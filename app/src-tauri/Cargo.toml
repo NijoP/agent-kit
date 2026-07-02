@@ -1,0 +1,22 @@
+# eak-app — the desktop IDE shell. Intentionally NOT a member of the eak/ Cargo workspace:
+# Tauri's system deps (webkit2gtk, …) must never gate the kernel build, so this crate stands alone
+# and pulls the kernel in as path dependencies. Tauri config (tauri.conf.json, build.rs) is
+# generated locally by `npm create tauri-app` / `cargo tauri init` — see ../README.md.
+[package]
+name = "eak-app"
+version = "0.1.0"
+edition = "2021"
+description = "Electronics Agent Kit — local AI-native EDA IDE (desktop shell)"
+
+[dependencies]
+tauri = { version = "2" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# The kernel = the app's native backend (path deps into the sibling workspace).
+eak-cli = { path = "../../eak/crates/eak-cli" }
+eak-ports = { path = "../../eak/crates/eak-ports" }
+eak-reasoning = { path = "../../eak/crates/eak-reasoning" }
+
+[build-dependencies]
+tauri-build = { version = "2" }

@@ -13,7 +13,7 @@ use eak_phases::{
     ManufacturingGenerationMachine, PcbFloorPlanningMachine, RequirementPlanningMachine,
     RoutingPlanningMachine, SchematicPlanningMachine,
 };
-use eak_ports::ReasoningEngine;
+use eak_ports::{EventSink, ReasoningEngine};
 use eak_reasoning::{Cassette, FixtureEngine};
 use eak_runtime::{
     replay, Autonomy, Clock, LogicalClock, LoopBack, Orchestrator, RuntimeCore, SeededIdSource,
@@ -116,6 +116,19 @@ pub fn run_with(
     reasoning: Box<dyn ReasoningEngine>,
     cfg: &RunConfig,
 ) -> Result<RunReport, CliError> {
+    run_with_sink(reasoning, cfg, None)
+}
+
+/// Like [`run_with`], but also attaches a live [`EventSink`] so the caller observes every event as
+/// it commits — the streaming entry point a desktop UI (the `eak-app` Tauri shell) drives. Passing
+/// `None` behaves exactly like [`run_with`]. The sink only *observes*: the run, its event log, and
+/// its replay are byte-identical whether or not one is attached (P4). The sink is set before
+/// `capture_intent`, so the very first (intent) event streams too.
+pub fn run_with_sink(
+    reasoning: Box<dyn ReasoningEngine>,
+    cfg: &RunConfig,
+    sink: Option<Box<dyn EventSink>>,
+) -> Result<RunReport, CliError> {
     let _ = std::fs::remove_file(&cfg.log); // a run starts a fresh project history
     let log = FileEventLog::open(&cfg.log)?;
     let ids = Box::new(SeededIdSource::new(cfg.seed));
@@ -126,6 +139,9 @@ pub fn run_with(
     };
 
     let mut core = RuntimeCore::new(Box::new(log), reasoning, ids, clock, Autonomy::Autonomous);
+    if let Some(sink) = sink {
+        core.set_sink(sink);
+    }
     core.capture_intent(&cfg.intent, "engineer")?;
 
     let mut plan = default_workflow();
