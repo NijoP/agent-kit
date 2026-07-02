@@ -14,6 +14,9 @@
 use eak_domain::{Board, BoardSide, EntityId, LayerStack, Net, NetClass, Track};
 use eak_units::{PhysicalQuantity, Unit};
 
+mod export;
+pub use export::export;
+
 /// A design imported from a `.kicad_pcb` file: the outline plus the copper the review rules read.
 #[derive(Debug, Clone)]
 pub struct ImportedDesign {
