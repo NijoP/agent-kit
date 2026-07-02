@@ -153,6 +153,10 @@ pub trait AgentContext {
     fn constraints(&self) -> Vec<Constraint>;
     /// Phase 2: read the raised violations (so a re-verify can skip duplicates).
     fn violations(&self) -> Vec<Violation>;
+    /// E6 (C1): the ids of violations that already carry an advisory explanation, so the review
+    /// explainer skips a violation it has already explained (idempotent re-entry). This is advisory
+    /// bookkeeping only — it is NEVER a workflow-gate input.
+    fn explained_violations(&self) -> Vec<EntityId>;
     /// Phase 3: read the committed functional blocks (synthesis input).
     fn functional_blocks(&self) -> Vec<FunctionalBlock>;
     /// Phase 3: read the realized components.

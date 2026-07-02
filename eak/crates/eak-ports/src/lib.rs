@@ -177,6 +177,24 @@ pub enum Event {
         copper_count: usize,
         line_item_count: usize,
     },
+
+    // ---- E6 (C1): AI review explainer — advisory-only metadata ----
+    /// A plain-English explanation + suggested fix for one raised [`Violation`], proposed through
+    /// the reasoning boundary (`violation_explanation_v1`) and committed as ADVISORY metadata.
+    ///
+    /// INVARIANT (advisory-only, security-critical): this event NEVER changes the violation's
+    /// `severity`/`status`/validity, NEVER gates a phase, and NEVER drives a kernel mutation. The
+    /// committed kernel data *grounds* the text; the model only *describes* it. It folds into a
+    /// SEPARATE advisory store (`EngineeringState::violation_explanations`), never into the
+    /// [`Violation`] itself, so no reasoning output can ever reach an engineering decision (P3).
+    /// `reasoning_call_seq` points back at the exact [`Event::ReasoningCall`] that produced the
+    /// text (provenance-by-construction); `violation` links it to the subject it explains.
+    ViolationExplained {
+        violation: eak_domain::EntityId,
+        explanation: String,
+        suggested_fix: String,
+        reasoning_call_seq: Seq,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -249,9 +267,25 @@ pub struct CandidateRequirement {
     pub targets: Vec<PhysicalQuantity>,
 }
 
+/// One advisory explanation of a raised [`Violation`] proposed by the reasoning engine under the
+/// `violation_explanation_v1` schema — *judgement only*. It is NOT a domain entity and is NEVER
+/// validated at a capability seam: it is stored verbatim as advisory metadata (see
+/// [`Event::ViolationExplained`]) and can never gate a phase or alter the violation it describes.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct CandidateExplanation {
+    /// Plain-English account of what the violation means and why it was raised.
+    pub explanation: String,
+    /// A concrete, advisory suggestion for how an engineer might resolve it.
+    pub suggested_fix: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ReasoningResponse {
     pub candidates: Vec<CandidateRequirement>,
+    /// Advisory violation explanations (E6 C1). Additive and defaulted, so a
+    /// `requirement_candidates_v1` response that omits it deserializes unchanged.
+    #[serde(default)]
+    pub explanations: Vec<CandidateExplanation>,
     #[serde(default)]
     pub clarifying_questions: Vec<String>,
     #[serde(default)]

@@ -9,8 +9,24 @@ use eak_domain::{
     FunctionalBlock, Net, Part, Pin, Placement, ProvenanceLink, Requirement, Track, Violation,
     ViolationStatus, Waiver,
 };
-use eak_ports::Event;
+use eak_ports::{Event, Seq};
 use serde::{Deserialize, Serialize};
+
+/// Advisory, model-authored review metadata attached to a raised [`Violation`] (E6 C1).
+///
+/// It is deliberately NOT a domain engineering entity: it carries no id of its own, is never
+/// validated at a capability seam, and NEVER affects the violation's severity/status/validity or
+/// gates a phase. It only *describes*. It is folded from [`Event::ViolationExplained`] into
+/// [`EngineeringState::violation_explanations`] so the review/traceability UI can read it back and
+/// so replay reconstructs it byte-identically (P4). `reasoning_call_seq` points back at the exact
+/// [`Event::ReasoningCall`] that produced the text (provenance-by-construction).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ViolationExplanation {
+    pub violation: EntityId,
+    pub explanation: String,
+    pub suggested_fix: String,
+    pub reasoning_call_seq: Seq,
+}
 
 /// The single canonical instance of everything the runtime knows about a design. Entities
 /// are kept in insertion (event) order so a run and its replay serialize byte-identically.
@@ -38,6 +54,9 @@ pub struct EngineeringState {
     pub placements: Vec<Placement>,
     // Phase 3 (routing): the copper tracks realizing the nets.
     pub tracks: Vec<Track>,
+    // E6 (C1): advisory, model-authored explanations of raised violations. A SEPARATE store from
+    // `violations` — folding here never touches a `Violation`, so the explainer stays advisory-only.
+    pub violation_explanations: Vec<ViolationExplanation>,
 }
 
 impl EngineeringState {
@@ -79,6 +98,20 @@ impl EngineeringState {
             Event::BoardCommitted { board } => self.board = Some(board.clone()),
             Event::PlacementCommitted { placement } => self.placements.push(placement.clone()),
             Event::TrackCommitted { track } => self.tracks.push(track.clone()),
+            // E6 (C1): advisory review metadata. State-bearing (so the UI/replay can read it), but
+            // it folds into its OWN store and never mutates the referenced `Violation` — the
+            // advisory-only invariant is structural, not merely a convention.
+            Event::ViolationExplained {
+                violation,
+                explanation,
+                suggested_fix,
+                reasoning_call_seq,
+            } => self.violation_explanations.push(ViolationExplanation {
+                violation: *violation,
+                explanation: explanation.clone(),
+                suggested_fix: suggested_fix.clone(),
+                reasoning_call_seq: *reasoning_call_seq,
+            }),
             // Audit-only events (phase lifecycle, reasoning calls, IR-boundary milestones)
             // carry no state and are intentionally not folded. AUDIT: any NEW state-bearing
             // event variant MUST get an explicit arm above, or replay will silently diverge.
@@ -140,6 +173,15 @@ impl EngineeringState {
 
     pub fn track(&self, id: EntityId) -> Option<&Track> {
         self.tracks.iter().find(|t| t.id == id)
+    }
+
+    /// Advisory explanations recorded for a given violation (E6 C1). Read-only metadata — it never
+    /// participates in any gate; the workflow gate remains [`Self::open_blocking_violations`].
+    pub fn explanations_for(&self, violation: EntityId) -> Vec<&ViolationExplanation> {
+        self.violation_explanations
+            .iter()
+            .filter(|e| e.violation == violation)
+            .collect()
     }
 
     /// Open, blocking (error-severity) violations — the workflow gate (P13).

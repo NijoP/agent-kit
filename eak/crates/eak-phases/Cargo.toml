@@ -12,3 +12,7 @@ eak-ports = { workspace = true }
 eak-runtime = { workspace = true }
 eak-engines = { workspace = true }
 eak-compiler = { workspace = true }
+
+[dev-dependencies]
+# E6 (C1) review-explainer tests drive the real FixtureEngine cassette (deterministic, offline).
+eak-reasoning = { workspace = true }

@@ -204,6 +204,7 @@ dependencies = [
  "eak-domain",
  "eak-engines",
  "eak-ports",
+ "eak-reasoning",
  "eak-runtime",
  "eak-units",
 ]

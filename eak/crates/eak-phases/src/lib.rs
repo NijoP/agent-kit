@@ -15,6 +15,7 @@ pub mod erc_verification;
 pub mod manufacturing_generation;
 pub mod pcb_floor_planning;
 pub mod requirement_planning;
+pub mod review_explanation;
 pub mod routing_planning;
 pub mod schematic_planning;
 
@@ -32,6 +33,7 @@ pub use erc_verification::ErcVerificationMachine;
 pub use manufacturing_generation::ManufacturingGenerationMachine;
 pub use pcb_floor_planning::PcbFloorPlanningMachine;
 pub use requirement_planning::RequirementPlanningMachine;
+pub use review_explanation::{explanation_request, ReviewExplanationMachine};
 pub use routing_planning::RoutingPlanningMachine;
 pub use schematic_planning::SchematicPlanningMachine;
 
@@ -105,6 +107,7 @@ mod tests {
                         targets: vec![],
                     },
                 ],
+                explanations: vec![],
                 clarifying_questions: vec![],
                 raw: "{}".into(),
             })
@@ -189,6 +192,7 @@ mod tests {
                         targets: vec![PhysicalQuantity::new(50.0, Unit::Millimetre)],
                     },
                 ],
+                explanations: vec![],
                 clarifying_questions: vec![],
                 raw: "{}".into(),
             })
@@ -268,6 +272,7 @@ mod tests {
                         targets: vec![PhysicalQuantity::new(8.0, Unit::Watt)],
                     },
                 ],
+                explanations: vec![],
                 clarifying_questions: vec![],
                 raw: "{}".into(),
             })
@@ -361,6 +366,7 @@ mod tests {
                         targets: vec![PhysicalQuantity::new(5.0, Unit::Watt)],
                     },
                 ],
+                explanations: vec![],
                 clarifying_questions: vec![],
                 raw: "{}".into(),
             })
@@ -425,6 +431,7 @@ mod tests {
                     rationale: "compute load".into(),
                     targets: vec![],
                 }],
+                explanations: vec![],
                 clarifying_questions: vec![],
                 raw: "{}".into(),
             })
@@ -574,6 +581,7 @@ mod tests {
                         targets: vec![],
                     },
                 ],
+                explanations: vec![],
                 clarifying_questions: vec![],
                 raw: "{}".into(),
             })
@@ -761,6 +769,7 @@ mod tests {
                         targets: vec![],
                     },
                 ],
+                explanations: vec![],
                 clarifying_questions: vec![],
                 raw: "{}".into(),
             })
@@ -892,6 +901,7 @@ mod tests {
                         targets: vec![PhysicalQuantity::new(0.75, Unit::Millimetre)],
                     },
                 ],
+                explanations: vec![],
                 clarifying_questions: vec![],
                 raw: "{}".into(),
             })
@@ -1029,6 +1039,7 @@ mod tests {
                         targets: vec![],
                     },
                 ],
+                explanations: vec![],
                 clarifying_questions: vec![],
                 raw: "{}".into(),
             })
@@ -1163,6 +1174,7 @@ mod tests {
                         targets: vec![PhysicalQuantity::new(10_000.0, Unit::Megahertz)],
                     },
                 ],
+                explanations: vec![],
                 clarifying_questions: vec![],
                 raw: "{}".into(),
             })

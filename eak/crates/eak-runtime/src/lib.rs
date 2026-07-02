@@ -22,7 +22,7 @@ pub use protocol::{
 };
 pub use replay::replay;
 pub use runtime_core::RuntimeCore;
-pub use state::EngineeringState;
+pub use state::{EngineeringState, ViolationExplanation};
 
 #[cfg(test)]
 mod dependency_rule {
@@ -98,6 +98,7 @@ mod kernel_tests {
         ) -> Result<ReasoningResponse, ReasoningError> {
             Ok(ReasoningResponse {
                 candidates: vec![],
+                explanations: vec![],
                 clarifying_questions: vec![],
                 raw: String::new(),
             })

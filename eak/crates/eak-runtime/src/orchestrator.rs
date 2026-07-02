@@ -164,6 +164,9 @@ mod tests {
         fn violations(&self) -> Vec<Violation> {
             vec![]
         }
+        fn explained_violations(&self) -> Vec<EntityId> {
+            vec![]
+        }
         fn functional_blocks(&self) -> Vec<FunctionalBlock> {
             vec![]
         }

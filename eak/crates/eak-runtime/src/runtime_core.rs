@@ -578,6 +578,14 @@ impl AgentContext for RuntimeCore {
         self.state.violations.clone()
     }
 
+    fn explained_violations(&self) -> Vec<EntityId> {
+        self.state
+            .violation_explanations
+            .iter()
+            .map(|e| e.violation)
+            .collect()
+    }
+
     fn functional_blocks(&self) -> Vec<FunctionalBlock> {
         self.state.functional_blocks.clone()
     }
