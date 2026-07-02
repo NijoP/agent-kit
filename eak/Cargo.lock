@@ -187,6 +187,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "eak-kicad"
+version = "0.1.0"
+dependencies = [
+ "eak-domain",
+ "eak-engines",
+ "eak-units",
+]
+
+[[package]]
 name = "eak-phases"
 version = "0.1.0"
 dependencies = [
