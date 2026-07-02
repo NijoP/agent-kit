@@ -206,6 +206,19 @@ pub trait EventLog {
     fn next_seq(&self) -> Seq;
 }
 
+/// A live observer of committed events — the seam a streaming consumer (e.g. a desktop UI)
+/// subscribes to. The runtime invokes it once per event, in commit order, immediately after the
+/// event has been appended to the [`EventLog`] and folded into state, so an observer sees each
+/// change *as it happens* rather than only at the end of a run. A sink is a pure side-observer:
+/// it must not mutate engineering state, and the runtime owns at most one — absent a sink the
+/// behavior is exactly as before, so determinism and replay are untouched (P4). Fire-and-forget
+/// by design: a sink that needs to hand events to another thread should enqueue them (e.g. onto a
+/// channel) and return promptly rather than block the commit path.
+pub trait EventSink {
+    /// Invoked after `record`'s event has been committed (appended + folded).
+    fn on_committed(&mut self, record: &EventRecord);
+}
+
 // ===================== Reasoning boundary (impl: eak-reasoning) =====================
 
 /// A structured request for judgement. The prompt is *data the runtime composes*; the

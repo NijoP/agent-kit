@@ -14,8 +14,8 @@ use eak_domain::{
     Waiver,
 };
 use eak_ports::{
-    Event, EventLog, ReasoningEngine, ReasoningError, ReasoningRequest, ReasoningResponse, Seq,
-    StoreError, Timestamp,
+    Event, EventLog, EventRecord, EventSink, ReasoningEngine, ReasoningError, ReasoningRequest,
+    ReasoningResponse, Seq, StoreError, Timestamp,
 };
 
 pub struct RuntimeCore {
@@ -25,6 +25,9 @@ pub struct RuntimeCore {
     ids: Box<dyn IdSource>,
     clock: Box<dyn Clock>,
     autonomy: Autonomy,
+    /// Optional live observer of committed events (a UI stream, telemetry, …). `None` restores
+    /// the pre-observer behavior exactly; a sink only observes, never mutates (P4).
+    sink: Option<Box<dyn EventSink>>,
 }
 
 impl RuntimeCore {
@@ -42,7 +45,23 @@ impl RuntimeCore {
             ids,
             clock,
             autonomy,
+            sink: None,
         }
+    }
+
+    /// Attach a live [`EventSink`] that observes every committed event as it happens (builder
+    /// form). Absent a sink the runtime behaves exactly as before; a sink never affects what is
+    /// committed or folded — it only observes — so determinism and replay are unchanged (P4). This
+    /// is the seam a desktop UI subscribes to for live streaming.
+    pub fn with_sink(mut self, sink: Box<dyn EventSink>) -> Self {
+        self.sink = Some(sink);
+        self
+    }
+
+    /// Attach or replace the live [`EventSink`] after construction (same guarantees as
+    /// [`with_sink`](Self::with_sink)).
+    pub fn set_sink(&mut self, sink: Box<dyn EventSink>) {
+        self.sink = Some(sink);
     }
 
     /// Read-only access to the log (for replay / inspection).
@@ -60,6 +79,18 @@ impl RuntimeCore {
         let seqs = self.log.append(&stamped)?;
         for e in &events {
             self.state.apply(e);
+        }
+        // Notify a live observer (if any) once per event, in commit order, AFTER the fold — so a
+        // streaming consumer sees each change against consistent state. Purely observational: the
+        // sink cannot alter what was committed, so replay and determinism are untouched (P4).
+        if let Some(sink) = self.sink.as_mut() {
+            for ((timestamp, event), seq) in stamped.iter().zip(seqs.iter()) {
+                sink.on_committed(&EventRecord {
+                    seq: *seq,
+                    timestamp: *timestamp,
+                    event: event.clone(),
+                });
+            }
         }
         Ok(seqs)
     }

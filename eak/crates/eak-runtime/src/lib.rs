@@ -150,6 +150,77 @@ mod kernel_tests {
         assert_eq!(core.state.requirements.len(), 1);
     }
 
+    #[test]
+    fn event_sink_observes_every_committed_event_live_in_order() {
+        use std::cell::RefCell;
+        use std::rc::Rc;
+
+        // A sink that clones each committed record into a shared buffer the instant it commits.
+        struct CollectingSink(Rc<RefCell<Vec<EventRecord>>>);
+        impl eak_ports::EventSink for CollectingSink {
+            fn on_committed(&mut self, record: &EventRecord) {
+                self.0.borrow_mut().push(record.clone());
+            }
+        }
+
+        let seen = Rc::new(RefCell::new(Vec::new()));
+        let mut core = RuntimeCore::new(
+            Box::new(MemLog { records: vec![] }),
+            Box::new(NullReasoner),
+            Box::new(SeededIdSource::new(7)),
+            Box::new(LogicalClock::new()),
+            Autonomy::Autonomous,
+        )
+        .with_sink(Box::new(CollectingSink(Rc::clone(&seen))));
+
+        // The sink must already hold the intent event the moment capture_intent commits — i.e.
+        // mid-run, not batched at the end of a workflow.
+        core.capture_intent("USB-C powered IoT sensor node, < 5 W", "engineer")
+            .unwrap();
+        assert_eq!(seen.borrow().len(), 1, "sink saw the intent event live");
+        assert!(matches!(seen.borrow()[0].event, Event::IntentCaptured { .. }));
+
+        // A multi-event commit (evidence?/decision/requirement) keeps streaming in order.
+        let src = core.state.intent.as_ref().unwrap().id;
+        let rid = core.fresh_id();
+        let did = core.fresh_id();
+        core.invoke(CapabilityRequest::CreateRequirement {
+            requirement: Requirement {
+                id: rid,
+                statement: "Operating power shall not exceed 5 W".into(),
+                category: RequirementCategory::Electrical,
+                priority: Priority::High,
+                acceptance_criterion: "measured power < 5 W".into(),
+                status: RequirementStatus::Accepted,
+                source: src,
+                targets: vec![],
+            },
+            decision: Decision {
+                id: did,
+                subject: rid,
+                rationale: "derived from intent".into(),
+                decider: "test".into(),
+                reasoning_call_seq: None,
+                evidence: vec![],
+                confidence: 1.0,
+            },
+            evidence: vec![],
+            links: vec![],
+        })
+        .unwrap();
+
+        // The streamed events must match the authoritative log exactly, seq-aligned and in order —
+        // proving every committed event reached the observer once, live (the UI's contract).
+        let logged = core.log().read_all().unwrap();
+        let streamed = seen.borrow();
+        assert_eq!(streamed.len(), logged.len());
+        assert!(streamed.len() >= 2, "intent + at least the requirement");
+        for (streamed_rec, logged_rec) in streamed.iter().zip(logged.iter()) {
+            assert_eq!(streamed_rec.seq, logged_rec.seq);
+            assert_eq!(streamed_rec.event, logged_rec.event);
+        }
+    }
+
     fn new_core() -> RuntimeCore {
         RuntimeCore::new(
             Box::new(MemLog { records: vec![] }),
