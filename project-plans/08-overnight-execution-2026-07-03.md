@@ -50,11 +50,54 @@ replay must not weaken. Any change that would touch them escalates instead of pr
 
 ## Live status ledger
 
-(Eng Lead updates this section as increments land.)
+(Eng Lead updates this section as increments land. Test ratchet: baseline 195 → **201**.)
 
-- [ ] A1 — exporter
-- [ ] B1 — import → capability seam
-- [ ] B2 — verify-only workflow
-- [ ] C1 — AI-review explainer
-- [ ] D1 — hero-flow smoke test
-- [ ] C2 — 2nd reasoning phase (stretch)
+- [x] A1 — `.kicad_pcb` exporter (`68b1f32`) — export→import round-trip fixed point; footprints honestly deferred.
+- [x] B1 — import → capability seam (`beb35fc`) — needed an architect ruling (ADR-0016 `NetOrigin{Logical,Physical}`); full board+nets+tracks now flow through `commit`, event-log-proven.
+- [x] B2 — verify-only workflow (`55f34e8`) — `import_and_verify` trips a traceable `drc-unrouted-net` violation over imported copper, no synthesis, no back door.
+- [x] C1 — AI-review explainer (`f4fcd52`) — `ViolationExplained` advisory event; separate store, never mutates the violation; fixture-deterministic; rust+security approved.
+- [x] D1 — hero-flow smoke test (`c3c7b56`) — hero intent → released `ManufacturingIr` (checked from raw log) + byte-identical replay.
+- [x] C2 — 2nd reasoning phase (`47c6334`) — BOM part selection reasons; LLM proposes, kernel catalog validates; hallucinated MPN provably rejected; rust+verification+security approved.
+- [x] E5.1 — default Fabrication process floor on import (`fe9a9f0`) — IPC Class-2 (0.15 mm/6 mil) floor seeded via the real `CreateRequirement` seam; imported too-thin trace now raises a traceable `drc-trace-width` violation. rust + eda-domain-scientist approved (slot contract verified).
+
+## Final tally (2026-07-03 overnight run)
+
+**7 increments, all green + reviewed + pushed. Test ratchet 195 → 209 (+14), zero red at any point.**
+`68b1f32` A1 · `beb35fc` B1 (+ADR-0016) · `55f34e8` B2 · `f4fcd52` C1 · `c3c7b56` D1 · `47c6334` C2 · `fe9a9f0` E5.1.
+
+What now demonstrably works, kernel-verified:
+- **Generate → canvas**: `ManufacturingIr`/copper → `.kicad_pcb` (round-trip fixed point).
+- **Import → AI-review (bulletproof)**: real KiCad board → capability seam → verify-only workflow →
+  traceable connectivity **and geometric** DRC violations (trace-width/clearance now fire).
+- **The soul (E6)**: every violation gets an advisory AI explanation (deterministic, boundary-safe);
+  a 2nd phase (BOM part selection) now reasons with the LLM while the kernel catalog rejects
+  hallucinated parts — "LLM proposes, kernel validates" proven by test.
+- **Anti-rot**: hero-flow smoke test pins release + byte-identical replay.
+
+Remaining top follow-ups (see Findings): curated hero cassette (E7); import skip-and-warn (#3);
+parser depth cap (#4); multi-part catalog set-inclusion (#5); the E5.1 override site. And the
+**non-buildable-here** frontend/Tauri wiring (E1 `start_run`, E2 TS event store, E3 panels, E4
+KiCanvas embed) — needs a founder-at-keyboard session with the Tauri toolchain.
+
+### C2 follow-up (captured)
+5. **Catalog membership is 1:1 today.** `PartSelectionAgent` accepts a proposal only if it equals
+   the single `part_for(class)` entry (fails *closed* — safe). When the catalog grows multiple parts
+   per class, membership must become **set-inclusion**, else a valid alternative MPN is wrongly
+   rejected. Invariant future writers must keep: **never construct a `Part` from model text** —
+   always from the trusted `CatalogPart`.
+
+## Findings & follow-ups surfaced by the swarm (for the founder)
+
+1. **ADR-0016 shipped** — `NetOrigin::{Logical,Physical}` distinguishes schematic-synthesized nets
+   (must join ≥1 pin) from imported copper nets (pin membership not parsed). Architect-approved,
+   determinism-preserving. This is now a load-bearing domain concept.
+2. **Import-review only checks connectivity today.** The geometric DRC rules (`drc-trace-width`,
+   `drc-copper-clearance`) stay silent on a pure `.kicad_pcb` import because they require a
+   **Fabrication process floor** the file doesn't carry. To make "import → AI-review" catch real
+   geometry problems, a follow-up must give imported boards a **default or declared process floor /
+   constraint set**. High-value next backlog item for the hero fallback.
+3. **Import is all-or-nothing.** A segment citing an undeclared / net-0 fails the whole import
+   (RouteNet rejects the phantom net). Real boards may hit this — a follow-up should skip-and-warn
+   on unresolvable copper rather than abort. (Robustness for the "bulletproof" promise.)
+4. **Pre-existing:** the `.kicad_pcb` S-expr parser recurses per nesting depth (stack-overflow risk
+   on adversarial input; landed in `fa117a5`, not this run). Consider an iterative parse or depth cap.
