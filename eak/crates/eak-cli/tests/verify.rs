@@ -8,14 +8,21 @@
 //!   2. a clean board (every declared net realized by copper) yields ZERO violations of that rule —
 //!      the review does not false-positive.
 //!
-//! WHY `drc-unrouted-net` is the rule under test: on an import-only design there are no
-//! requirements, so the fabrication-floor rules (`drc-trace-width` = Fabrication length slot 0,
-//! `drc-copper-clearance` = slot 2) have no stated floor and correctly stay SILENT — a `.kicad_pcb`
-//! carries copper geometry, not a process class. `drc-unrouted-net` is the one DRC rule that fires
-//! on imported copper topology alone: a net declared in the netlist with no segment realizing it is
-//! an electrical break the review must catch.
+//! `drc-unrouted-net` fires on imported copper topology alone: a net declared in the netlist with no
+//! segment realizing it is an electrical break the review must catch.
+//!
+//! Increment E5.1 extends this: [`import_and_verify`] now SEEDS a default fabrication process floor
+//! (a `Fabrication` requirement carrying the IPC-2221 Class 2 6 mil / 0.15 mm minimum trace width and
+//! copper spacing) through the real `CreateRequirement` seam BEFORE the review runs. A `.kicad_pcb`
+//! carries copper geometry but no process class, so without a floor the two geometric rules
+//! (`drc-trace-width` = Fabrication length slot 0, `drc-copper-clearance` = slot 2) had nothing to
+//! check and stayed silent. With the seeded default they now fire, so the tests below prove an
+//! imported too-thin trace raises a traceable `drc-trace-width` violation and a too-close copper pair
+//! raises `drc-copper-clearance`, while clean geometry within the floor stays green (no false
+//! positive). It is a DEFAULT, overridable by a stated process window.
 
 use eak_cli::{import_and_verify, PhaseOutcome, Relation};
+use eak_domain::RequirementCategory;
 
 /// A board with an UNROUTED net: net 3 ("SDA") is declared but no segment references it, so it
 /// carries no copper — `drc-unrouted-net` must flag it. Net 2 ("GND") is realized by its segment, so
@@ -93,10 +100,19 @@ fn import_and_verify_flags_the_unrouted_net_traceably() {
         "a TracesTo link must make the violation traceable to its net"
     );
 
-    // No back door / no synthesis: the review fabricated nothing. The only entities in state are the
-    // ones the import committed (a board, two nets, one track); no requirement, schematic, BOM, or
-    // placement was invented by the verify-only pass.
-    assert!(report.state.requirements.is_empty());
+    // No back door / no synthesis: the review fabricated no DESIGN data. The one requirement in
+    // state is the seeded default fabrication floor (increment E5.1) — a Fabrication requirement
+    // installed through the real CreateRequirement seam so the geometric DRC rules have a floor; no
+    // schematic, BOM, or placement was invented by the verify-only pass.
+    assert_eq!(
+        report.state.requirements.len(),
+        1,
+        "only the seeded default fabrication floor is present"
+    );
+    assert_eq!(
+        report.state.requirements[0].category,
+        RequirementCategory::Fabrication
+    );
     assert!(report.state.functional_blocks.is_empty());
     assert!(report.state.components.is_empty());
     assert!(report.state.bom_line_items.is_empty());
@@ -138,4 +154,168 @@ fn import_and_verify_clean_board_finds_no_violation() {
     // Both nets are realized by their own copper.
     assert_eq!(report.state.nets.len(), 2);
     assert_eq!(report.state.tracks.len(), 2);
+}
+
+// ----------------------- Increment E5.1: geometric DRC fires on import -----------------------
+
+/// A board with a routed net whose copper is FINER than the seeded 0.15 mm process floor: the GND
+/// segment is 0.10 mm wide (below 6 mil / 0.15 mm), so `drc-trace-width` must flag it. The net is
+/// realized (it carries the segment), so `drc-unrouted-net` stays silent — the flag is unambiguously
+/// the too-thin trace. Net id 2 avoids the board's own `EntityId(1)`.
+const TOO_THIN: &str = r#"
+    (kicad_pcb
+      (net 0 "")
+      (net 2 "GND")
+      (segment (start 10 10) (end 40 10) (width 0.10) (layer "F.Cu") (net 2))
+    )
+"#;
+
+/// A board with two same-layer segments on DIFFERENT nets whose centre-lines are 0.30 mm apart; at
+/// 0.20 mm wide each the edge-to-edge gap is 0.10 mm, below the seeded 0.15 mm copper-clearance
+/// floor, so `drc-copper-clearance` must flag the pair. Both segments are 0.20 mm (> 0.15 mm) and
+/// both nets are realized, so neither `drc-trace-width` nor `drc-unrouted-net` fires.
+const TOO_CLOSE: &str = r#"
+    (kicad_pcb
+      (net 0 "")
+      (net 2 "GND")
+      (net 3 "SDA")
+      (segment (start 10 10) (end 40 10) (width 0.20) (layer "F.Cu") (net 2))
+      (segment (start 10 10.3) (end 40 10.3) (width 0.20) (layer "F.Cu") (net 3))
+    )
+"#;
+
+/// A board whose only net is realized by copper WITHIN the default floor: a single 0.20 mm segment
+/// (wider than the 0.15 mm minimum) on a net that carries it. The seeded floor is present, yet the
+/// geometric rules find nothing — the true-negative that guards against a false positive.
+const WITHIN_FLOOR: &str = r#"
+    (kicad_pcb
+      (net 0 "")
+      (net 2 "GND")
+      (segment (start 10 10) (end 40 10) (width 0.20) (layer "F.Cu") (net 2))
+    )
+"#;
+
+#[test]
+fn import_and_verify_flags_a_too_thin_trace_via_the_seeded_floor() {
+    let report = import_and_verify(TOO_THIN).expect("import + verify-only review should run");
+
+    // The seeded default floor is what makes this fire: a Fabrication requirement carrying the
+    // 0.15 mm minimum trace width (slot 0), installed through the real CreateRequirement seam.
+    assert_eq!(report.state.requirements.len(), 1);
+    assert_eq!(
+        report.state.requirements[0].category,
+        RequirementCategory::Fabrication
+    );
+
+    // The DRC gate FAILED on the trace-width rule (the plan is linear, so it stops there).
+    let (_, drc_outcome) = report
+        .outcomes
+        .iter()
+        .find(|(name, _)| name == "DrcVerification")
+        .expect("DRC Verification must run");
+    assert!(matches!(drc_outcome, PhaseOutcome::Failed(_)));
+
+    // Exactly one violation, and it is the trace-width finding — no unrouted-net (the net is
+    // routed) and no clearance (a single track has no pair).
+    assert_eq!(report.state.violations.len(), 1);
+    let v = &report.state.violations[0];
+    assert_eq!(v.rule, "drc-trace-width");
+    assert!(v.is_blocking());
+
+    // Traceable: the violation NAMES the offending track, and a TracesTo link ties them together —
+    // the anchor a reviewer follows back to the copper (Violation -> Track -> Net -> ...).
+    assert_eq!(v.subjects.len(), 1, "one too-thin track");
+    let track = report
+        .state
+        .tracks
+        .iter()
+        .find(|t| t.id == v.subjects[0])
+        .expect("the implicated subject is a committed track");
+    assert!(
+        report
+            .state
+            .links
+            .iter()
+            .any(|l| l.from == v.id && l.to == track.id && l.relation == Relation::TracesTo),
+        "a TracesTo link must make the trace-width violation traceable to its track"
+    );
+}
+
+#[test]
+fn import_and_verify_flags_too_close_copper_via_the_seeded_floor() {
+    let report = import_and_verify(TOO_CLOSE).expect("import + verify-only review should run");
+
+    // The seeded floor supplies slot 2 (0.15 mm copper-to-copper clearance).
+    assert_eq!(report.state.requirements.len(), 1);
+
+    let (_, drc_outcome) = report
+        .outcomes
+        .iter()
+        .find(|(name, _)| name == "DrcVerification")
+        .expect("DRC Verification must run");
+    assert!(matches!(drc_outcome, PhaseOutcome::Failed(_)));
+
+    // Exactly one violation, and it is the copper-clearance finding on the two-track pair — no
+    // trace-width (both 0.20 mm > 0.15 mm) and no unrouted-net (both nets realized).
+    assert_eq!(report.state.violations.len(), 1);
+    let v = &report.state.violations[0];
+    assert_eq!(v.rule, "drc-copper-clearance");
+    assert!(v.is_blocking());
+
+    // Traceable to BOTH offending tracks, each with a TracesTo link.
+    assert_eq!(
+        v.subjects.len(),
+        2,
+        "a clearance breach implicates both tracks"
+    );
+    for subj in &v.subjects {
+        assert!(
+            report.state.tracks.iter().any(|t| t.id == *subj),
+            "each subject is a committed track"
+        );
+        assert!(
+            report
+                .state
+                .links
+                .iter()
+                .any(|l| l.from == v.id && l.to == *subj && l.relation == Relation::TracesTo),
+            "a TracesTo link must tie the clearance violation to each track"
+        );
+    }
+}
+
+#[test]
+fn import_and_verify_seeds_floor_yet_clean_geometry_passes() {
+    let report = import_and_verify(WITHIN_FLOOR).expect("import + verify-only review should run");
+
+    // The default floor IS seeded (proof it is installed, not merely absent)...
+    assert_eq!(report.state.requirements.len(), 1);
+    assert_eq!(
+        report.state.requirements[0].category,
+        RequirementCategory::Fabrication
+    );
+    assert_eq!(
+        report.state.requirements[0].targets.len(),
+        3,
+        "the three positional Fabrication slots (width, edge keep-out, clearance)"
+    );
+
+    // ...yet copper within the floor trips NEITHER geometric rule — no false positive.
+    assert!(
+        report
+            .state
+            .violations
+            .iter()
+            .all(|v| v.rule != "drc-trace-width" && v.rule != "drc-copper-clearance"),
+        "geometry within the default floor raises no trace-width/clearance violation"
+    );
+    assert!(
+        report.state.violations.is_empty(),
+        "a clean board within the floor yields zero violations"
+    );
+    assert_eq!(
+        report.outcomes.len(),
+        6,
+        "no gate fails, so all six verify-only phases run"
+    );
 }

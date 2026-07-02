@@ -5,7 +5,10 @@
 //! library functions so it is testable without spawning a process; `main.rs` is a thin
 //! shell over [`run_cli`].
 
-use eak_domain::RelationType;
+use eak_domain::{
+    Decision, Evidence, EvidenceKind, Priority, ProvenanceLink, RelationType, Requirement,
+    RequirementCategory,
+};
 use eak_phases::{
     BomPlanningMachine, BomVerificationMachine, ComponentPlacementMachine,
     ConstraintExtractionMachine, ConstraintVerificationMachine, DfmVerificationMachine,
@@ -20,6 +23,7 @@ use eak_runtime::{
     RuntimeCore, SeededIdSource, SystemClock, WorkflowPlan,
 };
 use eak_store::FileEventLog;
+use eak_units::{PhysicalQuantity, Unit};
 use std::path::{Path, PathBuf};
 
 pub use eak_domain::{EntityId, RelationType as Relation, RequirementStatus};
@@ -288,6 +292,135 @@ pub fn verify_only_workflow() -> WorkflowPlan {
     ])
 }
 
+// ----------------- Default fabrication process floor (epic E5 / increment E5.1) -----------------
+//
+// A `.kicad_pcb` carries copper geometry but NOT a fabrication process class, so the two geometric
+// DRC rules that need a stated process floor — `drc-trace-width` (Fabrication Length slot 0) and
+// `drc-copper-clearance` (slot 2) — have nothing to check against on a bare import and correctly
+// stay silent. That left "import -> AI-review" blind to a too-thin trace or a too-close copper pair
+// (only `drc-unrouted-net` fired, since it reads topology alone). Seeding a *default* floor — a real
+// Fabrication requirement committed through the same capability the synthesis path uses — gives
+// those rules a floor so the review catches real geometry defects. It is a DEFAULT, explicitly
+// overridable: a design that states its own Fabrication process window supersedes it.
+
+/// Default minimum manufacturable **trace width**, in millimetres. 0.15 mm ≈ 6 mil is the
+/// standard-capability minimum trace/space every mainstream fabricator quotes for an IPC-2221
+/// generic-design board at IPC-A-600 / IPC-6012 **Class 2** (dedicated service — most commercial
+/// work), the conservative "6 mil minimum trace/space" the engineering-science layer names as the
+/// canonical process floor (`engineering-science/manufacturing/dfm-principles.md` §process-
+/// capability; `.../ipc-standards.md` §1, §5). A DEFAULT, not a measured fab limit — a real process
+/// window overrides it by stating its own `Fabrication` requirement.
+const DEFAULT_MIN_TRACE_WIDTH_MM: f64 = 0.15;
+
+/// Default minimum copper-to-copper **clearance**, in millimetres — the same IPC-2221 Class-2
+/// 6 mil (0.15 mm) minimum space (width and spacing share the standard-capability floor; cited as
+/// [`DEFAULT_MIN_TRACE_WIDTH_MM`]). Overridable by a stated process window.
+const DEFAULT_MIN_CLEARANCE_MM: f64 = 0.15;
+
+/// Default board-edge keep-out band, in millimetres — slot 1 of the positional Fabrication-target
+/// contract. Set to 0.5 mm, IDENTICAL to `eak-engines`' own `DFM_EDGE_CLEARANCE_FALLBACK_MM` (the
+/// keep-out the DFM edge rules already apply to an import when no Fabrication requirement is stated),
+/// so seeding the floor leaves DFM edge behaviour on an import UNCHANGED. It exists only to occupy
+/// slot 1 so the clearance floor lands in slot 2 (IPC-2221 edge clearance, `.../ipc-standards.md`).
+const DEFAULT_EDGE_KEEPOUT_MM: f64 = 0.5;
+
+/// The default fabrication process-floor targets an imported `.kicad_pcb` is seeded with, in the
+/// documented POSITIONAL SLOT CONTRACT `eak-engines`' `fabrication_length_targets` reads: slot 0 =
+/// minimum trace width (`drc-trace-width`), slot 1 = board-edge keep-out (the DFM edge rules),
+/// slot 2 = minimum copper-to-copper clearance (`drc-copper-clearance`). All three slots are filled
+/// because the contract is positional — the clearance floor is only reachable at slot 2. A DEFAULT,
+/// explicitly overridable by a stated `Fabrication` requirement; see the per-constant citations.
+pub fn default_fabrication_floor() -> Vec<PhysicalQuantity> {
+    vec![
+        PhysicalQuantity::new(DEFAULT_MIN_TRACE_WIDTH_MM, Unit::Millimetre), // slot 0
+        PhysicalQuantity::new(DEFAULT_EDGE_KEEPOUT_MM, Unit::Millimetre),    // slot 1
+        PhysicalQuantity::new(DEFAULT_MIN_CLEARANCE_MM, Unit::Millimetre),   // slot 2
+    ]
+}
+
+/// Seed the imported design with the [`default_fabrication_floor`] as a
+/// [`Fabrication`](RequirementCategory::Fabrication) [`Requirement`], committed through the SAME
+/// sanctioned capability the synthesis path uses — [`CapabilityRequest::CreateRequirement`] — so it
+/// is stamped, appended, and folded by the runtime's single `commit` seam (P2/P3), never poked into
+/// state. This is exactly how the requirement agent installs a process floor derived from a design
+/// intent; here the value is a documented default instead of an intent-derived one.
+///
+/// The requirement is rooted in the imported [`Board`](eak_domain::Board) — a real committed entity,
+/// since an Accepted requirement needs a non-null source ([`Requirement::validate`]) — and carries a
+/// `StandardClause` [`Evidence`] citing IPC-2221 Class 2, with `JustifiedBy` / `DerivedFrom` /
+/// `Supports` provenance links, so the seeded floor is as traceable as a synthesised one. With no
+/// board there is no copper to check, so nothing is seeded (the geometry rules are silent without a
+/// board regardless). Returns the seam error unchanged if the runtime rejects the proposal (P3) —
+/// never a back door.
+fn seed_default_fabrication_floor(core: &mut RuntimeCore) -> Result<(), CliError> {
+    let Some(source) = core.state.board.as_ref().map(|b| b.id) else {
+        return Ok(());
+    };
+    let rid = core.fresh_id();
+    let did = core.fresh_id();
+    let eid = core.fresh_id();
+    let link_justified = core.fresh_id();
+    let link_derived = core.fresh_id();
+    let link_supports = core.fresh_id();
+    core.invoke(CapabilityRequest::CreateRequirement {
+        requirement: Requirement {
+            id: rid,
+            statement: "Imported board defaults to the IPC-2221 Class 2 fabrication process floor"
+                .into(),
+            category: RequirementCategory::Fabrication,
+            priority: Priority::High,
+            acceptance_criterion: format!(
+                "every trace >= {DEFAULT_MIN_TRACE_WIDTH_MM} mm wide and every copper gap \
+                 >= {DEFAULT_MIN_CLEARANCE_MM} mm"
+            ),
+            status: RequirementStatus::Accepted,
+            source,
+            targets: default_fabrication_floor(),
+        },
+        decision: Decision {
+            id: did,
+            subject: rid,
+            rationale: "No fab process was imported with the board; apply a conservative, \
+                        overridable default floor so geometric DRC can run"
+                .into(),
+            decider: "ImportDefaultFabFloor".into(),
+            reasoning_call_seq: None,
+            evidence: vec![eid],
+            confidence: 1.0,
+        },
+        evidence: vec![Evidence {
+            id: eid,
+            kind: EvidenceKind::StandardClause,
+            content_reference: "IPC-2221 generic design, Class 2 standard capability: 6 mil \
+                                (0.15 mm) minimum trace width and copper spacing"
+                .into(),
+            source: "IPC-2221".into(),
+            reliability: 1.0,
+        }],
+        links: vec![
+            ProvenanceLink {
+                id: link_justified,
+                from: rid,
+                to: did,
+                relation: RelationType::JustifiedBy,
+            },
+            ProvenanceLink {
+                id: link_derived,
+                from: rid,
+                to: source,
+                relation: RelationType::DerivedFrom,
+            },
+            ProvenanceLink {
+                id: link_supports,
+                from: did,
+                to: eid,
+                relation: RelationType::Supports,
+            },
+        ],
+    })?;
+    Ok(())
+}
+
 /// Import a `.kicad_pcb` and run the **verify-only** review over it (epic E5 / increment B2) — the
 /// import -> AI-review fallback, end to end and with no back door. Populates a [`RuntimeCore`] via the
 /// real capability seam ([`import_design`]), then drives [`verify_only_workflow`] over that SAME core
@@ -295,7 +428,15 @@ pub fn verify_only_workflow() -> WorkflowPlan {
 /// (P3) and folded into state exactly as a generated design's would be — the review reuses the real
 /// runtime, never a side channel.
 ///
-/// The verification machines tolerate an import-only design (P4/P9 honesty): with no requirements,
+/// Before the review runs, the imported design is seeded with the [`default_fabrication_floor`]
+/// (increment E5.1) via [`seed_default_fabrication_floor`] — a `Fabrication` requirement committed
+/// through the real `CreateRequirement` seam. A `.kicad_pcb` carries copper but no process class, so
+/// without this the geometric DRC rules (`drc-trace-width`, `drc-copper-clearance`) have no floor and
+/// stay silent; seeding the default gives them one, so an imported too-thin trace or too-close copper
+/// pair is now caught by the review. It is a DEFAULT — a design that states its own process window
+/// overrides it.
+///
+/// The verification machines otherwise tolerate an import-only design (P4/P9 honesty): with no
 /// constraints, realized schematic, BOM, or placements, the constraint / ERC / BOM / DFM / EMC gates
 /// find nothing, so a defect in the imported copper surfaces at the DRC gate. The plan is linear, so
 /// it stops at the first failing gate with that violation recorded. Returns the per-phase outcomes
@@ -303,6 +444,9 @@ pub fn verify_only_workflow() -> WorkflowPlan {
 /// provenance links that make each one traceable back to the net/track it implicates.
 pub fn import_and_verify(kicad_src: &str) -> Result<RunReport, CliError> {
     let mut core = import_design(kicad_src)?;
+    // Seed the default fabrication process floor (E5.1) BEFORE verifying, through the real
+    // CreateRequirement seam, so `drc-trace-width` / `drc-copper-clearance` have a floor to evaluate.
+    seed_default_fabrication_floor(&mut core)?;
     let mut plan = verify_only_workflow();
     let outcomes = Orchestrator::new().run(&mut plan, &mut core);
     Ok(RunReport {

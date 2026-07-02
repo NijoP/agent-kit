@@ -18,12 +18,12 @@ eak-runtime = { workspace = true }
 eak-phases = { workspace = true }
 eak-reasoning = { workspace = true }
 eak-store = { workspace = true }
+# Typed physical quantities (P9): the default fabrication process floor (E5.1) is stated in
+# millimetres, so the composition root builds the seeded targets as `PhysicalQuantity`.
+eak-units = { workspace = true }
 # Path (not workspace) dep: the importer is not registered in the root workspace deps, and the
 # composition root is the one ring allowed to reach both the kicad adapter and the runtime.
 eak-kicad = { path = "../eak-kicad" }
-
-[dev-dependencies]
-eak-units = { workspace = true }
 
 [features]
 live = ["eak-reasoning/live"]
