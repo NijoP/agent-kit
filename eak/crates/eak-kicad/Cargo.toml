@@ -1,0 +1,15 @@
+[package]
+name = "eak-kicad"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+eak-domain = { workspace = true }
+eak-units = { workspace = true }
+
+# The verification engine is only needed to DEMONSTRATE import -> review in tests; the importer
+# itself depends on nothing outward (it produces plain domain entities).
+[dev-dependencies]
+eak-engines = { workspace = true }

@@ -178,7 +178,10 @@ mod kernel_tests {
         core.capture_intent("USB-C powered IoT sensor node, < 5 W", "engineer")
             .unwrap();
         assert_eq!(seen.borrow().len(), 1, "sink saw the intent event live");
-        assert!(matches!(seen.borrow()[0].event, Event::IntentCaptured { .. }));
+        assert!(matches!(
+            seen.borrow()[0].event,
+            Event::IntentCaptured { .. }
+        ));
 
         // A multi-event commit (evidence?/decision/requirement) keeps streaming in order.
         let src = core.state.intent.as_ref().unwrap().id;
