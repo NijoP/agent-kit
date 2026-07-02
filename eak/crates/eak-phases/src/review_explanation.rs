@@ -237,6 +237,7 @@ mod tests {
                 key,
                 response: ReasoningResponse {
                     candidates: vec![],
+                    part_candidates: vec![],
                     explanations: vec![CandidateExplanation {
                         explanation: EXPLANATION.into(),
                         suggested_fix: FIX.into(),

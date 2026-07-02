@@ -279,13 +279,42 @@ pub struct CandidateExplanation {
     pub suggested_fix: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+/// One candidate part selection proposed by the reasoning engine under the `part_candidates_v1`
+/// schema (E6 C2) — *judgement only*, exactly like [`CandidateRequirement`]. The model names the
+/// manufacturer part number it believes realizes a given component class; that claim is UNTRUSTED.
+/// The deterministic half of the part-selection agent re-validates every proposal against the
+/// authoritative `PartCatalog` (in `eak-engines`) and REJECTS any MPN the catalog does not carry
+/// for that class — a rejected proposal is never committed and never enters state (the seam, P3).
+/// The committed [`Part`] is always built from the trusted catalog record, so the model's free
+/// text can never reach engineering state even when its proposal is accepted; it only *chooses*
+/// among catalogued parts, it does not *author* one.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct CandidatePart {
+    /// The component class this proposal is for (e.g. "Ic", "Connector", "Regulator"). Matched
+    /// against the schematic's classes case-insensitively; an unrecognized class is simply ignored.
+    pub component_class: String,
+    /// The manufacturer part number the model proposes for that class — the claim the kernel checks
+    /// against the catalog. A non-catalog MPN here is the canonical rejected proposal.
+    pub mpn: String,
+    /// Advisory rationale for the choice (recorded for the reasoning/traceability panel).
+    #[serde(default)]
+    pub rationale: String,
+    /// The model's self-reported confidence in the selection (advisory).
+    #[serde(default)]
+    pub confidence: f64,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ReasoningResponse {
     pub candidates: Vec<CandidateRequirement>,
     /// Advisory violation explanations (E6 C1). Additive and defaulted, so a
     /// `requirement_candidates_v1` response that omits it deserializes unchanged.
     #[serde(default)]
     pub explanations: Vec<CandidateExplanation>,
+    /// Candidate part selections (E6 C2, `part_candidates_v1`). Additive and defaulted, so a
+    /// requirement or explanation response that omits it deserializes unchanged.
+    #[serde(default)]
+    pub part_candidates: Vec<CandidatePart>,
     #[serde(default)]
     pub clarifying_questions: Vec<String>,
     #[serde(default)]

@@ -115,6 +115,7 @@ mod tests {
                 rationale: String::new(),
                 targets: vec![],
             }],
+            part_candidates: vec![],
             explanations: vec![],
             clarifying_questions: vec![],
             raw: String::new(),

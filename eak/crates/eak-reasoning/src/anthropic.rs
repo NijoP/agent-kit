@@ -8,13 +8,15 @@
 
 use eak_domain::{Priority, RequirementCategory};
 use eak_ports::{
-    CandidateExplanation, CandidateRequirement, ReasoningEngine, ReasoningError, ReasoningRequest,
-    ReasoningResponse,
+    CandidateExplanation, CandidatePart, CandidateRequirement, ReasoningEngine, ReasoningError,
+    ReasoningRequest, ReasoningResponse,
 };
 use serde::Deserialize;
 
 /// Schema name of the advisory review explainer (E6 C1). Kept in sync with the fixture path.
 const EXPLANATION_SCHEMA: &str = "violation_explanation_v1";
+/// Schema name of the part-selection proposer (E6 C2). Kept in sync with the fixture path.
+const PART_SCHEMA: &str = "part_candidates_v1";
 
 pub struct AnthropicEngine {
     api_key: String,
@@ -71,6 +73,24 @@ struct RawExplanation {
     explanation: String,
     #[serde(default)]
     suggested_fix: String,
+}
+
+#[derive(Deserialize)]
+struct RawPartCandidate {
+    #[serde(default)]
+    component_class: String,
+    #[serde(default)]
+    mpn: String,
+    #[serde(default)]
+    rationale: String,
+    #[serde(default = "default_confidence")]
+    confidence: f64,
+}
+
+#[derive(Deserialize)]
+struct RawPartOutput {
+    #[serde(default)]
+    part_candidates: Vec<RawPartCandidate>,
 }
 
 fn map_category(s: &str) -> RequirementCategory {
@@ -203,6 +223,7 @@ impl AnthropicEngine {
 
         Ok(ReasoningResponse {
             candidates,
+            part_candidates: vec![],
             explanations: vec![],
             clarifying_questions: raw.clarifying_questions,
             raw: raw_body,
@@ -240,6 +261,62 @@ impl AnthropicEngine {
                 explanation: raw.explanation,
                 suggested_fix: raw.suggested_fix,
             }],
+            part_candidates: vec![],
+            clarifying_questions: vec![],
+            raw: raw_body,
+        })
+    }
+
+    /// Part-selection path (`part_candidates_v1`, E6 C2). The model PROPOSES an MPN per component
+    /// class; the mapping here is pure transport — every proposal is untrusted and is re-validated
+    /// against the authoritative catalog by the part-selection agent's deterministic half (the
+    /// moat, P3), which commits only catalogued parts and rejects the rest. This method never
+    /// touches state; it only shapes the tool output into [`CandidatePart`]s.
+    fn request_parts(&self, req: &ReasoningRequest) -> Result<ReasoningResponse, ReasoningError> {
+        let tool_schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "part_candidates": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "component_class": {"type": "string", "enum": ["Connector","Regulator","Ic","Resistor","Capacitor"]},
+                            "mpn": {"type": "string"},
+                            "rationale": {"type": "string"},
+                            "confidence": {"type": "number"}
+                        },
+                        "required": ["component_class","mpn"]
+                    }
+                }
+            },
+            "required": ["part_candidates"]
+        });
+        let (input, raw_body) = self.invoke_tool(
+            "emit_part_selections",
+            "Propose an approved-catalog manufacturer part number for each component class. \
+             A non-catalog part number will be rejected by the kernel.",
+            tool_schema,
+            req,
+        )?;
+        let raw: RawPartOutput =
+            serde_json::from_value(input).map_err(|e| ReasoningError::Schema(e.to_string()))?;
+
+        let part_candidates = raw
+            .part_candidates
+            .into_iter()
+            .map(|p| CandidatePart {
+                component_class: p.component_class,
+                mpn: p.mpn,
+                rationale: p.rationale,
+                confidence: p.confidence,
+            })
+            .collect();
+
+        Ok(ReasoningResponse {
+            candidates: vec![],
+            explanations: vec![],
+            part_candidates,
             clarifying_questions: vec![],
             raw: raw_body,
         })
@@ -257,6 +334,8 @@ impl ReasoningEngine for AnthropicEngine {
     ) -> Result<ReasoningResponse, ReasoningError> {
         if req.schema_name == EXPLANATION_SCHEMA {
             self.request_explanation(req)
+        } else if req.schema_name == PART_SCHEMA {
+            self.request_parts(req)
         } else {
             self.request_requirements(req)
         }

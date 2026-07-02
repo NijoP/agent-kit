@@ -76,6 +76,7 @@ fn contradictory_engine() -> Box<dyn ReasoningEngine> {
     };
     Box::new(FixtureEngine::single(ReasoningResponse {
         candidates: vec![power_max, power_min],
+        part_candidates: vec![],
         explanations: vec![],
         clarifying_questions: vec![],
         raw: "{}".into(),
@@ -109,6 +110,7 @@ fn load_only_engine() -> Box<dyn ReasoningEngine> {
     };
     Box::new(FixtureEngine::single(ReasoningResponse {
         candidates: vec![sensor, logic],
+        part_candidates: vec![],
         explanations: vec![],
         clarifying_questions: vec![],
         raw: "{}".into(),
@@ -154,6 +156,7 @@ fn regulator_and_load_engine() -> Box<dyn ReasoningEngine> {
     };
     Box::new(FixtureEngine::single(ReasoningResponse {
         candidates: vec![usb_c, regulator, load],
+        part_candidates: vec![],
         explanations: vec![],
         clarifying_questions: vec![],
         raw: "{}".into(),
@@ -207,6 +210,7 @@ fn oversize_board_engine() -> Box<dyn ReasoningEngine> {
     };
     Box::new(FixtureEngine::single(ReasoningResponse {
         candidates: vec![usb_c, enclosure, load],
+        part_candidates: vec![],
         explanations: vec![],
         clarifying_questions: vec![],
         raw: "{}".into(),
@@ -254,6 +258,7 @@ fn trace_floor_engine() -> Box<dyn ReasoningEngine> {
     };
     Box::new(FixtureEngine::single(ReasoningResponse {
         candidates: vec![usb_c, load, process],
+        part_candidates: vec![],
         explanations: vec![],
         clarifying_questions: vec![],
         raw: "{}".into(),
@@ -299,6 +304,7 @@ fn tight_edge_board_engine() -> Box<dyn ReasoningEngine> {
     };
     Box::new(FixtureEngine::single(ReasoningResponse {
         candidates: vec![usb_c, enclosure, load],
+        part_candidates: vec![],
         explanations: vec![],
         clarifying_questions: vec![],
         raw: "{}".into(),
@@ -346,6 +352,7 @@ fn high_speed_engine() -> Box<dyn ReasoningEngine> {
     };
     Box::new(FixtureEngine::single(ReasoningResponse {
         candidates: vec![usb_c, load, high_speed],
+        part_candidates: vec![],
         explanations: vec![],
         clarifying_questions: vec![],
         raw: "{}".into(),

@@ -32,6 +32,38 @@
         "targets": []
       }
     ],
+    "part_candidates": [
+      {
+        "component_class": "Connector",
+        "mpn": "USB4110-GF-A",
+        "rationale": "USB-C receptacle for the power-entry connector class.",
+        "confidence": 0.95
+      },
+      {
+        "component_class": "Ic",
+        "mpn": "STM32L010F4P6",
+        "rationale": "Low-power MCU for the logic/IC load class.",
+        "confidence": 0.93
+      },
+      {
+        "component_class": "Regulator",
+        "mpn": "LM1117-3.3",
+        "rationale": "3.3 V linear regulator for the regulator class.",
+        "confidence": 0.9
+      },
+      {
+        "component_class": "Resistor",
+        "mpn": "RC0402FR-0710KL",
+        "rationale": "0402 thick-film resistor for the resistor class.",
+        "confidence": 0.9
+      },
+      {
+        "component_class": "Capacitor",
+        "mpn": "CL05A104KA5NNNC",
+        "rationale": "0402 MLCC for the capacitor class.",
+        "confidence": 0.9
+      }
+    ],
     "clarifying_questions": [],
     "raw": "fixture"
   }

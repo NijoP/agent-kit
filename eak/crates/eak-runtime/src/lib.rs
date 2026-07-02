@@ -98,6 +98,7 @@ mod kernel_tests {
         ) -> Result<ReasoningResponse, ReasoningError> {
             Ok(ReasoningResponse {
                 candidates: vec![],
+                part_candidates: vec![],
                 explanations: vec![],
                 clarifying_questions: vec![],
                 raw: String::new(),

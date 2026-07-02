@@ -1,27 +1,40 @@
-//! BOM Planning state machine (instance) — DETERMINISTIC in Phase 3.
+//! BOM Planning state machine (instance) — REASONING-DRIVEN part selection (E6 C2).
 //!
 //! It turns the realized schematic into a procurable bill of materials: every
-//! [`Component`](eak_domain::Component) is grouped by [`ComponentClass`], each class is
-//! resolved to a concrete [`Part`] through the deterministic [`PartCatalog`], and a
-//! [`BomLineItem`] binds that part to the components it covers (P13: nothing ships
-//! unsourced). It makes NO reasoning calls — catalog selection is a pure function of the
-//! component class, so a replay is bit-identical (P4). It is idempotent: if line items
-//! already exist (e.g. on a BOM-loop back) it only (re)projects the [`BomIr`] and re-emits the
-//! milestone, committing nothing new. Parts are deduplicated by manufacturer part number so a
-//! class shared across components yields a single ordered part. See
+//! [`Component`](eak_domain::Component) is grouped by [`ComponentClass`], each class is resolved to
+//! a concrete [`Part`](eak_domain::Part), and a [`BomLineItem`](eak_domain::BomLineItem) binds that
+//! part to the components it covers (P13: nothing ships unsourced). The part CHOICE is now proposed
+//! by the model (`part_candidates_v1`) and re-validated against the authoritative
+//! [`PartCatalog`](eak_engines::PartCatalog): the [`PartSelectionAgent`] asks
+//! `ctx.reason`, then commits — through the ordinary capability seam — only proposals the catalog
+//! actually carries, REJECTING any hallucinated MPN (which the `bom-coverage` gate then surfaces).
+//! This is the SECOND phase to reason (after Requirement Planning), and the moat holds: the model
+//! only *chooses* among catalogued parts, the committed part is built from the trusted catalog
+//! record, and a rejected proposal never enters state (see `part_agent.rs`).
+//!
+//! DETERMINISM/REPLAY (P4): the reasoning call is recorded, and a class the model is silent about
+//! (the offline default cassette, or a `FixtureEngine::single` scenario) falls back to the exact
+//! pre-C2 catalog selection — so an offline run remains bit-identical. It is idempotent: if line
+//! items already exist (e.g. on a BOM-loop back) it only (re)projects the [`BomIr`] and re-emits the
+//! milestone, committing nothing new (and making no fresh reasoning call). See
 //! `docs/state-machines/bom-planning.md`.
 
+use crate::part_agent::PartSelectionAgent;
 use eak_compiler::{BomIr, EngineeringIr, RequirementIr, SchematicIr};
-use eak_domain::{BomLineItem, ComponentClass, EntityId, Part, ProvenanceLink, RelationType};
-use eak_engines::PartCatalog;
 use eak_ports::Event;
-use eak_runtime::{AgentContext, CapabilityRequest, Machine, MachineError, StepResult};
+use eak_runtime::{
+    Agent, AgentActivation, AgentContext, AgentOutcome, Budget, Machine, MachineError, StepResult,
+};
 
-pub struct BomPlanningMachine;
+pub struct BomPlanningMachine {
+    agent: PartSelectionAgent,
+}
 
 impl BomPlanningMachine {
     pub fn new() -> Self {
-        Self
+        Self {
+            agent: PartSelectionAgent::new(),
+        }
     }
 }
 impl Default for BomPlanningMachine {
@@ -49,84 +62,26 @@ impl Machine for BomPlanningMachine {
 
             "Planning" => {
                 // Idempotent: synthesize the BOM only once. A re-entry (BOM loop-back) skips
-                // synthesis and just (re)projects the IR below.
+                // synthesis (and its reasoning call) and just (re)projects the IR below. Delegate
+                // part selection to the reasoning-driven agent: it proposes (via `ctx.reason`),
+                // re-validates every proposal against the catalog, and commits the survivors
+                // through the seam — rejected proposals never enter state (the moat, P3).
                 if ctx.bom_line_items().is_empty() {
-                    let catalog = PartCatalog::new();
-                    let components = ctx.components();
-
-                    // Group components by class in first-appearance order — a deterministic
-                    // pass so the minted line items (and their ids) are reproducible (P4).
-                    let mut groups: Vec<(ComponentClass, Vec<EntityId>)> = Vec::new();
-                    for component in &components {
-                        if let Some(group) = groups
-                            .iter_mut()
-                            .find(|(class, _)| *class == component.class)
-                        {
-                            group.1.push(component.id);
-                        } else {
-                            groups.push((component.class, vec![component.id]));
+                    let activation = AgentActivation {
+                        phase: "BomPlanning".into(),
+                        goal: "select an approved catalog part for each component class".into(),
+                        budget: Budget {
+                            max_reasoning_calls: 1,
+                        },
+                    };
+                    match self.agent.activate(ctx, &activation) {
+                        AgentOutcome::Success { .. } => {}
+                        AgentOutcome::NeedsHuman(m) => {
+                            return Ok(StepResult::Failed(format!(
+                                "needs human: {m} (HITL deferred)"
+                            )))
                         }
-                    }
-
-                    // Cache of manufacturer-part-number -> committed part id, seeded with any
-                    // already-committed parts, so a part reused across classes (same mpn) is
-                    // ordered once (P13).
-                    let mut part_ids: Vec<(String, EntityId)> =
-                        ctx.parts().iter().map(|p| (p.mpn.clone(), p.id)).collect();
-
-                    for (class, comp_ids) in &groups {
-                        let cp = catalog.part_for(*class);
-
-                        // Dedup the part by mpn: reuse an existing one, else mint and commit it.
-                        let part_id = if let Some((_, id)) =
-                            part_ids.iter().find(|(mpn, _)| mpn.as_str() == cp.mpn)
-                        {
-                            *id
-                        } else {
-                            let pid = ctx.fresh_id();
-                            let part = Part {
-                                id: pid,
-                                mpn: cp.mpn.into(),
-                                manufacturer: cp.manufacturer.into(),
-                                lifecycle: cp.lifecycle,
-                                datasheet: cp.datasheet.into(),
-                            };
-                            ctx.invoke(CapabilityRequest::CreatePart {
-                                part,
-                                links: vec![],
-                            })
-                            .map_err(|e| MachineError::Internal(e.to_string()))?;
-                            part_ids.push((cp.mpn.to_string(), pid));
-                            pid
-                        };
-
-                        // The line binds the part to every component of this class. Provenance:
-                        // the line traces to the part it orders AND to each component it covers,
-                        // so a BOM violation is fully link-traceable back to intent (P3):
-                        // Violation -> line -> {part ; component -> block -> requirement -> intent}.
-                        let item_id = ctx.fresh_id();
-                        let item = BomLineItem {
-                            id: item_id,
-                            part: part_id,
-                            components: comp_ids.clone(),
-                            quantity: comp_ids.len() as u32,
-                        };
-                        let mut links = vec![ProvenanceLink {
-                            id: ctx.fresh_id(),
-                            from: item_id,
-                            to: part_id,
-                            relation: RelationType::TracesTo,
-                        }];
-                        for cid in comp_ids {
-                            links.push(ProvenanceLink {
-                                id: ctx.fresh_id(),
-                                from: item_id,
-                                to: *cid,
-                                relation: RelationType::TracesTo,
-                            });
-                        }
-                        ctx.invoke(CapabilityRequest::CreateBomLineItem { item, links })
-                            .map_err(|e| MachineError::Internal(e.to_string()))?;
+                        AgentOutcome::Failed(m) => return Ok(StepResult::Failed(m)),
                     }
                 }
 
