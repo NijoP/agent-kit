@@ -130,7 +130,7 @@ fn quote(s: &str) -> String {
 mod tests {
     use super::*;
     use crate::import_kicad_pcb;
-    use eak_domain::{Board, EntityId, LayerStack, Net, NetClass};
+    use eak_domain::{Board, EntityId, LayerStack, Net, NetClass, NetOrigin};
     use eak_units::Unit;
 
     /// A real-shaped board with power/ground/signal nets on both copper sides, plus a via the
@@ -237,6 +237,7 @@ mod tests {
                 members: vec![],
                 current: None,
                 impedance_target: None,
+                origin: NetOrigin::Logical,
             },
             Net {
                 id: EntityId(2),
@@ -245,6 +246,7 @@ mod tests {
                 members: vec![],
                 current: None,
                 impedance_target: None,
+                origin: NetOrigin::Logical,
             },
         ];
         let tracks = vec![

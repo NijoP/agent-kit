@@ -278,7 +278,7 @@ fn project_pcb(ctx: &mut dyn AgentContext) -> Result<PcbIr, MachineError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use eak_domain::{LayerRole, LayerStack};
+    use eak_domain::{LayerRole, LayerStack, NetOrigin};
 
     /// A net with the given optional controlled-impedance target (Ω) on a Signal class.
     fn signal_net(id: u128, impedance_ohm: Option<f64>) -> Net {
@@ -289,6 +289,7 @@ mod tests {
             members: vec![],
             current: None,
             impedance_target: impedance_ohm.map(|z| PhysicalQuantity::new(z, Unit::Ohm)),
+            origin: NetOrigin::Logical,
         }
     }
 

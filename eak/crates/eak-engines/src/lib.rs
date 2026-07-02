@@ -1765,7 +1765,9 @@ impl Rule for EmcAntennaLengthRule {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use eak_domain::{BoardSide, ConstraintStatus, LayerStack, Priority, RequirementStatus};
+    use eak_domain::{
+        BoardSide, ConstraintStatus, LayerStack, NetOrigin, Priority, RequirementStatus,
+    };
     use eak_units::Unit;
 
     #[test]
@@ -1922,6 +1924,7 @@ mod tests {
             members: members.into_iter().map(EntityId).collect(),
             current: None,
             impedance_target: None,
+            origin: NetOrigin::Logical,
         }
     }
 
@@ -1933,6 +1936,7 @@ mod tests {
             members: vec![],
             current: Some(PhysicalQuantity::new(current_a, Unit::Ampere)),
             impedance_target: None,
+            origin: NetOrigin::Logical,
         }
     }
 
@@ -1944,6 +1948,7 @@ mod tests {
             members: vec![],
             current: None,
             impedance_target: Some(PhysicalQuantity::new(ohms, Unit::Ohm)),
+            origin: NetOrigin::Logical,
         }
     }
 

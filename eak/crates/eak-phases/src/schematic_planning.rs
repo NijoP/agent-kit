@@ -10,8 +10,8 @@
 
 use eak_compiler::{EngineeringIr, RequirementIr, SchematicIr};
 use eak_domain::{
-    Component, ComponentClass, EntityId, FunctionalBlock, Net, NetClass, Pin, PinElectricalType,
-    ProvenanceLink, RelationType, Requirement, RequirementCategory,
+    Component, ComponentClass, EntityId, FunctionalBlock, Net, NetClass, NetOrigin, Pin,
+    PinElectricalType, ProvenanceLink, RelationType, Requirement, RequirementCategory,
 };
 use eak_ports::Event;
 use eak_runtime::{AgentContext, CapabilityRequest, Machine, MachineError, StepResult};
@@ -215,6 +215,7 @@ impl Machine for SchematicPlanningMachine {
                                 // ampacity floor stays unstated here and its DRC check is silent.
                                 current: None,
                                 impedance_target: None,
+                                origin: NetOrigin::Logical,
                             };
                             ctx.invoke(CapabilityRequest::CreateNet { net, links: vec![] })
                                 .map_err(|e| MachineError::Internal(e.to_string()))?;
@@ -234,6 +235,7 @@ impl Machine for SchematicPlanningMachine {
                             members: ground_members,
                             current: None,
                             impedance_target: None,
+                            origin: NetOrigin::Logical,
                         };
                         ctx.invoke(CapabilityRequest::CreateNet { net, links: vec![] })
                             .map_err(|e| MachineError::Internal(e.to_string()))?;

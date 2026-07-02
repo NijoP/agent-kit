@@ -32,6 +32,7 @@ Phase 1 (implementation start) records the technology and scoping decisions Phas
 | [0013](0013-reasoning-adapters-fixture-and-live.md) | Reasoning adapters: one port, fixture + live Anthropic | Accepted |
 | [0014](0014-first-phase-requirement-planning.md) | First implemented phase: Requirement Planning | Accepted |
 | [0015](0015-phase1-autonomous-hitl-deferred.md) | Phase 1 runs autonomously; human-in-the-loop deferred | Accepted |
+| [0016](0016-net-origin-logical-vs-physical.md) | `NetOrigin`: logical (synthesised) vs physical (imported) nets | Accepted |
 
 ## The ADR lifecycle
 

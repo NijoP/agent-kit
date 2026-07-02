@@ -10,8 +10,8 @@ use crate::protocol::{AgentContext, Autonomy, CapabilityAck, CapabilityError, Ca
 use crate::state::EngineeringState;
 use eak_domain::{
     Board, BomLineItem, Component, Constraint, Decision, DesignIntent, EntityId, Evidence,
-    FunctionalBlock, Net, Part, Pin, Placement, ProvenanceLink, Requirement, Track, Violation,
-    Waiver,
+    FunctionalBlock, Net, NetOrigin, Part, Pin, Placement, ProvenanceLink, Requirement, Track,
+    Violation, Waiver,
 };
 use eak_ports::{
     Event, EventLog, EventRecord, EventSink, ReasoningEngine, ReasoningError, ReasoningRequest,
@@ -314,14 +314,21 @@ impl RuntimeCore {
         // The seam (P3): re-validate the net and its membership before committing.
         net.validate()
             .map_err(|e| CapabilityError::Rejected(e.to_string()))?;
-        // A net joining no pins carries no connectivity — reject it (P13).
-        if net.members.is_empty() {
+        // The ≥1-pin rule is an *origin-dependent* seam invariant (P3, P13), not a domain one.
+        // A `Logical` net is synthesised from the schematic, which joins pins, so a member-less
+        // logical net is a synthesis defect and is rejected — existing behavior, verbatim. A
+        // `Physical` net is imported from a finished board's copper, which carries no parsed pins
+        // yet (import order is CreateBoard -> CreateNet -> RouteNet, so the realizing tracks do not
+        // exist at net-creation), so it MAY be member-less; the seam never fabricates a pin to
+        // satisfy the logical rule. Either way, any member that IS listed must be a committed pin.
+        if matches!(net.origin, NetOrigin::Logical) && net.members.is_empty() {
             return Err(CapabilityError::Rejected(
                 "net joins no pins (carries no connectivity)".into(),
             ));
         }
-        // Referential integrity at the seam: every member must be a committed pin, so
-        // connectivity can never reference a phantom terminal (P3, P5).
+        // Referential integrity at the seam: every member that is listed must be a committed pin,
+        // so connectivity can never reference a phantom terminal (P3, P5) — enforced for both
+        // origins, so a `Physical` net can be empty but never fabricates a pin.
         for pid in &net.members {
             if self.state.pin(*pid).is_none() {
                 return Err(CapabilityError::Rejected(format!(

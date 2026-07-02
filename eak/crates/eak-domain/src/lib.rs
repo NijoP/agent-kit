@@ -352,6 +352,23 @@ pub struct Pin {
     pub electrical_type: PinElectricalType,
 }
 
+/// Where a [`Net`] came from — the discriminator that lets the capability seam apply the right
+/// connectivity invariant to each. A `Logical` net is *synthesised* (Schematic Planning joins
+/// pins), so it must join ≥1 pin or it is a synthesis defect. A `Physical` net is *imported* from a
+/// finished board's copper, which carries no parsed pins yet, so it may legitimately be member-less
+/// — the seam must never fabricate a pin to satisfy the logical rule. Old event logs predate this
+/// field, so [`Net::origin`] is `#[serde(default)]` and defaults to `Logical` (their historical
+/// meaning). A static, fieldless enum: it folds identically on replay (P4).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum NetOrigin {
+    /// Synthesised connectivity that joins pins (the schematic/synthesis path). Requires ≥1 member.
+    /// The default, so pre-existing event logs (which never carried an origin) deserialize here.
+    #[default]
+    Logical,
+    /// Imported copper from a finished board, which carries no parsed pins. May be member-less.
+    Physical,
+}
+
 /// A first-class electrical connection joining a set of [`Pin`]s. Made addressable so ERC
 /// findings can name the offending net and trace it (P3, P13). The optional `current` is the
 /// net's worst-case DC load — physically the KCL sum of its consumers (see
@@ -376,6 +393,12 @@ pub struct Net {
     /// trace to the stack-up-derived microstrip width and `drc-impedance-match` confirms the
     /// realized Z₀ is within tolerance (see `engineering-science/electrical/transmission-lines.md`).
     pub impedance_target: Option<PhysicalQuantity>,
+    /// Whether this net was synthesised (`Logical`, joins pins) or imported from a physical board's
+    /// copper (`Physical`, may be member-less). Drives the connectivity invariant the capability
+    /// seam applies (see [`NetOrigin`]). `#[serde(default)]` so pre-existing logs — which never
+    /// carried an origin — deserialize as `Logical`, their original meaning (P4 replay-stability).
+    #[serde(default)]
+    pub origin: NetOrigin,
 }
 
 impl Net {
@@ -947,6 +970,7 @@ mod tests {
             members: vec![EntityId(2), EntityId(3)],
             current: None,
             impedance_target: None,
+            origin: NetOrigin::Logical,
         };
         assert_eq!(n.validate(), Err(DomainError::EmptyField("net name")));
     }
@@ -960,6 +984,7 @@ mod tests {
             members: vec![EntityId(2), EntityId(3)],
             current: None,
             impedance_target: None,
+            origin: NetOrigin::Logical,
         };
         assert!(n.validate().is_ok());
     }
@@ -973,6 +998,7 @@ mod tests {
             members: vec![EntityId(2), EntityId(3)],
             current: Some(PhysicalQuantity::new(2.0, Unit::Ampere)),
             impedance_target: None,
+            origin: NetOrigin::Logical,
         };
         assert!(n.validate().is_ok());
     }
@@ -987,6 +1013,7 @@ mod tests {
             members: vec![EntityId(2)],
             current: Some(PhysicalQuantity::new(2.0, Unit::Millimetre)),
             impedance_target: None,
+            origin: NetOrigin::Logical,
         };
         assert!(matches!(n.validate(), Err(DomainError::Inconsistent(_))));
     }
@@ -1000,6 +1027,7 @@ mod tests {
             members: vec![EntityId(2)],
             current: Some(PhysicalQuantity::new(0.0, Unit::Ampere)),
             impedance_target: None,
+            origin: NetOrigin::Logical,
         };
         assert!(matches!(n.validate(), Err(DomainError::Inconsistent(_))));
     }
@@ -1013,6 +1041,7 @@ mod tests {
             members: vec![EntityId(2)],
             current: None,
             impedance_target: Some(PhysicalQuantity::new(50.0, Unit::Ohm)),
+            origin: NetOrigin::Logical,
         };
         assert!(n.validate().is_ok());
     }
@@ -1027,6 +1056,7 @@ mod tests {
             members: vec![EntityId(2)],
             current: None,
             impedance_target: Some(PhysicalQuantity::new(50.0, Unit::Millimetre)),
+            origin: NetOrigin::Logical,
         };
         assert!(matches!(n.validate(), Err(DomainError::Inconsistent(_))));
     }

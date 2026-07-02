@@ -52,8 +52,9 @@ mod kernel_tests {
     use super::*;
     use eak_domain::{
         Board, BoardSide, BomLineItem, Component, ComponentClass, Decision, EntityId,
-        FunctionalBlock, LayerStack, Net, NetClass, Part, PartLifecycle, Pin, PinElectricalType,
-        Placement, Priority, Requirement, RequirementCategory, RequirementStatus, Track,
+        FunctionalBlock, LayerStack, Net, NetClass, NetOrigin, Part, PartLifecycle, Pin,
+        PinElectricalType, Placement, Priority, Requirement, RequirementCategory,
+        RequirementStatus, Track,
     };
     use eak_ports::{
         Event, EventLog, EventRecord, ReasoningEngine, ReasoningError, ReasoningRequest,
@@ -234,6 +235,71 @@ mod kernel_tests {
         )
     }
 
+    /// The B1 ruling: the ≥1-pin connectivity rule is an *origin-dependent* seam invariant. A
+    /// `Physical` (imported-copper) net may be member-less; a `Logical` (synthesised) net may not;
+    /// and neither origin may reference a pin that was never committed (Physical relaxes the count,
+    /// never the no-phantom-terminal rule). No board is needed — `CreateNet` gates on the net alone.
+    #[test]
+    fn create_net_seam_applies_origin_dependent_connectivity_invariant() {
+        let mut core = new_core();
+        let phys_id = core.fresh_id();
+        let logi_id = core.fresh_id();
+        let phantom_id = core.fresh_id();
+
+        // Physical + member-less: ACCEPTED — imported copper carries no parsed pins yet.
+        core.invoke(CapabilityRequest::CreateNet {
+            net: Net {
+                id: phys_id,
+                name: "GND".into(),
+                class: NetClass::Ground,
+                members: vec![],
+                current: None,
+                impedance_target: None,
+                origin: NetOrigin::Physical,
+            },
+            links: vec![],
+        })
+        .expect("a member-less Physical net is accepted at the seam");
+        assert_eq!(core.state.nets.len(), 1);
+
+        // Logical + member-less: REJECTED — the synthesis connectivity invariant is intact.
+        let err = core
+            .invoke(CapabilityRequest::CreateNet {
+                net: Net {
+                    id: logi_id,
+                    name: "VCC".into(),
+                    class: NetClass::Power,
+                    members: vec![],
+                    current: None,
+                    impedance_target: None,
+                    origin: NetOrigin::Logical,
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // Physical but listing a pin that was never committed: REJECTED — no fabricated terminal.
+        let err = core
+            .invoke(CapabilityRequest::CreateNet {
+                net: Net {
+                    id: phantom_id,
+                    name: "SDA".into(),
+                    class: NetClass::Signal,
+                    members: vec![EntityId(0xDEAD_BEEF)],
+                    current: None,
+                    impedance_target: None,
+                    origin: NetOrigin::Physical,
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // Only the accepted Physical net folded into state.
+        assert_eq!(core.state.nets.len(), 1);
+    }
+
     #[test]
     fn phase3_synthesis_commits_fold_and_replay_byte_identically() {
         let mut core = new_core();
@@ -312,6 +378,7 @@ mod kernel_tests {
                 members: vec![pid],
                 current: None,
                 impedance_target: None,
+                origin: NetOrigin::Logical,
             },
             links: vec![],
         })
@@ -689,6 +756,7 @@ mod kernel_tests {
                     members: vec![],
                     current: None,
                     impedance_target: None,
+                    origin: NetOrigin::Logical,
                 },
                 links: vec![],
             })
@@ -942,6 +1010,7 @@ mod kernel_tests {
                 members: vec![pin_id],
                 current: None,
                 impedance_target: None,
+                origin: NetOrigin::Logical,
             },
             links: vec![],
         })

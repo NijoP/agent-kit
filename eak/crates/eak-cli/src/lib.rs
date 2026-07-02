@@ -16,8 +16,8 @@ use eak_phases::{
 use eak_ports::{EventSink, ReasoningEngine};
 use eak_reasoning::{Cassette, FixtureEngine};
 use eak_runtime::{
-    replay, Autonomy, Clock, LogicalClock, LoopBack, Orchestrator, RuntimeCore, SeededIdSource,
-    SystemClock, WorkflowPlan,
+    replay, AgentContext, Autonomy, CapabilityRequest, Clock, LogicalClock, LoopBack, Orchestrator,
+    RuntimeCore, SeededIdSource, SystemClock, WorkflowPlan,
 };
 use eak_store::FileEventLog;
 use std::path::{Path, PathBuf};
@@ -54,11 +54,16 @@ pub struct RunReport {
 #[derive(Debug)]
 pub enum CliError {
     Msg(String),
+    /// A design could not be imported. Either the `.kicad_pcb` failed to parse, or a proposed
+    /// import entity was declined at the capability seam (P3) — never a back door; the runtime
+    /// re-validated the proposal and rejected it, exactly as it would a generated one.
+    Import(String),
 }
 impl std::fmt::Display for CliError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             CliError::Msg(m) => write!(f, "{m}"),
+            CliError::Import(m) => write!(f, "import failed: {m}"),
         }
     }
 }
@@ -66,6 +71,16 @@ impl std::error::Error for CliError {}
 impl From<eak_ports::StoreError> for CliError {
     fn from(e: eak_ports::StoreError) -> Self {
         CliError::Msg(e.to_string())
+    }
+}
+impl From<eak_kicad::ImportError> for CliError {
+    fn from(e: eak_kicad::ImportError) -> Self {
+        CliError::Import(e.to_string())
+    }
+}
+impl From<eak_runtime::CapabilityError> for CliError {
+    fn from(e: eak_runtime::CapabilityError) -> Self {
+        CliError::Import(e.to_string())
     }
 }
 
@@ -152,6 +167,92 @@ pub fn run_with_sink(
         state: core.state.clone(),
         log_path: cfg.log.clone(),
     })
+}
+
+// ----------------------------- KiCad import driver (epic E5 / B1) -----------------------------
+
+/// A minimal append-only in-memory [`eak_ports::EventLog`] backing a self-contained
+/// [`import_design`] run. An import is a pure transformation (parse -> seam -> fold), so it needs
+/// no on-disk history to feed the runtime. The recorded events remain queryable through
+/// `RuntimeCore::log()`, which is how a caller (and the tests) prove each imported entity went
+/// through `commit`, not a side channel.
+struct MemoryEventLog {
+    records: Vec<eak_ports::EventRecord>,
+}
+impl eak_ports::EventLog for MemoryEventLog {
+    fn append(
+        &mut self,
+        events: &[(eak_ports::Timestamp, eak_ports::Event)],
+    ) -> Result<Vec<eak_ports::Seq>, eak_ports::StoreError> {
+        let mut seqs = Vec::new();
+        for (ts, ev) in events {
+            let seq = self.records.len() as eak_ports::Seq;
+            self.records.push(eak_ports::EventRecord {
+                seq,
+                timestamp: *ts,
+                event: ev.clone(),
+            });
+            seqs.push(seq);
+        }
+        Ok(seqs)
+    }
+    fn read_all(&self) -> Result<Vec<eak_ports::EventRecord>, eak_ports::StoreError> {
+        Ok(self.records.clone())
+    }
+    fn next_seq(&self) -> eak_ports::Seq {
+        self.records.len() as eak_ports::Seq
+    }
+}
+
+/// Construct a runtime for an import: an in-memory log (imports keep no persistent history), a
+/// logical clock + seeded ids so the run is reproducible (P4), and the default fixture reasoning
+/// engine — which import never calls, since importing a finished board involves no reasoning.
+fn import_core() -> Result<RuntimeCore, CliError> {
+    let cassette: Cassette =
+        serde_json::from_str(DEFAULT_CASSETTE).map_err(|e| CliError::Msg(e.to_string()))?;
+    let reasoning: Box<dyn ReasoningEngine> = Box::new(FixtureEngine::from_cassette(cassette));
+    Ok(RuntimeCore::new(
+        Box::new(MemoryEventLog { records: vec![] }),
+        reasoning,
+        Box::new(SeededIdSource::new(1)),
+        Box::new(LogicalClock::new()),
+        Autonomy::Autonomous,
+    ))
+}
+
+/// Feed an imported KiCad design through the **real capability seam**, so an imported board earns
+/// the same P3 re-validation and the same append-only event log as a generated one — no back door.
+///
+/// Parses `kicad_src` into an [`eak_kicad::ImportedDesign`], then commits its entities — in
+/// dependency order — through [`RuntimeCore::invoke`]: the single [`Board`](eak_domain::Board)
+/// outline first, then each [`Net`](eak_domain::Net), then each routed [`Track`](eak_domain::Track).
+/// Every entity funnels through the runtime's `commit` (stamp -> append -> fold), identical to the
+/// generation path. Any parse failure or seam rejection is surfaced as a [`CliError`] — the model
+/// (and, here, the importer) is never trusted to bypass validation.
+///
+/// The runtime is returned so the caller can read the reconstructed state (`core.state`) and the
+/// recorded event log (`core.log()`), which together prove the import went through `commit`.
+pub fn import_design(kicad_src: &str) -> Result<RuntimeCore, CliError> {
+    let design = eak_kicad::import_kicad_pcb(kicad_src)?;
+    let mut core = import_core()?;
+
+    // Dependency order: the outline must exist before any net or track (routing/placement seams
+    // require a board). Each `invoke` re-validates at the seam (P3) and, on success, commits.
+    core.invoke(CapabilityRequest::CreateBoard {
+        board: design.board,
+        links: vec![],
+    })?;
+    for net in design.nets {
+        core.invoke(CapabilityRequest::CreateNet { net, links: vec![] })?;
+    }
+    for track in design.tracks {
+        core.invoke(CapabilityRequest::RouteNet {
+            track,
+            links: vec![],
+        })?;
+    }
+
+    Ok(core)
 }
 
 /// The default Phase-3 workflow: Requirement Planning -> Engineering Analysis ->

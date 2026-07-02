@@ -152,6 +152,7 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "eak-domain",
+ "eak-kicad",
  "eak-phases",
  "eak-ports",
  "eak-reasoning",

@@ -18,6 +18,9 @@ eak-runtime = { workspace = true }
 eak-phases = { workspace = true }
 eak-reasoning = { workspace = true }
 eak-store = { workspace = true }
+# Path (not workspace) dep: the importer is not registered in the root workspace deps, and the
+# composition root is the one ring allowed to reach both the kicad adapter and the runtime.
+eak-kicad = { path = "../eak-kicad" }
 
 [dev-dependencies]
 eak-units = { workspace = true }

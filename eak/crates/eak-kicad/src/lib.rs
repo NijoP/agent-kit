@@ -11,7 +11,7 @@
 //! outline. Footprints, vias, zones, and arcs are recognised-but-skipped; richer coverage is a
 //! later increment. See `project-plans/03-roadmap.md` (Hero Flow) and `07-engineering-backlog.md`.
 
-use eak_domain::{Board, BoardSide, EntityId, LayerStack, Net, NetClass, Track};
+use eak_domain::{Board, BoardSide, EntityId, LayerStack, Net, NetClass, NetOrigin, Track};
 use eak_units::{PhysicalQuantity, Unit};
 
 mod export;
@@ -211,9 +211,13 @@ pub fn import_kicad_pcb(src: &str) -> Result<ImportedDesign, ImportError> {
                     id: EntityId(id),
                     name,
                     class,
+                    // Imported copper carries no parsed pins yet, so the net is member-less; it is
+                    // tagged `Physical` so the CreateNet seam applies the physical-origin invariant
+                    // (member-less is allowed) rather than rejecting it as a logical-synthesis defect.
                     members: vec![],
                     current: None,
                     impedance_target: None,
+                    origin: NetOrigin::Physical,
                 };
                 net.validate()
                     .map_err(|e| ImportError::Invalid(e.to_string()))?;

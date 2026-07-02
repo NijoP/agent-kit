@@ -438,8 +438,8 @@ impl ManufacturingIr {
 mod tests {
     use super::*;
     use eak_domain::{
-        BoardSide, ComponentClass, LayerStack, NetClass, PartLifecycle, PinElectricalType,
-        Priority, RequirementCategory,
+        BoardSide, ComponentClass, LayerStack, NetClass, NetOrigin, PartLifecycle,
+        PinElectricalType, Priority, RequirementCategory,
     };
     use eak_units::{PhysicalQuantity, Unit};
 
@@ -515,6 +515,7 @@ mod tests {
             members,
             current: None,
             impedance_target: None,
+            origin: NetOrigin::Logical,
         }
     }
 
