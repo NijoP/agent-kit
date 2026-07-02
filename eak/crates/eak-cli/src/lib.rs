@@ -255,6 +255,65 @@ pub fn import_design(kicad_src: &str) -> Result<RuntimeCore, CliError> {
     Ok(core)
 }
 
+/// The **verify-only** workflow (epic E5 / increment B2): ONLY the verification-family machines,
+/// in their canonical order, with every SYNTHESIS phase skipped. This is the review half of the
+/// "import → AI-review always works" fallback — it runs the existing deterministic rule set over an
+/// already-populated design (e.g. an imported `.kicad_pcb`, see [`import_and_verify`]) and surfaces
+/// its violations, without generating a single entity.
+///
+/// The six phases are exactly the rule-check machines [`default_workflow`] runs, constructed the
+/// same way — Constraint Verification -> ERC Verification -> BOM Verification -> DRC Verification ->
+/// DFM Verification -> EMC Analysis. Each reads committed state and raises violations; none
+/// synthesizes. On an import-only design most stay silent (no constraints, no realized schematic, no
+/// BOM, no placements), and the DRC family is the one that reads the imported copper — so an import
+/// review that finds a defect finds it there.
+///
+/// EXCLUDED, and why (honesty over coverage): every synthesis phase is omitted because it would
+/// fabricate design data the review must not invent — Requirement/Schematic/Floor/Placement/Routing
+/// planning, Manufacturing Generation (the terminal *generator* + global gate), and Constraint
+/// Extraction. **Engineering Analysis is also excluded**: despite the name it SYNTHESIZES a
+/// functional block per requirement AND hard-requires a design intent (`ctx.design_intent()`),
+/// neither of which an import provides — it would error, not review. The plan is LINEAR (no
+/// loop-backs): a loop-back's target is a synthesis phase that is not present here, so a failed gate
+/// stops the review at that gate with the violation recorded — precisely the "here is what is wrong
+/// with your board" outcome the fallback wants.
+pub fn verify_only_workflow() -> WorkflowPlan {
+    WorkflowPlan::new(vec![
+        Box::new(ConstraintVerificationMachine::new()),
+        Box::new(ErcVerificationMachine::new()),
+        Box::new(BomVerificationMachine::new()),
+        Box::new(DrcVerificationMachine::new()),
+        Box::new(DfmVerificationMachine::new()),
+        Box::new(EmcAnalysisMachine::new()),
+    ])
+}
+
+/// Import a `.kicad_pcb` and run the **verify-only** review over it (epic E5 / increment B2) — the
+/// import -> AI-review fallback, end to end and with no back door. Populates a [`RuntimeCore`] via the
+/// real capability seam ([`import_design`]), then drives [`verify_only_workflow`] over that SAME core
+/// through the ordinary [`Orchestrator`], so every violation is minted at the runtime's commit seam
+/// (P3) and folded into state exactly as a generated design's would be — the review reuses the real
+/// runtime, never a side channel.
+///
+/// The verification machines tolerate an import-only design (P4/P9 honesty): with no requirements,
+/// constraints, realized schematic, BOM, or placements, the constraint / ERC / BOM / DFM / EMC gates
+/// find nothing, so a defect in the imported copper surfaces at the DRC gate. The plan is linear, so
+/// it stops at the first failing gate with that violation recorded. Returns the per-phase outcomes
+/// and the reconstructed [`EngineeringState`], which carries the raised violations and the
+/// provenance links that make each one traceable back to the net/track it implicates.
+pub fn import_and_verify(kicad_src: &str) -> Result<RunReport, CliError> {
+    let mut core = import_design(kicad_src)?;
+    let mut plan = verify_only_workflow();
+    let outcomes = Orchestrator::new().run(&mut plan, &mut core);
+    Ok(RunReport {
+        outcomes,
+        state: core.state.clone(),
+        // An import runs on an in-memory event log (see `import_core`), so there is no on-disk path;
+        // every committed event remains queryable through the returned state's fold.
+        log_path: PathBuf::from("<in-memory import log>"),
+    })
+}
+
 /// The default Phase-3 workflow: Requirement Planning -> Engineering Analysis ->
 /// Constraint Extraction -> Constraint Verification -> Schematic Planning -> ERC
 /// Verification -> BOM Planning -> BOM Verification -> PCB Floor Planning ->
