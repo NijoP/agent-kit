@@ -318,17 +318,50 @@ pub enum NetClass {
     Signal,
 }
 
-/// A concrete part realizing some of a [`FunctionalBlock`]'s function. Minted from a block,
-/// so it is always traceable back to the intent it serves (P3). The optional `value` is a
-/// typed physical quantity (e.g. a resistor's 10 kΩ), hence `Component` is not `Eq`.
+/// Where a [`Component`] came from — the discriminator that lets the capability seam apply the right
+/// traceability invariant to each, mirroring [`NetOrigin`]. A `Synthesized` component is *minted*
+/// from a committed [`FunctionalBlock`] (Schematic Planning realizes it from intent), so it MUST
+/// carry a non-null [`from_block`](Component::from_block) referencing a committed block, or it is a
+/// synthesis defect. An `Imported` component is parsed from a finished board's `(footprint …)`, which
+/// declares no functional decomposition, so it MAY carry a null `from_block` — the seam must never
+/// fabricate a block to satisfy the synthesis rule (that would invent design intent the board never
+/// stated, poisoning traceability). Old event logs predate this field, so [`Component::origin`] is
+/// `#[serde(default)]` and defaults to `Synthesized` (their historical meaning). A static, fieldless
+/// enum: it folds identically on replay (P4).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum ComponentOrigin {
+    /// A component minted from a committed [`FunctionalBlock`] (the schematic/synthesis path).
+    /// Requires a non-null `from_block` referencing a committed block. The default, so pre-existing
+    /// event logs (which never carried an origin) deserialize here.
+    #[default]
+    Synthesized,
+    /// A component parsed from a finished board's footprint, which declares no functional block. May
+    /// carry a null `from_block`; any block it *does* reference must still be committed (no phantom).
+    Imported,
+}
+
+/// A concrete part realizing some of a [`FunctionalBlock`]'s function. A `Synthesized` component is
+/// minted from a block, so it is traceable back to the intent it serves (P3); an `Imported` one is
+/// parsed from a finished board and declares no upstream block — its [`origin`](Component::origin)
+/// and null [`from_block`](Component::from_block) say so honestly rather than fabricating intent. The
+/// optional `value` is a typed physical quantity (e.g. a resistor's 10 kΩ), hence `Component` is not
+/// `Eq`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Component {
     pub id: EntityId,
     pub refdes: String,
     pub class: ComponentClass,
     pub value: Option<PhysicalQuantity>,
-    /// The functional block this component was realized from.
+    /// The functional block this component was realized from — [`EntityId::NULL`] for an
+    /// [`Imported`](ComponentOrigin::Imported) component, which declares no upstream block.
     pub from_block: EntityId,
+    /// Whether this component was synthesised (`Synthesized`, minted from a committed block) or
+    /// imported from a finished board's footprint (`Imported`, may carry a null `from_block`). Drives
+    /// the traceability invariant the capability seam applies (see [`ComponentOrigin`]).
+    /// `#[serde(default)]` so pre-existing logs — which never carried an origin — deserialize as
+    /// `Synthesized`, their original meaning (P4 replay-stability).
+    #[serde(default)]
+    pub origin: ComponentOrigin,
 }
 
 impl Component {
@@ -942,6 +975,7 @@ mod tests {
             class: ComponentClass::Regulator,
             value: None,
             from_block: EntityId(2),
+            origin: ComponentOrigin::Synthesized,
         };
         assert_eq!(
             c.validate(),
@@ -957,8 +991,29 @@ mod tests {
             class: ComponentClass::Resistor,
             value: Some(PhysicalQuantity::new(10_000.0, eak_units::Unit::Ohm)),
             from_block: EntityId(2),
+            origin: ComponentOrigin::Synthesized,
         };
         assert!(c.validate().is_ok());
+    }
+
+    #[test]
+    fn component_origin_defaults_to_synthesized_so_old_logs_replay_unchanged() {
+        // The default (which `#[serde(default)]` backfills onto pre-origin event logs, so historical
+        // logs deserialize as Synthesized — their original meaning) is Synthesized (P4). Serde-level
+        // backfill is proven end-to-end in the runtime replay tests, where serde_json is already a
+        // dependency; the entities ring keeps its dependency surface minimal.
+        assert_eq!(ComponentOrigin::default(), ComponentOrigin::Synthesized);
+        let imported = Component {
+            id: EntityId(1),
+            refdes: "R1".into(),
+            class: ComponentClass::Resistor,
+            value: None,
+            from_block: EntityId::NULL,
+            origin: ComponentOrigin::Imported,
+        };
+        // An imported component validates with a null block — validate() is origin-agnostic (the
+        // origin-dependent block rule lives at the capability seam, P3), exactly like Net.
+        assert!(imported.validate().is_ok());
     }
 
     #[test]

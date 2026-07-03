@@ -8,28 +8,53 @@
 //! not carried (P4/P9 discipline), so the review is honest about what the board actually declares.
 //!
 //! Scope (MVP): the copper-realization subset — `(net …)` and `(segment …)` nodes plus a derived
-//! outline. Footprints, vias, zones, and arcs are recognised-but-skipped; richer coverage is a
-//! later increment. See `project-plans/03-roadmap.md` (Hero Flow) and `07-engineering-backlog.md`.
+//! outline — AND, since increment F2, `(footprint …)` nodes as domain [`Component`]s + [`Placement`]s
+//! (each footprint's `(pad …)`s become [`Pin`]s so the part is realizable at the seam), so an
+//! imported real board carries *parts* for the canvas + review, not just copper. Vias, zones, and
+//! arcs remain recognised-but-skipped; pad→pin→net *membership* is a deliberate F2 follow-up (imported
+//! nets stay member-less `Physical`). See `project-plans/03-roadmap.md` (Hero Flow) and
+//! `07-engineering-backlog.md`.
 
-use eak_domain::{Board, BoardSide, EntityId, LayerStack, Net, NetClass, NetOrigin, Track};
+use eak_domain::{
+    Board, BoardSide, Component, ComponentClass, ComponentOrigin, EntityId, LayerStack, Net,
+    NetClass, NetOrigin, Pin, PinElectricalType, Placement, Track,
+};
 use eak_units::{PhysicalQuantity, Unit};
 use std::collections::HashSet;
 
 mod export;
 pub use export::export;
 
-/// A design imported from a `.kicad_pcb` file: the outline plus the copper the review rules read,
-/// alongside any non-fatal [`ImportWarning`]s recorded while skipping content that could not be
-/// resolved (e.g. a segment on an undeclared net). A well-formed board imports with `warnings` empty.
+/// A design imported from a `.kicad_pcb` file: the outline, the copper the review rules read, and
+/// (since F2) the [`components`](ImportedDesign::components) each `(footprint …)` lands as, alongside
+/// any non-fatal [`ImportWarning`]s recorded while skipping content that could not be resolved (e.g.
+/// a segment on an undeclared net). A well-formed board imports with `warnings` empty.
 #[derive(Debug, Clone)]
 pub struct ImportedDesign {
     pub board: Board,
     pub nets: Vec<Net>,
     pub tracks: Vec<Track>,
+    /// The parts parsed from the board's `(footprint …)` nodes (F2), each ready to be realized +
+    /// placed through the capability seam. Empty for a copper-only board — exactly as before F2.
+    pub components: Vec<ImportedComponent>,
     /// Non-fatal problems recorded during import: content that could not be carried was skipped, but
     /// the skip is surfaced here rather than hidden (honesty), so the caller can report e.g.
     /// "N segments skipped: unknown net" without aborting the whole import.
     pub warnings: Vec<ImportWarning>,
+}
+
+/// One parsed `(footprint …)`: the [`Component`] it realizes, the [`Pin`]s minted from its pads, and
+/// the [`Placement`] positioning it on the board. The component is tagged
+/// [`ComponentOrigin::Imported`] with a null [`from_block`](Component::from_block) — an imported board
+/// declares no functional decomposition, so the importer states that honestly (ADR-0017) rather than
+/// fabricating a synthetic block/requirement/intent spine to satisfy the seam. The `RealizeComponent`
+/// seam accepts an `Imported` component with a null block (it never fabricates intent) while still
+/// requiring ≥1 pin — the pads are real, so that holds.
+#[derive(Debug, Clone)]
+pub struct ImportedComponent {
+    pub component: Component,
+    pub pins: Vec<Pin>,
+    pub placement: Placement,
 }
 
 /// A non-fatal problem recorded during import: the affected content is skipped, but the skip is
@@ -41,6 +66,14 @@ pub enum ImportWarning {
     /// resolved to a committed net, so it was skipped rather than emitting a phantom-net track that
     /// `RouteNet` would reject downstream, aborting the entire import.
     SegmentUnknownNet { net_id: u128 },
+    /// A `(footprint …)` carried no reference designator (`fp_text reference` / `property "Reference"`)
+    /// — a [`Component`] needs a non-empty refdes ([`Component::validate`]), and a nameless part is
+    /// untraceable, so it was skipped rather than committed with an invented name.
+    FootprintNoReference,
+    /// A `(footprint …)` carried no `(pad …)` (a fiducial, logo, or mounting mark). `RealizeComponent`
+    /// rejects a pin-less component (it could never join a net and would pass ERC vacuously), and the
+    /// importer will not fabricate a phantom pin, so the part was skipped and the skip surfaced here.
+    FootprintNoPads { refdes: String },
 }
 
 impl std::fmt::Display for ImportWarning {
@@ -48,6 +81,15 @@ impl std::fmt::Display for ImportWarning {
         match self {
             ImportWarning::SegmentUnknownNet { net_id } => {
                 write!(f, "segment skipped: references unknown net {net_id}")
+            }
+            ImportWarning::FootprintNoReference => {
+                write!(f, "footprint skipped: no reference designator")
+            }
+            ImportWarning::FootprintNoPads { refdes } => {
+                write!(
+                    f,
+                    "footprint {refdes} skipped: no pads (cannot realize a pin-less component)"
+                )
             }
         }
     }
@@ -222,6 +264,103 @@ fn classify(name: &str) -> NetClass {
     }
 }
 
+/// Every direct child sub-list whose head is `key` (e.g. all `(pad …)` of a footprint) — the
+/// many-match sibling of [`sub`], which returns only the first. Non-recursive: it walks the list's
+/// own children, not their descendants, so a footprint's own `(layer …)`/`(pad …)` are found while
+/// the nested `(layer …)` inside each pad are not. Returns each match's full list (head included).
+fn children<'a>(list: &'a [Sexp], key: &str) -> Vec<&'a [Sexp]> {
+    list.iter()
+        .filter_map(|n| match n {
+            Sexp::List(inner) if head(inner) == Some(key) => Some(inner.as_slice()),
+            _ => None,
+        })
+        .collect()
+}
+
+/// The reference designator of a `(footprint …)`, from either the classic `(fp_text reference "R1" …)`
+/// or the newer `(property "Reference" "R1" …)` form. `None` when neither is present or the name is
+/// blank — such a footprint is skipped ([`ImportWarning::FootprintNoReference`]) rather than named.
+fn footprint_refdes(fp: &[Sexp]) -> Option<String> {
+    let non_blank = |s: &str| (!s.trim().is_empty()).then(|| s.to_string());
+    for t in children(fp, "fp_text") {
+        if atom_str(t, 1) == Some("reference") {
+            if let Some(r) = atom_str(t, 2).and_then(non_blank) {
+                return Some(r);
+            }
+        }
+    }
+    for p in children(fp, "property") {
+        if atom_str(p, 1) == Some("Reference") {
+            if let Some(r) = atom_str(p, 2).and_then(non_blank) {
+                return Some(r);
+            }
+        }
+    }
+    None
+}
+
+/// Infer a [`ComponentClass`] from a refdes prefix — the coarse convention every schematic follows
+/// (R=resistor, C=capacitor, U/IC=integrated circuit, J/P/CN=connector, VR/REG=regulator). A
+/// HEURISTIC on the imported name, not an electrical claim: the domain enum has no generic/unknown
+/// class, so an unrecognised prefix (L, D, Q, Y, …) falls back to the neutral active class,
+/// [`ComponentClass::Ic`]. The class only drives the default courtyard size and ERC expectations.
+fn classify_refdes(refdes: &str) -> ComponentClass {
+    let prefix: String = refdes
+        .chars()
+        .take_while(|c| c.is_ascii_alphabetic())
+        .collect::<String>()
+        .to_uppercase();
+    match prefix.as_str() {
+        "R" | "RN" => ComponentClass::Resistor,
+        "C" => ComponentClass::Capacitor,
+        "J" | "P" | "CN" | "CON" => ComponentClass::Connector,
+        "VR" | "REG" => ComponentClass::Regulator,
+        "U" | "IC" => ComponentClass::Ic,
+        _ => ComponentClass::Ic,
+    }
+}
+
+/// The default square courtyard edge (mm) for a class — mirrors `eak-phases`'
+/// `component_placement::courtyard_mm` so an imported part occupies the same footprint a synthesised
+/// one of the same class would. Used only when the footprint declares no explicit courtyard rect.
+fn courtyard_default_mm(class: ComponentClass) -> f64 {
+    match class {
+        ComponentClass::Connector => 9.0,
+        ComponentClass::Regulator | ComponentClass::Ic => 6.0,
+        ComponentClass::Resistor | ComponentClass::Capacitor => 3.0,
+    }
+}
+
+/// The `(width, height)` mm courtyard of a footprint: the bounding box of its `(fp_rect …)` on a
+/// courtyard layer (`*.CrtYd`) when one is declared, else the class-sized default square
+/// ([`courtyard_default_mm`]). A real courtyard is honoured; otherwise a sane, documented default is
+/// used rather than inventing a precise extent the file never stated.
+fn footprint_courtyard(fp: &[Sexp], class: ComponentClass) -> (f64, f64) {
+    for r in children(fp, "fp_rect") {
+        let on_courtyard = sub(r, "layer")
+            .and_then(|ly| atom_str(ly, 0))
+            .is_some_and(|l| l.contains("CrtYd"));
+        if !on_courtyard {
+            continue;
+        }
+        if let (Some(s), Some(e)) = (sub(r, "start"), sub(r, "end")) {
+            if let (Some(x1), Some(y1), Some(x2), Some(y2)) = (
+                atom_f64(s, 0),
+                atom_f64(s, 1),
+                atom_f64(e, 0),
+                atom_f64(e, 1),
+            ) {
+                let (w, h) = ((x2 - x1).abs(), (y2 - y1).abs());
+                if w > 0.0 && h > 0.0 {
+                    return (w, h);
+                }
+            }
+        }
+    }
+    let edge = courtyard_default_mm(class);
+    (edge, edge)
+}
+
 fn mm(v: f64) -> PhysicalQuantity {
     PhysicalQuantity::new(v, Unit::Millimetre)
 }
@@ -230,9 +369,11 @@ fn mm(v: f64) -> PhysicalQuantity {
 
 /// Parse a `.kicad_pcb` document into an [`ImportedDesign`]. Nets keep their KiCad id; the empty
 /// net 0 (unconnected) is dropped. Each `(segment …)` becomes a [`Track`] on `F.Cu`→`Top` /
-/// `B.Cu`→`Bottom`; the outline is a standard 2-layer FR-4 stack sized to the copper's bounding box
-/// (a placeholder until `Edge.Cuts` parsing lands). Produced entities are domain-validated, so a
-/// malformed board is a typed error, never a silently bad design.
+/// `B.Cu`→`Bottom`; each `(footprint …)` becomes an [`ImportedComponent`] (refdes → [`Component`],
+/// pads → [`Pin`]s, `(at …)`+layer → [`Placement`]); the outline is a standard 2-layer FR-4 stack
+/// sized to the copper + footprint bounding box (a placeholder until `Edge.Cuts` parsing lands).
+/// Produced entities are domain-validated, so a malformed board is a typed error, never a silently
+/// bad design.
 pub fn import_kicad_pcb(src: &str) -> Result<ImportedDesign, ImportError> {
     let root = parse_node(&mut src.chars().peekable(), 0)?;
     let items = match root {
@@ -339,8 +480,110 @@ pub fn import_kicad_pcb(src: &str) -> Result<ImportedDesign, ImportError> {
         max_y = max_y.max(y1).max(y2);
     }
 
-    // Outline placeholder: a standard 2-layer FR-4 stack sized to the copper bounding box + margin
-    // (never zero, so Board::validate's positive-dimension invariant always holds).
+    // Third pass — footprints (F2). Each `(footprint …)` lands as a Component, its pads as Pins (so
+    // the part is realizable at the seam), and a Placement at its `(at …)` on its `(layer …)` side.
+    // A footprint with no reference designator or no pads cannot become a valid, realizable component,
+    // so it is skipped and the skip surfaced (honesty), never committed with invented data. Ids are
+    // deterministic offsets clear of the board (1), the small net ids, and the tracks (10_000+i):
+    // components at 20_000+i, pins at 30_000+running, placements at 40_000+i.
+    let mut components: Vec<ImportedComponent> = Vec::new();
+    let mut pin_counter: u128 = 0;
+    for item in &items {
+        let Sexp::List(l) = item else { continue };
+        if head(l) != Some("footprint") && head(l) != Some("module") {
+            continue;
+        }
+        // Side from the footprint's own top-level layer (F.*→Top, B.*→Bottom), mirroring segments.
+        let fp_layer = sub(l, "layer")
+            .and_then(|ly| atom_str(ly, 0))
+            .unwrap_or("F.Cu");
+        let side = if fp_layer.starts_with("B.") {
+            BoardSide::Bottom
+        } else {
+            BoardSide::Top
+        };
+        // Placement centre — `(at x y [rot])`; rotation is not modelled by `Placement`, so ignored.
+        let at = sub(l, "at").ok_or(ImportError::Malformed("footprint at"))?;
+        let x = atom_f64(at, 0).ok_or(ImportError::Malformed("footprint at x"))?;
+        let y = atom_f64(at, 1).ok_or(ImportError::Malformed("footprint at y"))?;
+
+        // A component needs a non-empty refdes and >=1 pin to be realizable; skip + warn otherwise.
+        let Some(refdes) = footprint_refdes(l) else {
+            warnings.push(ImportWarning::FootprintNoReference);
+            continue;
+        };
+        let class = classify_refdes(&refdes);
+        let pads = children(l, "pad");
+        if pads.is_empty() {
+            warnings.push(ImportWarning::FootprintNoPads { refdes });
+            continue;
+        }
+
+        let component_id = EntityId(20_000 + components.len() as u128);
+        // Pads → pins. A Pin carries no geometry, only an addressed terminal; the pad name is its
+        // designation (falling back to its 1-based index when a pad is unnamed). Electrical type is
+        // Passive — a PCB pad states no schematic role, so we do not over-claim one. Pin→net
+        // membership is a deliberate F2 follow-up, so these pins are not joined to any net yet.
+        let pins: Vec<Pin> = pads
+            .iter()
+            .enumerate()
+            .map(|(pi, pad)| {
+                let designation = atom_str(pad, 1)
+                    .map(str::to_string)
+                    .filter(|s| !s.trim().is_empty())
+                    .unwrap_or_else(|| (pi + 1).to_string());
+                let pin = Pin {
+                    id: EntityId(30_000 + pin_counter),
+                    component: component_id,
+                    designation,
+                    electrical_type: PinElectricalType::Passive,
+                };
+                pin_counter += 1;
+                pin
+            })
+            .collect();
+
+        let (cw, ch) = footprint_courtyard(l, class);
+        // Grow the outline to enclose the placed courtyard (centre ± half-extent) so a placed part
+        // never falls outside the bbox-derived board and trips placement DRC spuriously.
+        max_x = max_x.max(x + cw / 2.0);
+        max_y = max_y.max(y + ch / 2.0);
+
+        let component = Component {
+            id: component_id,
+            refdes,
+            class,
+            value: None,
+            // An imported board declares no functional block, so `from_block` is honestly NULL and the
+            // component is tagged `Imported`; the RealizeComponent seam accepts that without
+            // fabricating an intent spine (ADR-0017).
+            from_block: EntityId::NULL,
+            origin: ComponentOrigin::Imported,
+        };
+        component
+            .validate()
+            .map_err(|e| ImportError::Invalid(e.to_string()))?;
+        let placement = Placement {
+            id: EntityId(40_000 + components.len() as u128),
+            component: component_id,
+            x: mm(x),
+            y: mm(y),
+            width: mm(cw),
+            height: mm(ch),
+            side,
+        };
+        placement
+            .validate()
+            .map_err(|e| ImportError::Invalid(e.to_string()))?;
+        components.push(ImportedComponent {
+            component,
+            pins,
+            placement,
+        });
+    }
+
+    // Outline placeholder: a standard 2-layer FR-4 stack sized to the copper + footprint bounding box
+    // + margin (never zero, so Board::validate's positive-dimension invariant always holds).
     let board = Board {
         id: EntityId(1),
         width: mm((max_x + 5.0).max(10.0)),
@@ -355,6 +598,7 @@ pub fn import_kicad_pcb(src: &str) -> Result<ImportedDesign, ImportError> {
         board,
         nets,
         tracks,
+        components,
         warnings,
     })
 }
@@ -487,5 +731,131 @@ mod tests {
         // The two 0.15 mm traces are under the 0.20 mm floor; the 0.25 mm one clears it.
         assert_eq!(findings.len(), 2);
         assert!(findings.iter().all(|f| f.rule == DrcTraceWidthRule::ID));
+    }
+
+    // ------------------------------- F2: footprints -> components -------------------------------
+
+    /// A board with three real footprints (an 0805 resistor on top with an explicit courtyard rect,
+    /// a SOIC-8 IC on the bottom, a thru-hole connector named via `property "Reference"`) plus a
+    /// pad-less fiducial the importer must skip. Exercises class inference, side, position, both
+    /// courtyard paths (explicit + class default), pads→pins, and the no-pads skip.
+    const WITH_FOOTPRINTS: &str = r#"
+        (kicad_pcb
+          (net 0 "")
+          (net 1 "GND")
+          (net 2 "VCC")
+          (footprint "Resistor_SMD:R_0805" (layer "F.Cu") (at 20 30 90)
+            (fp_text reference "R1" (at 0 -2) (layer "F.SilkS"))
+            (fp_text value "10k" (at 0 2) (layer "F.Fab"))
+            (fp_rect (start -1 -0.7) (end 1 0.7) (layer "F.CrtYd") (width 0.05))
+            (pad "1" smd roundrect (at -0.9 0) (size 1 1.2) (layers "F.Cu"))
+            (pad "2" smd roundrect (at 0.9 0) (size 1 1.2) (layers "F.Cu"))
+          )
+          (footprint "Package_SO:SOIC-8" (layer "B.Cu") (at 50 40)
+            (fp_text reference "U1" (at 0 -3) (layer "B.SilkS"))
+            (pad "1" smd rect (at -2 -1.9) (size 0.6 1.5) (layers "B.Cu"))
+            (pad "2" smd rect (at -2 -0.6) (size 0.6 1.5) (layers "B.Cu"))
+            (pad "3" smd rect (at -2 0.6) (size 0.6 1.5) (layers "B.Cu"))
+          )
+          (footprint "Connector:Conn_01x02" (layer "F.Cu") (at 5 5)
+            (property "Reference" "J1" (at 0 -2) (layer "F.SilkS"))
+            (pad "1" thru_hole circle (at 0 0) (size 1.7 1.7) (layers "*.Cu"))
+            (pad "2" thru_hole circle (at 2.54 0) (size 1.7 1.7) (layers "*.Cu"))
+          )
+          (footprint "Fiducial" (layer "F.Cu") (at 1 1)
+            (fp_text reference "FID1" (at 0 -1) (layer "F.SilkS"))
+          )
+        )
+    "#;
+
+    fn comp<'a>(d: &'a ImportedDesign, refdes: &str) -> &'a ImportedComponent {
+        d.components
+            .iter()
+            .find(|c| c.component.refdes == refdes)
+            .unwrap_or_else(|| panic!("no imported component {refdes}"))
+    }
+
+    fn near(q: &PhysicalQuantity, mm_val: f64) -> bool {
+        (q.si_magnitude() - mm_val * 1e-3).abs() < 1e-9
+    }
+
+    #[test]
+    fn footprints_import_as_components_with_inferred_class_side_and_position() {
+        let d = import_kicad_pcb(WITH_FOOTPRINTS).unwrap();
+        // Three realizable footprints; the pad-less fiducial is skipped.
+        assert_eq!(d.components.len(), 3);
+
+        let r1 = comp(&d, "R1");
+        assert_eq!(r1.component.class, ComponentClass::Resistor); // R prefix
+        assert_eq!(r1.placement.side, BoardSide::Top); // F.Cu
+        assert!(near(&r1.placement.x, 20.0) && near(&r1.placement.y, 30.0));
+
+        let u1 = comp(&d, "U1");
+        assert_eq!(u1.component.class, ComponentClass::Ic); // U prefix
+        assert_eq!(u1.placement.side, BoardSide::Bottom); // B.Cu
+        assert!(near(&u1.placement.x, 50.0) && near(&u1.placement.y, 40.0));
+
+        let j1 = comp(&d, "J1");
+        assert_eq!(j1.component.class, ComponentClass::Connector); // J prefix, via property
+        assert_eq!(j1.placement.side, BoardSide::Top);
+    }
+
+    #[test]
+    fn footprint_courtyard_uses_the_rect_when_present_else_the_class_default() {
+        let d = import_kicad_pcb(WITH_FOOTPRINTS).unwrap();
+        // R1 declares an explicit F.CrtYd rect: (-1,-0.7)..(1,0.7) -> 2.0 x 1.4 mm.
+        let r1 = comp(&d, "R1");
+        assert!(near(&r1.placement.width, 2.0) && near(&r1.placement.height, 1.4));
+        // U1 (Ic) has no courtyard rect -> class default 6 x 6 mm square.
+        let u1 = comp(&d, "U1");
+        assert!(near(&u1.placement.width, 6.0) && near(&u1.placement.height, 6.0));
+        // J1 (Connector) default 9 x 9 mm square.
+        let j1 = comp(&d, "J1");
+        assert!(near(&j1.placement.width, 9.0) && near(&j1.placement.height, 9.0));
+    }
+
+    #[test]
+    fn footprint_pads_become_pins_bound_to_their_component() {
+        let d = import_kicad_pcb(WITH_FOOTPRINTS).unwrap();
+        let r1 = comp(&d, "R1");
+        assert_eq!(r1.pins.len(), 2);
+        assert!(r1.pins.iter().all(|p| p.component == r1.component.id));
+        assert!(r1
+            .pins
+            .iter()
+            .all(|p| p.electrical_type == PinElectricalType::Passive));
+        let names: Vec<&str> = r1.pins.iter().map(|p| p.designation.as_str()).collect();
+        assert_eq!(names, vec!["1", "2"]); // pad numbers become pin designations
+                                           // U1 has three pads -> three pins.
+        assert_eq!(comp(&d, "U1").pins.len(), 3);
+        // Pin ids are unique across the whole import (offset scheme has no collisions).
+        let mut ids: Vec<_> = d
+            .components
+            .iter()
+            .flat_map(|c| c.pins.iter().map(|p| p.id))
+            .collect();
+        let n = ids.len();
+        ids.sort();
+        ids.dedup();
+        assert_eq!(ids.len(), n, "all pin ids distinct");
+    }
+
+    #[test]
+    fn padless_footprint_is_skipped_and_warned_not_committed() {
+        let d = import_kicad_pcb(WITH_FOOTPRINTS).unwrap();
+        // FID1 has no pads -> not a component, and the skip is surfaced (honesty).
+        assert!(d.components.iter().all(|c| c.component.refdes != "FID1"));
+        assert!(d.warnings.contains(&ImportWarning::FootprintNoPads {
+            refdes: "FID1".into()
+        }));
+    }
+
+    #[test]
+    fn copper_only_board_has_no_components() {
+        // Regression guard: a board with no footprints imports parts-free, exactly as before F2.
+        let d = import_kicad_pcb(SAMPLE).unwrap();
+        assert!(d.components.is_empty());
+        assert_eq!(d.tracks.len(), 3);
+        assert!(d.warnings.is_empty());
     }
 }

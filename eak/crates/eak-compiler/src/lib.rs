@@ -5,8 +5,9 @@
 //! [`SchematicIr`] projections (transformation P1) at the engineering and schematic seams.
 
 use eak_domain::{
-    Board, BomLineItem, Component, Constraint, DesignIntent, EntityId, FunctionalBlock, Net, Part,
-    Pin, Placement, ProvenanceLink, Requirement, RequirementStatus, Track,
+    Board, BomLineItem, Component, ComponentOrigin, Constraint, DesignIntent, EntityId,
+    FunctionalBlock, Net, Part, Pin, Placement, ProvenanceLink, Requirement, RequirementStatus,
+    Track,
 };
 use serde::{Deserialize, Serialize};
 
@@ -208,8 +209,14 @@ impl SchematicIr {
         nets: &[Net],
     ) -> Result<Self, IrError> {
         for c in components {
-            // invariant: a component traces back to a real functional block (P3).
-            if !eng_ir.blocks.iter().any(|b| b.id == c.from_block) {
+            // invariant: a *synthesised* component traces back to a real functional block (P3). An
+            // `Imported` component (ADR-0017) is parsed from a finished board that declares no
+            // functional decomposition, so its trace honestly terminates at "imported artifact, no
+            // upstream block" — the projection tolerates its null `from_block` rather than flagging it
+            // an orphan (a synthesised component with a null/unknown block is still an orphan defect).
+            if matches!(c.origin, ComponentOrigin::Synthesized)
+                && !eng_ir.blocks.iter().any(|b| b.id == c.from_block)
+            {
                 return Err(IrError::OrphanComponent(c.id));
             }
         }
@@ -497,6 +504,7 @@ mod tests {
             class: ComponentClass::Regulator,
             value: None,
             from_block,
+            origin: ComponentOrigin::Synthesized,
         }
     }
     fn pin(id: u128, comp: EntityId) -> Pin {
@@ -571,6 +579,23 @@ mod tests {
             SchematicIr::project(&eng, &[c], &[], &[]),
             Err(IrError::OrphanComponent(_))
         ));
+    }
+
+    #[test]
+    fn schematic_project_tolerates_imported_component_with_null_block() {
+        // ADR-0017 integration guard: an `Imported` component declares no upstream block, so its
+        // null `from_block` is NOT an orphan defect — the projection terminates the trace honestly at
+        // "imported artifact, no upstream block" rather than erroring (a Synthesized null-block
+        // component is still rejected, see `schematic_project_rejects_orphan_component`).
+        let eng = EngineeringIr::project(&req_ir(), &[block(10, vec![EntityId(2)])], &[]).unwrap();
+        let imported = Component {
+            origin: ComponentOrigin::Imported,
+            from_block: EntityId::NULL,
+            ..component(20, EntityId::NULL)
+        };
+        let sch = SchematicIr::project(&eng, &[imported], &[], &[]).unwrap();
+        assert_eq!(sch.components.len(), 1);
+        assert!(sch.components[0].from_block.is_null());
     }
 
     #[test]

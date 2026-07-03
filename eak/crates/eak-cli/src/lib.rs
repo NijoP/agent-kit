@@ -9,6 +9,7 @@ use eak_domain::{
     Decision, Evidence, EvidenceKind, Priority, ProvenanceLink, RelationType, Requirement,
     RequirementCategory,
 };
+use eak_kicad::ImportedComponent;
 use eak_phases::{
     BomPlanningMachine, BomVerificationMachine, ComponentPlacementMachine,
     ConstraintExtractionMachine, ConstraintVerificationMachine, DfmVerificationMachine,
@@ -229,10 +230,23 @@ fn import_core() -> Result<RuntimeCore, CliError> {
 ///
 /// Parses `kicad_src` into an [`eak_kicad::ImportedDesign`], then commits its entities — in
 /// dependency order — through [`RuntimeCore::invoke`]: the single [`Board`](eak_domain::Board)
-/// outline first, then each [`Net`](eak_domain::Net), then each routed [`Track`](eak_domain::Track).
-/// Every entity funnels through the runtime's `commit` (stamp -> append -> fold), identical to the
-/// generation path. Any parse failure or seam rejection is surfaced as a [`CliError`] — the model
-/// (and, here, the importer) is never trusted to bypass validation.
+/// outline first, then each [`Net`](eak_domain::Net), then each routed [`Track`](eak_domain::Track),
+/// and finally (F2) each imported footprint as a realized [`Component`](eak_domain::Component)
+/// (+its [`Pin`](eak_domain::Pin)s) with a [`Placement`](eak_domain::Placement). Every entity funnels
+/// through the runtime's `commit` (stamp -> append -> fold), identical to the generation path. Any
+/// parse failure or seam rejection is surfaced as a [`CliError`] — the model (and, here, the
+/// importer) is never trusted to bypass validation.
+///
+/// **Footprints (F2, ADR-0017):** the `RealizeComponent` seam requires ≥1 pin and, for a
+/// [`Synthesized`](eak_domain::ComponentOrigin::Synthesized) component, a committed originating
+/// block. An imported footprint carries [`ComponentOrigin::Imported`](eak_domain::ComponentOrigin)
+/// with a null `from_block`: an imported board declares no functional decomposition, so the seam
+/// accepts it without a block rather than fabricating a synthetic intent/requirement/block spine
+/// (which would poison traceability — the architect rejected that). The ≥1-pin rule still holds
+/// honestly: the pins are the footprint's real pads. NO `IntentCaptured` / `RequirementCommitted` /
+/// `FunctionalBlockCommitted` is emitted for an import — the log carries only what the board actually
+/// declares. Pad→pin→net *membership* is a deliberate F2 follow-up: imported nets stay member-less
+/// `Physical`, so a realized pin is not yet joined to a net.
 ///
 /// The runtime is returned so the caller can read the reconstructed state (`core.state`) and the
 /// recorded event log (`core.log()`), which together prove the import went through `commit`.
@@ -240,8 +254,8 @@ pub fn import_design(kicad_src: &str) -> Result<RuntimeCore, CliError> {
     let design = eak_kicad::import_kicad_pcb(kicad_src)?;
     let mut core = import_core()?;
 
-    // Dependency order: the outline must exist before any net or track (routing/placement seams
-    // require a board). Each `invoke` re-validates at the seam (P3) and, on success, commits.
+    // Dependency order: the outline must exist before any net, track, or placement (routing/placement
+    // seams require a board). Each `invoke` re-validates at the seam (P3) and, on success, commits.
     core.invoke(CapabilityRequest::CreateBoard {
         board: design.board,
         links: vec![],
@@ -252,6 +266,29 @@ pub fn import_design(kicad_src: &str) -> Result<RuntimeCore, CliError> {
     for track in design.tracks {
         core.invoke(CapabilityRequest::RouteNet {
             track,
+            links: vec![],
+        })?;
+    }
+
+    // F2 (ADR-0017): land imported footprints as Components + Placements through the real seam. Each
+    // component is already tagged `ComponentOrigin::Imported` with a null `from_block` by the importer,
+    // so RealizeComponent accepts it WITHOUT a fabricated intent/requirement/block spine — an imported
+    // board declares no functional decomposition, and the seam re-validates that honestly (≥1 pin, a
+    // board exists, no double-placement) exactly as it does for a generated part. A copper-only import
+    // simply iterates an empty vec, so it commits no component — byte-for-byte unchanged.
+    for imported in design.components {
+        let ImportedComponent {
+            component,
+            pins,
+            placement,
+        } = imported;
+        core.invoke(CapabilityRequest::RealizeComponent {
+            component,
+            pins,
+            links: vec![],
+        })?;
+        core.invoke(CapabilityRequest::PlaceComponent {
+            placement,
             links: vec![],
         })?;
     }

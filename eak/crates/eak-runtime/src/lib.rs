@@ -51,8 +51,8 @@ mod dependency_rule {
 mod kernel_tests {
     use super::*;
     use eak_domain::{
-        Board, BoardSide, BomLineItem, Component, ComponentClass, Decision, EntityId,
-        FunctionalBlock, LayerStack, Net, NetClass, NetOrigin, Part, PartLifecycle, Pin,
+        Board, BoardSide, BomLineItem, Component, ComponentClass, ComponentOrigin, Decision,
+        EntityId, FunctionalBlock, LayerStack, Net, NetClass, NetOrigin, Part, PartLifecycle, Pin,
         PinElectricalType, Placement, Priority, Requirement, RequirementCategory,
         RequirementStatus, Track,
     };
@@ -302,6 +302,84 @@ mod kernel_tests {
         assert_eq!(core.state.nets.len(), 1);
     }
 
+    /// The F2 ruling (ADR-0017): the block-origin rule at `RealizeComponent` is *origin-dependent*,
+    /// mirroring the B1 net test above. An `Imported` component (parsed from a finished board, which
+    /// declares no functional decomposition) may carry a null `from_block`; a `Synthesized` one may
+    /// not; and an `Imported` one that DOES name a block must name a committed one (existence relaxed,
+    /// no-phantom rule intact). The ≥1-pin rule holds for both. No board is needed — `RealizeComponent`
+    /// gates on the component + pins alone (placement is a separate seam).
+    #[test]
+    fn realize_component_seam_applies_origin_dependent_block_invariant() {
+        let mut core = new_core();
+        let imported_id = core.fresh_id();
+        let imported_pin = core.fresh_id();
+        let synth_id = core.fresh_id();
+        let synth_pin = core.fresh_id();
+        let phantom_comp = core.fresh_id();
+        let phantom_pin = core.fresh_id();
+
+        let pin = |id: EntityId, comp: EntityId| Pin {
+            id,
+            component: comp,
+            designation: "1".into(),
+            electrical_type: PinElectricalType::Passive,
+        };
+
+        // Imported + null block + a real pin: ACCEPTED — an imported board declares no block, and the
+        // seam never fabricates one.
+        core.invoke(CapabilityRequest::RealizeComponent {
+            component: Component {
+                id: imported_id,
+                refdes: "R1".into(),
+                class: ComponentClass::Resistor,
+                value: None,
+                from_block: EntityId::NULL,
+                origin: ComponentOrigin::Imported,
+            },
+            pins: vec![pin(imported_pin, imported_id)],
+            links: vec![],
+        })
+        .expect("an Imported component with a null block is accepted at the seam");
+        assert_eq!(core.state.components.len(), 1);
+
+        // Synthesized + null block: REJECTED — the synthesis traceability invariant is intact.
+        let err = core
+            .invoke(CapabilityRequest::RealizeComponent {
+                component: Component {
+                    id: synth_id,
+                    refdes: "U1".into(),
+                    class: ComponentClass::Ic,
+                    value: None,
+                    from_block: EntityId::NULL,
+                    origin: ComponentOrigin::Synthesized,
+                },
+                pins: vec![pin(synth_pin, synth_id)],
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // Imported but naming a block that was never committed: REJECTED — no phantom block.
+        let err = core
+            .invoke(CapabilityRequest::RealizeComponent {
+                component: Component {
+                    id: phantom_comp,
+                    refdes: "U2".into(),
+                    class: ComponentClass::Ic,
+                    value: None,
+                    from_block: EntityId(0xDEAD_BEEF),
+                    origin: ComponentOrigin::Imported,
+                },
+                pins: vec![pin(phantom_pin, phantom_comp)],
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // Only the accepted Imported component folded into state.
+        assert_eq!(core.state.components.len(), 1);
+    }
+
     #[test]
     fn phase3_synthesis_commits_fold_and_replay_byte_identically() {
         let mut core = new_core();
@@ -355,6 +433,7 @@ mod kernel_tests {
             class: ComponentClass::Regulator,
             value: None,
             from_block: bid,
+            origin: ComponentOrigin::Synthesized,
         };
         let cid = comp.id;
         let pin = Pin {
@@ -455,6 +534,7 @@ mod kernel_tests {
             class: ComponentClass::Regulator,
             value: None,
             from_block: bid,
+            origin: ComponentOrigin::Synthesized,
         };
         let cid = comp.id;
         let pin = Pin {
@@ -567,6 +647,7 @@ mod kernel_tests {
             class: ComponentClass::Regulator,
             value: None,
             from_block: bid,
+            origin: ComponentOrigin::Synthesized,
         };
         let cid = comp.id;
         let pin = Pin {
@@ -741,6 +822,7 @@ mod kernel_tests {
                     class: ComponentClass::Resistor,
                     value: None,
                     from_block: EntityId::NULL,
+                    origin: ComponentOrigin::Synthesized,
                 },
                 pins: vec![],
                 links: vec![],
@@ -888,6 +970,7 @@ mod kernel_tests {
                 class: ComponentClass::Ic,
                 value: None,
                 from_block: block_id,
+                origin: ComponentOrigin::Synthesized,
             },
             pins: vec![Pin {
                 id: pin_id,
@@ -993,6 +1076,7 @@ mod kernel_tests {
                 class: ComponentClass::Ic,
                 value: None,
                 from_block: block_id,
+                origin: ComponentOrigin::Synthesized,
             },
             pins: vec![Pin {
                 id: pin_id,

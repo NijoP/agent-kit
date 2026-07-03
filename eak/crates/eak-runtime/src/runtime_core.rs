@@ -9,9 +9,9 @@ use crate::clock::{Clock, IdSource};
 use crate::protocol::{AgentContext, Autonomy, CapabilityAck, CapabilityError, CapabilityRequest};
 use crate::state::EngineeringState;
 use eak_domain::{
-    Board, BomLineItem, Component, Constraint, Decision, DesignIntent, EntityId, Evidence,
-    FunctionalBlock, Net, NetOrigin, Part, Pin, Placement, ProvenanceLink, Requirement, Track,
-    Violation, Waiver,
+    Board, BomLineItem, Component, ComponentOrigin, Constraint, Decision, DesignIntent, EntityId,
+    Evidence, FunctionalBlock, Net, NetOrigin, Part, Pin, Placement, ProvenanceLink, Requirement,
+    Track, Violation, Waiver,
 };
 use eak_ports::{
     Event, EventLog, EventRecord, EventSink, ReasoningEngine, ReasoningError, ReasoningRequest,
@@ -273,18 +273,43 @@ impl RuntimeCore {
         component
             .validate()
             .map_err(|e| CapabilityError::Rejected(e.to_string()))?;
-        // A component minted from no block is untraceable to intent (P3) — reject it.
-        if component.from_block == EntityId::NULL {
-            return Err(CapabilityError::Rejected(
-                "component has no originating functional block".into(),
-            ));
-        }
-        // Referential integrity at the seam: the originating block must exist (P3, P5).
-        if self.state.functional_block(component.from_block).is_none() {
-            return Err(CapabilityError::Rejected(format!(
-                "component originates from unknown functional block {}",
-                component.from_block.short()
-            )));
+        // The block-origin rule is *origin-dependent* (P3), mirroring `handle_create_net`'s
+        // Logical/Physical branch. A `Synthesized` component is minted from a committed
+        // [`FunctionalBlock`] (Schematic Planning realizes it from intent), so a null or unknown
+        // `from_block` is a synthesis defect — existing behavior, verbatim. An `Imported` component
+        // is parsed from a finished board's footprint, which declares no functional decomposition, so
+        // it MAY carry a null `from_block`; the seam never fabricates a block (that would invent intent
+        // the board never stated). Either way, any block it DOES reference must be committed — Imported
+        // relaxes existence only, never the no-phantom rule.
+        match component.origin {
+            ComponentOrigin::Synthesized => {
+                // A component minted from no block is untraceable to intent (P3) — reject it.
+                if component.from_block == EntityId::NULL {
+                    return Err(CapabilityError::Rejected(
+                        "component has no originating functional block".into(),
+                    ));
+                }
+                // Referential integrity at the seam: the originating block must exist (P3, P5).
+                if self.state.functional_block(component.from_block).is_none() {
+                    return Err(CapabilityError::Rejected(format!(
+                        "component originates from unknown functional block {}",
+                        component.from_block.short()
+                    )));
+                }
+            }
+            ComponentOrigin::Imported => {
+                // A null `from_block` is legitimate (an imported board declares no block); but any
+                // block it DOES reference must be a committed one, so an import can never point at a
+                // phantom block (P3, P5) — existence relaxed, no-phantom rule intact.
+                if component.from_block != EntityId::NULL
+                    && self.state.functional_block(component.from_block).is_none()
+                {
+                    return Err(CapabilityError::Rejected(format!(
+                        "imported component references unknown functional block {}",
+                        component.from_block.short()
+                    )));
+                }
+            }
         }
         // A component with no pins can never join a net and would pass every ERC rule
         // vacuously — reject it (P13: no silently-inert entities).

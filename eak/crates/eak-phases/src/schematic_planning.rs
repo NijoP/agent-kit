@@ -10,8 +10,9 @@
 
 use eak_compiler::{EngineeringIr, RequirementIr, SchematicIr};
 use eak_domain::{
-    Component, ComponentClass, EntityId, FunctionalBlock, Net, NetClass, NetOrigin, Pin,
-    PinElectricalType, ProvenanceLink, RelationType, Requirement, RequirementCategory,
+    Component, ComponentClass, ComponentOrigin, EntityId, FunctionalBlock, Net, NetClass,
+    NetOrigin, Pin, PinElectricalType, ProvenanceLink, RelationType, Requirement,
+    RequirementCategory,
 };
 use eak_ports::Event;
 use eak_runtime::{AgentContext, CapabilityRequest, Machine, MachineError, StepResult};
@@ -86,6 +87,7 @@ impl Machine for SchematicPlanningMachine {
                             class,
                             value: None,
                             from_block: block.id,
+                            origin: ComponentOrigin::Synthesized,
                         };
 
                         // Fixed pin template per class: a connector source exposes a driven

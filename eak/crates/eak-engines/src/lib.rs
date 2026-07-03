@@ -1766,7 +1766,8 @@ impl Rule for EmcAntennaLengthRule {
 mod tests {
     use super::*;
     use eak_domain::{
-        BoardSide, ConstraintStatus, LayerStack, NetOrigin, Priority, RequirementStatus,
+        BoardSide, ComponentOrigin, ConstraintStatus, LayerStack, NetOrigin, Priority,
+        RequirementStatus,
     };
     use eak_units::Unit;
 
@@ -2031,6 +2032,7 @@ mod tests {
             class,
             value: None,
             from_block: EntityId(800 + id),
+            origin: ComponentOrigin::Synthesized,
         }
     }
 

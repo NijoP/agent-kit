@@ -3,9 +3,10 @@
 //! This emits the copper-realization subset the importer round-trips: a `(net …)` table, one
 //! `(segment …)` per [`Track`], plus a header (version/generator/layer table) and an `Edge.Cuts`
 //! rectangle so the reused KiCanvas renderer can draw the board and its copper. It fabricates no
-//! per-entity KiCad fields it cannot see (P4/P9): an [`ImportedDesign`] carries no placements or
-//! components, so **no `(footprint …)` nodes are emitted** — parts are simply not present in this
-//! IR, not guessed at.
+//! per-entity KiCad fields it cannot see (P4/P9): while an [`ImportedDesign`] may now carry parsed
+//! `components` (F2), **no `(footprint …)` nodes are emitted yet** — footprint *export* (round-tripping
+//! parts back to KiCad) is a deliberate follow-up, so parts are simply omitted from this IR here,
+//! never half-guessed. The copper subset (nets + segments + outline) round-trips exactly as before.
 //!
 //! Determinism (E4/testability): the same [`ImportedDesign`] always yields the byte-identical
 //! string. Nothing here reads a clock, a UUID source, or hash-ordered map — every list is walked in
@@ -282,6 +283,7 @@ mod tests {
             board,
             nets,
             tracks,
+            components: vec![],
             warnings: vec![],
         };
 
