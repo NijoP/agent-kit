@@ -87,7 +87,22 @@ KiCanvas embed) — needs a founder-at-keyboard session with the Tauri toolchain
 
 New follow-up (from F2/F3): **pad→pin→net membership** — imported `Pin`s carry no position/net yet, so imported nets stay member-less `Physical` and exported pads have no `(net ..)`. Wiring pad nets would give imported nets real members (and could revisit Logical vs Physical) + full pad round-trip. Also (both reviewers): a debug-assert that synthesis paths never emit `ComponentOrigin::Imported` (theoretical mistag guard; no current writer does).
 
-**Overnight run total: 10 increments, tests 195 → 225 (+30), 2 ADRs (0016, 0017), zero red at any point.**
+### Continuation batch 2 (G / hero / catalog)
+
+- G1 `157aa2b` — **pad→pin→net membership**: imported nets now carry real committed pin members (import reordered so pins commit before nets; phantom-pin rule intact); export emits pad nets. A real imported board is now a **fully-connected kernel model**.
+- E7 `3ce0e30` — **curated hero cassette**: the hero intent produces on-topic requirements (USB-C / I²C temp sensor / <1 W / 50×50 mm) → clean released `ManufacturingIr` → byte-identical replay; hero test asserts hero-specific content.
+- C2.1 `90e0311` — **multi-part catalog + set-inclusion**: `PartCatalog` 1:many (added real `TMP102AIDRLR` temp sensor); part-selection accepts any in-catalog MPN (still rejects hallucinated); **honest hero BOM** (sources the sensor, not an MCU). Closes the C2 fail-closed limitation.
+
+**Overnight run total: 13 increments, tests 195 → 235 (+40), 2 ADRs (0016, 0017), zero red at any point.**
+
+### Remaining buildable-here items (diminishing marginal value)
+- Surface `design.warnings` through `import_design`/`RunReport` (honesty — F1 records them, they're dropped).
+- Net-EntityId ↔ raw-KiCad-index coupling could collide with the 10k/20k/30k id offset spaces on very large net indices (latent, low-probability; mint net ids via `fresh_id` + a map to fix).
+- debug-assert that synthesis paths never emit `ComponentOrigin::Imported` (moat guard; no current writer does).
+- Curate 2–3 real `.kicad_pcb` boards as import fixtures (E5); more E6 (budget/guardrails surfacing, graceful degradation, cassette capture tooling).
+
+### The real frontier needs the founder's machine
+The high-value buildable **kernel** work is now largely complete. The next big value is the **frontend/Tauri layer** (E1 `start_run` wiring, E2 TS event store, E3 IDE panels, E4 KiCanvas embed) — **not buildable in this sandbox** (needs webkit2gtk/node). All the kernel seams it hangs off (`run_with_sink`, exporter, `import_and_verify`, the explainer, part-selection) are in place and tested.
 
 ### C2 follow-up (captured)
 5. **Catalog membership is 1:1 today.** `PartSelectionAgent` accepts a proposal only if it equals
