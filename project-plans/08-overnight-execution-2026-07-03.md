@@ -74,10 +74,20 @@ What now demonstrably works, kernel-verified:
   hallucinated parts — "LLM proposes, kernel validates" proven by test.
 - **Anti-rot**: hero-flow smoke test pins release + byte-identical replay.
 
-Remaining top follow-ups (see Findings): curated hero cassette (E7); import skip-and-warn (#3);
-parser depth cap (#4); multi-part catalog set-inclusion (#5); the E5.1 override site. And the
+Remaining top follow-ups (see Findings): curated hero cassette (E7); the E5.1 override site. And the
 **non-buildable-here** frontend/Tauri wiring (E1 `start_run`, E2 TS event store, E3 panels, E4
 KiCanvas embed) — needs a founder-at-keyboard session with the Tauri toolchain.
+
+## Continuation batch (F-series) — "keep going"
+
+**+3 increments, all green + reviewed + pushed. Ratchet 209 → 225. Second architect ruling (ADR-0017).**
+- F1 `f39eed6` — **import robustness**: skip-and-warn on unresolvable copper (`ImportWarning`, two-pass parse) + parser **depth cap** (256 → `ImportError::TooDeep`). Closes findings #3 + #4. Import is now bulletproof on real/adversarial boards.
+- F2 `ca44317` — **footprint import**: `(footprint)` → domain `Component` + real `Pin`s (pads) + `Placement`, through the real `RealizeComponent`→`PlaceComponent` seam. Needed **ADR-0017** `ComponentOrigin{Synthesized,Imported}`: the architect **rejected** an earlier synthetic-intent-spine (it fabricated a fake `Accepted` requirement + intent → poisons traceability) in favor of an origin tag (consistent with ADR-0016). Imported traces terminate honestly at "imported artifact, no upstream intent". Imported boards now carry **parts**, not just copper.
+- F3 `f46d9ae` — **exporter footprints**: `export` emits `(footprint)`/`(pad)`; import↔export is now a fixed point over components/placements/pins too. Canvas round-trip for parts complete.
+
+New follow-up (from F2/F3): **pad→pin→net membership** — imported `Pin`s carry no position/net yet, so imported nets stay member-less `Physical` and exported pads have no `(net ..)`. Wiring pad nets would give imported nets real members (and could revisit Logical vs Physical) + full pad round-trip. Also (both reviewers): a debug-assert that synthesis paths never emit `ComponentOrigin::Imported` (theoretical mistag guard; no current writer does).
+
+**Overnight run total: 10 increments, tests 195 → 225 (+30), 2 ADRs (0016, 0017), zero red at any point.**
 
 ### C2 follow-up (captured)
 5. **Catalog membership is 1:1 today.** `PartSelectionAgent` accepts a proposal only if it equals
