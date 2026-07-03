@@ -7,18 +7,20 @@
 //! [`CapabilityRequest`] seam (P3). This is the moat made concrete for part selection:
 //!
 //!   * The model NEVER writes state. Its `part_candidates_v1` response is untrusted text.
-//!   * For each class, the agent looks up the catalog's part for that class. A proposal is
-//!     ACCEPTED iff its MPN equals the catalogued MPN — i.e. the model correctly identified a part
-//!     the catalog actually carries. A proposal whose MPN is NOT in the catalog for that class is
-//!     REJECTED: nothing is committed for it, and the phase FAILS with a diagnostic naming the
-//!     refused MPN (it neither forces the bad part in NOR silently substitutes the catalogued one,
-//!     either of which would hide the moat), so the design cannot release with an unsourced class.
+//!   * For each class, the agent looks up the catalog's SET of parts for that class (C2.1 — a class
+//!     may have several members, e.g. `Ic` carries both an MCU and a temperature sensor). A proposal
+//!     is ACCEPTED iff its MPN is a MEMBER of that set — i.e. the model correctly identified a part
+//!     the catalog actually carries for the class — and the MATCHED catalog entry is committed. A
+//!     proposal whose MPN is NOT in the set is REJECTED: nothing is committed for it, and the phase
+//!     FAILS with a diagnostic naming the refused MPN (it neither forces the bad part in NOR
+//!     silently substitutes a catalogued one, either of which would hide the moat), so the design
+//!     cannot release with an unsourced class.
 //!   * Even an ACCEPTED proposal only *chooses* among catalogued parts: the committed [`Part`] is
-//!     built from the trusted [`CatalogPart`] record, never from the model's free text, so model
-//!     output can never reach engineering state through this path.
-//!   * A class the model is SILENT about falls back to the deterministic catalog selection (exactly
-//!     the pre-C2 behaviour), so an offline/empty reasoning response degrades to the old
-//!     bit-identical path rather than failing.
+//!     built from the trusted [`CatalogPart`] record the proposal matched, never from the model's
+//!     free text, so model output can never reach engineering state through this path.
+//!   * A class the model is SILENT about falls back to the deterministic default (the class's
+//!     first-choice catalog part — exactly the pre-C2 behaviour), so an offline/empty reasoning
+//!     response degrades to the old bit-identical path rather than failing.
 //!
 //! See `docs/state-machines/bom-planning.md` and the reference agent `agent.rs`.
 
@@ -209,30 +211,28 @@ impl Agent for PartSelectionAgent {
 }
 
 /// Validate the model's proposal for one class against the authoritative catalog. The catalog is
-/// the single source of truth: the class's catalogued part is looked up, then the proposal (if any)
-/// is checked against it. No proposal -> deterministic fallback; a matching proposal -> accepted;
-/// a non-matching proposal -> REJECTED (the moat).
+/// the single source of truth: the class's catalog SET is the choice space, and the proposal (if
+/// any) is checked for SET-INCLUSION against it (C2.1). No proposal -> deterministic default;
+/// an in-set proposal -> accepted, committing the MATCHED trusted catalog entry; an out-of-set
+/// proposal -> REJECTED (the moat). The committed part is ALWAYS a `CatalogPart`, never model text.
 fn validate_selection(
     catalog: &PartCatalog,
     class: ComponentClass,
     response: &eak_ports::ReasoningResponse,
 ) -> Selection {
-    let catalogued = catalog.part_for(class);
     match response
         .part_candidates
         .iter()
         .find(|p| class_matches(&p.component_class, class))
     {
-        // The model proposed a part for this class: accept iff it is the catalogued MPN, else reject.
-        Some(proposal) => {
-            if proposal.mpn.trim().eq_ignore_ascii_case(catalogued.mpn) {
-                Selection::Use(catalogued)
-            } else {
-                Selection::Reject(proposal.mpn.clone())
-            }
-        }
-        // The model was silent about this class: fall back to the deterministic catalog part.
-        None => Selection::Use(catalogued),
+        // The model proposed a part for this class: accept iff its MPN is IN the class's catalog set
+        // (set-inclusion), committing the matched TRUSTED catalog entry; otherwise reject the MPN.
+        Some(proposal) => match catalog.part_for_mpn(class, &proposal.mpn) {
+            Some(catalogued) => Selection::Use(catalogued),
+            None => Selection::Reject(proposal.mpn.clone()),
+        },
+        // The model was silent about this class: fall back to the class's default catalog part.
+        None => Selection::Use(catalog.part_for(class)),
     }
 }
 

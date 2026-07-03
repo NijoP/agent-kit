@@ -191,15 +191,22 @@ fn hero_flow_releases_manufacturing_ir_and_replays_byte_identically() {
         "the curated hero design carries no (EOL) regulator, so it releases clean"
     );
 
-    // The BOM sources hero-appropriate, catalog-valid parts: the USB-C receptacle and the host IC.
+    // The BOM sources hero-appropriate, catalog-valid parts: the USB-C receptacle and — the C2.1
+    // honesty fix — the I²C temperature sensor itself (a NON-default, in-catalog Ic member), NOT the
+    // MCU. So a temperature-sensor design now sources a temperature-sensor MPN, validated by catalog
+    // set-inclusion (the model proposed the sensor; the kernel confirmed it is in the Ic set).
     let mpns: Vec<&str> = report.state.parts.iter().map(|p| p.mpn.as_str()).collect();
     assert!(
         mpns.contains(&"USB4110-GF-A"),
         "the BOM sources the USB-C receptacle part"
     );
     assert!(
-        mpns.contains(&"STM32L010F4P6"),
-        "the BOM sources the host-IC part"
+        mpns.contains(&"TMP102AIDRLR"),
+        "the BOM sources the I²C temperature-sensor part (honest hero BOM), not the MCU"
+    );
+    assert!(
+        !mpns.contains(&"STM32L010F4P6"),
+        "the hero sensor Ic no longer sources the MCU MPN (E7 honesty fix)"
     );
 
     // The RELEASE MILESTONE is real, not merely a green phase: the terminal Manufacturing IR was

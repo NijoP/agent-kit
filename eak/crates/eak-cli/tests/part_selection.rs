@@ -24,6 +24,11 @@ use std::path::PathBuf;
 
 const HALLUCINATED_MPN: &str = "HALLUCINATED-IC-9000";
 
+/// A NON-default but in-catalog `Ic` part (C2.1): the real I²C temperature sensor. The catalog's
+/// first-choice / default `Ic` part is the MCU `STM32L010F4P6`; this MPN is a *different* member of
+/// the same class set, so accepting it proves SET-INCLUSION, not equality-to-the-canonical-part.
+const TEMP_SENSOR_MPN: &str = "TMP102AIDRLR";
+
 fn temp_log(tag: &str) -> PathBuf {
     let mut p = std::env::temp_dir();
     p.push(format!("eak-cli-c2-{}-{}.jsonl", tag, std::process::id()));
@@ -82,6 +87,36 @@ fn hallucinated_ic_part_engine() -> Box<dyn ReasoningEngine> {
             mpn: HALLUCINATED_MPN.into(),
             rationale: "the model invented a part that is not in the catalog".into(),
             confidence: 0.99,
+        }],
+        explanations: vec![],
+        clarifying_questions: vec![],
+        raw: "{}".into(),
+    }))
+}
+
+/// A reasoning engine whose requirement candidates realize a USB-C power source (a `Connector`) and
+/// a logic load (an `Ic`) — identical to [`hallucinated_ic_part_engine`] so ERC is clean and the
+/// workflow reaches the BOM layer — but whose `Ic` PART proposal is the NON-DEFAULT, in-catalog
+/// temperature sensor (`TMP102AIDRLR`), not the class's canonical/default MCU. The `Connector` is
+/// left unproposed, so it falls back to its catalogued part. This isolates the set-inclusion accept
+/// path: the model chose a member of the `Ic` set that is NOT the default, and it must be accepted.
+fn temp_sensor_ic_part_engine() -> Box<dyn ReasoningEngine> {
+    Box::new(FixtureEngine::single(ReasoningResponse {
+        candidates: vec![
+            req(
+                "Device shall be powered over USB-C",
+                RequirementCategory::Functional,
+            ),
+            req(
+                "Logic core shall operate at 3.3 logic level",
+                RequirementCategory::Electrical,
+            ),
+        ],
+        part_candidates: vec![CandidatePart {
+            component_class: "Ic".into(),
+            mpn: TEMP_SENSOR_MPN.into(),
+            rationale: "a NON-default but in-catalog Ic part — the I²C temperature sensor".into(),
+            confidence: 0.95,
         }],
         explanations: vec![],
         clarifying_questions: vec![],
@@ -157,6 +192,76 @@ fn valid_part_proposal_is_accepted_and_lands_via_the_seam_and_releases() {
     }
 
     // Replay identity holds for the reasoning-driven accept run (P4).
+    let replayed = replay_cmd(&log).expect("replay succeeds");
+    assert_eq!(report.state, replayed);
+    assert_eq!(report.state.canonical_json(), replayed.canonical_json());
+
+    let _ = std::fs::remove_file(&log);
+}
+
+#[test]
+fn non_default_but_in_catalog_part_is_accepted_via_set_inclusion() {
+    // C2.1 SET-INCLUSION (positive): the model proposes a NON-default Ic part — the temperature
+    // sensor — that is nonetheless a member of the Ic catalog set. The kernel must ACCEPT it and
+    // commit that EXACT catalog entry (proving membership, not equality-to-the-canonical MCU).
+    let (config, log) = cfg("setincl", 11);
+    let report = run_with(temp_sensor_ic_part_engine(), &config).expect("run completes");
+
+    let records = FileEventLog::open(&log)
+        .expect("open log")
+        .read_all()
+        .expect("read log");
+
+    // The BOM phase REASONED (a part_candidates_v1 call is recorded) and the non-default proposal
+    // was ACCEPTED — BOM Planning succeeded rather than failing the way a rejection would.
+    assert!(
+        made_part_reasoning_call(&records),
+        "BOM Planning made a part_candidates_v1 reasoning call"
+    );
+    let bom_outcome = report
+        .outcomes
+        .iter()
+        .find(|(n, _)| n == "BomPlanning")
+        .map(|(_, o)| o)
+        .expect("BOM Planning ran");
+    assert!(
+        matches!(bom_outcome, PhaseOutcome::Success),
+        "a NON-default but in-catalog part is accepted, so BOM Planning succeeds; got: {bom_outcome:?}"
+    );
+
+    // The EXACT proposed catalog part (the temperature sensor) reached state through the REAL seam
+    // (a PartCommitted event carried it) — set-inclusion committed the matched member, not the
+    // canonical default.
+    assert!(
+        records.iter().any(|r| matches!(&r.event,
+            Event::PartCommitted { part } if part.mpn == TEMP_SENSOR_MPN)),
+        "the non-default temp-sensor part was committed via the capability seam"
+    );
+    let sensor = report
+        .state
+        .parts
+        .iter()
+        .find(|p| p.mpn == TEMP_SENSOR_MPN)
+        .expect("the temp sensor is in engineering state");
+    // The committed part is the TRUSTED CatalogPart (manufacturer from the catalog record, NOT model
+    // free text — the proposal carried no manufacturer at all). The moat holds on the accept path.
+    assert_eq!(
+        sensor.manufacturer, "Texas Instruments",
+        "the committed part is built from the trusted catalog record, not the proposal text"
+    );
+    // Because the model chose the sensor, the class DEFAULT (the MCU) was NOT sourced — this is a
+    // genuine set-member choice, not a fallback to the canonical part.
+    assert!(
+        !report.state.parts.iter().any(|p| p.mpn == "STM32L010F4P6"),
+        "the non-default choice replaced the canonical/default Ic part"
+    );
+    // The un-proposed Connector class fell back to its catalog part and was still sourced.
+    assert!(
+        report.state.parts.iter().any(|p| p.mpn == "USB4110-GF-A"),
+        "the un-proposed Connector class fell back to its catalog part"
+    );
+
+    // Replay identity holds for the set-inclusion accept run (P4).
     let replayed = replay_cmd(&log).expect("replay succeeds");
     assert_eq!(report.state, replayed);
     assert_eq!(report.state.canonical_json(), replayed.canonical_json());

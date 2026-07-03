@@ -365,10 +365,13 @@ pub struct CatalogPart {
     pub datasheet: &'static str,
 }
 
-/// Pure, deterministic part-selection service: maps a [`ComponentClass`] to a concrete
-/// catalog part (P9 — same class always yields the same part). A stand-in for a distributor
-/// lookup; the regulator entry is deliberately [`Eol`](PartLifecycle::Eol) so the BOM
-/// lifecycle gate has something to flag in the end-to-end demo.
+/// Pure, deterministic part-selection service: maps a [`ComponentClass`] to the ORDERED SET of
+/// concrete catalog parts that realize it (C2.1 — 1:many; several parts may satisfy one class, e.g.
+/// an MCU *and* a temperature sensor both being `Ic`). A stand-in for a distributor lookup; the
+/// regulator entry is deliberately [`Eol`](PartLifecycle::Eol) so the BOM lifecycle gate has
+/// something to flag in the end-to-end demo. Determinism (P9/P4): each class's table is a fixed,
+/// compiled-in `'static` slice in a stable order, so the same class always yields the same parts in
+/// the same order — a run replays byte-identically.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct PartCatalog;
 
@@ -377,40 +380,76 @@ impl PartCatalog {
         Self
     }
 
-    /// The catalog part realizing a given component class. Total over `ComponentClass`.
-    pub fn part_for(&self, class: ComponentClass) -> CatalogPart {
+    /// The ORDERED, non-empty set of catalog parts realizing a component class — the CHOICE SPACE a
+    /// part proposal is validated against (C2.1 set-inclusion). Total over `ComponentClass`; the
+    /// slice is `'static` and its order is fixed, so a run is reproducible (P4). The FIRST entry is
+    /// the class's default / first-choice (see [`part_for`](Self::part_for)).
+    pub fn parts_for(&self, class: ComponentClass) -> &'static [CatalogPart] {
         match class {
-            ComponentClass::Connector => CatalogPart {
+            ComponentClass::Connector => &[CatalogPart {
                 mpn: "USB4110-GF-A",
                 manufacturer: "GCT",
                 lifecycle: PartLifecycle::Active,
                 datasheet: "https://gct.co/usb4110",
-            },
-            ComponentClass::Ic => CatalogPart {
-                mpn: "STM32L010F4P6",
-                manufacturer: "STMicroelectronics",
-                lifecycle: PartLifecycle::Active,
-                datasheet: "https://st.com/stm32l0",
-            },
-            ComponentClass::Regulator => CatalogPart {
+            }],
+            // The Ic class is 1:many: a low-power host MCU (the pre-C2.1 default, kept FIRST so the
+            // silent-fallback path stays bit-identical) alongside a real I²C digital temperature
+            // sensor, so the hero "temperature sensor" Ic can source an honest sensor MPN rather
+            // than an MCU (C2.1 / E7 honesty fix).
+            ComponentClass::Ic => &[
+                CatalogPart {
+                    mpn: "STM32L010F4P6",
+                    manufacturer: "STMicroelectronics",
+                    lifecycle: PartLifecycle::Active,
+                    datasheet: "https://st.com/stm32l0",
+                },
+                CatalogPart {
+                    mpn: "TMP102AIDRLR",
+                    manufacturer: "Texas Instruments",
+                    lifecycle: PartLifecycle::Active,
+                    datasheet: "https://ti.com/tmp102",
+                },
+            ],
+            ComponentClass::Regulator => &[CatalogPart {
                 mpn: "LM1117-3.3",
                 manufacturer: "Texas Instruments",
                 lifecycle: PartLifecycle::Eol,
                 datasheet: "https://ti.com/lm1117",
-            },
-            ComponentClass::Resistor => CatalogPart {
+            }],
+            ComponentClass::Resistor => &[CatalogPart {
                 mpn: "RC0402FR-0710KL",
                 manufacturer: "Yageo",
                 lifecycle: PartLifecycle::Active,
                 datasheet: "https://yageo.com/rc0402",
-            },
-            ComponentClass::Capacitor => CatalogPart {
+            }],
+            ComponentClass::Capacitor => &[CatalogPart {
                 mpn: "CL05A104KA5NNNC",
                 manufacturer: "Samsung",
                 lifecycle: PartLifecycle::Active,
                 datasheet: "https://samsung.com/cl05",
-            },
+            }],
         }
+    }
+
+    /// The class's DEFAULT / first-choice catalog part — the first entry of
+    /// [`parts_for`](Self::parts_for). This is the deterministic fallback for a class the model is
+    /// silent about (the pre-C2.1 behaviour). Total over `ComponentClass` (every class's set is
+    /// non-empty).
+    pub fn part_for(&self, class: ComponentClass) -> CatalogPart {
+        self.parts_for(class)[0]
+    }
+
+    /// The catalog part for `class` whose MPN matches `mpn` (trimmed, case-insensitive), or `None`
+    /// when the class's set does not carry it. This is the C2.1 SET-INCLUSION check the part agent
+    /// runs: a proposal is accepted iff this returns `Some`, and the returned TRUSTED
+    /// [`CatalogPart`] (never the caller's free text) is what gets committed — so a hallucinated MPN
+    /// yields `None` and is rejected, and even an accepted proposal only *chooses* a catalog record.
+    pub fn part_for_mpn(&self, class: ComponentClass, mpn: &str) -> Option<CatalogPart> {
+        let needle = mpn.trim();
+        self.parts_for(class)
+            .iter()
+            .find(|p| p.mpn.eq_ignore_ascii_case(needle))
+            .copied()
     }
 }
 
@@ -2088,6 +2127,46 @@ mod tests {
             PartLifecycle::Active
         );
         assert_eq!(cat.part_for(ComponentClass::Ic).mpn, "STM32L010F4P6");
+    }
+
+    #[test]
+    fn catalog_is_one_to_many_with_a_temp_sensor_in_the_ic_set() {
+        let cat = PartCatalog::new();
+        // C2.1: the Ic class now carries >= 2 catalog members, deterministically ordered with the
+        // MCU FIRST so the silent-fallback default is unchanged (bit-identical offline runs).
+        let ics = cat.parts_for(ComponentClass::Ic);
+        assert!(ics.len() >= 2, "the Ic class is 1:many");
+        assert_eq!(
+            ics[0].mpn, "STM32L010F4P6",
+            "the MCU stays the first-choice default"
+        );
+        assert_eq!(cat.part_for(ComponentClass::Ic).mpn, "STM32L010F4P6");
+
+        // The real I²C temperature sensor is a NON-default member of the SAME class set — the E7
+        // honesty fix (a temperature-sensor Ic can source a sensor MPN, not an MCU).
+        let temp = cat
+            .part_for_mpn(ComponentClass::Ic, "TMP102AIDRLR")
+            .expect("temp sensor is in the Ic set");
+        assert_eq!(temp.manufacturer, "Texas Instruments");
+        assert_eq!(temp.lifecycle, PartLifecycle::Active);
+        assert_ne!(
+            temp.mpn,
+            cat.part_for(ComponentClass::Ic).mpn,
+            "the temp sensor is NOT the class default (proves set-inclusion, not equality)"
+        );
+
+        // The membership check is trimmed + case-insensitive, mirroring the agent's acceptance.
+        assert!(cat
+            .part_for_mpn(ComponentClass::Ic, "  tmp102aidrlr ")
+            .is_some());
+        // A hallucinated MPN is NOT in the set — the moat holds at the catalog boundary.
+        assert!(cat
+            .part_for_mpn(ComponentClass::Ic, "HALLUCINATED-IC-9000")
+            .is_none());
+        // Single-member classes still resolve their one part by MPN.
+        assert!(cat
+            .part_for_mpn(ComponentClass::Connector, "USB4110-GF-A")
+            .is_some());
     }
 
     #[test]

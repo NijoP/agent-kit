@@ -1,5 +1,5 @@
 {
-  "_note": "CURATED HERO CASSETTE (E7). These requirements + part candidates are AUTHORED, not live-derived: a deterministic, offline stand-in for the reasoning model so the hero demo intent 'USB-C powered I²C temperature sensor, < 1 W' produces on-topic requirements that flow clean through all 15 phases to a released ManufacturingIr, and replay byte-identically. Loaded by eak-cli/tests/hero_flow.rs via RunConfig.cassette. A single `default` response serves both the requirement_candidates_v1 and part_candidates_v1 schemas (the requirement agent reads `candidates`, the part agent reads `part_candidates`), exactly like default_cassette.json. Geometry is deliberately catalog-clean: the wording classifies into Connector + Ic only (NO Regulator, whose catalog part is EOL and would block release), no Fabrication/frequency/thermal/current targets are stated (so those DRC/DFM/EMC/thermal rules stay silent), and the 50 mm board comfortably fits the 4 courtyards. The part candidates name only catalog-carried MPNs, so every proposal is ACCEPTED at the catalog seam (the moat: model proposes, kernel validates).",
+  "_note": "CURATED HERO CASSETTE (E7). These requirements + part candidates are AUTHORED, not live-derived: a deterministic, offline stand-in for the reasoning model so the hero demo intent 'USB-C powered I²C temperature sensor, < 1 W' produces on-topic requirements that flow clean through all 15 phases to a released ManufacturingIr, and replay byte-identically. Loaded by eak-cli/tests/hero_flow.rs via RunConfig.cassette. A single `default` response serves both the requirement_candidates_v1 and part_candidates_v1 schemas (the requirement agent reads `candidates`, the part agent reads `part_candidates`), exactly like default_cassette.json. Geometry is deliberately catalog-clean: the wording classifies into Connector + Ic only (NO Regulator, whose catalog part is EOL and would block release), no Fabrication/frequency/thermal/current targets are stated (so those DRC/DFM/EMC/thermal rules stay silent), and the 50 mm board comfortably fits the 4 courtyards. The part candidates name only catalog-carried MPNs, so every proposal is ACCEPTED at the catalog seam (the moat: model proposes, kernel validates). C2.1: the Ic class is now 1:many (MCU + I²C temperature sensor), and the hero sources the temperature sensor TMP102AIDRLR — a NON-default, in-catalog Ic member — so the BOM is honest (a temperature-sensor design sources a sensor MPN, not an MCU), validated by catalog set-inclusion.",
   "default": {
     "candidates": [
       {
@@ -52,8 +52,8 @@
       },
       {
         "component_class": "Ic",
-        "mpn": "STM32L010F4P6",
-        "rationale": "Low-power host controller for the I²C temperature-sensor load class (catalog part for the Ic class).",
+        "mpn": "TMP102AIDRLR",
+        "rationale": "I²C digital temperature sensor realizing the temperature-sensor Ic class (a NON-default, in-catalog Ic part — the honest sensor MPN, not the MCU).",
         "confidence": 0.92
       }
     ],
