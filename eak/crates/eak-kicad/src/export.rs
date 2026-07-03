@@ -2,11 +2,15 @@
 //!
 //! This emits the copper-realization subset the importer round-trips: a `(net …)` table, one
 //! `(segment …)` per [`Track`], plus a header (version/generator/layer table) and an `Edge.Cuts`
-//! rectangle so the reused KiCanvas renderer can draw the board and its copper. It fabricates no
-//! per-entity KiCad fields it cannot see (P4/P9): while an [`ImportedDesign`] may now carry parsed
-//! `components` (F2), **no `(footprint …)` nodes are emitted yet** — footprint *export* (round-tripping
-//! parts back to KiCad) is a deliberate follow-up, so parts are simply omitted from this IR here,
-//! never half-guessed. The copper subset (nets + segments + outline) round-trips exactly as before.
+//! rectangle so the reused KiCanvas renderer can draw the board and its copper. Since increment F3 it
+//! also emits one `(footprint …)` per parsed [`crate::ImportedComponent`] (F2), completing the canvas
+//! round-trip for *parts*: the refdes as `(fp_text reference …)`, the side `(layer …)`, the placement
+//! centre `(at …)`, a courtyard `(fp_rect …)` sized to the placement so its width/height re-derive, and
+//! one `(pad …)` per [`Pin`](eak_domain::Pin) carrying that pin's designation. It emits **only the
+//! subset the importer parses back** (P4/P9): the footprint library-id is a self-labelled render
+//! scaffold and pad geometry is filler — because [`Pin`](eak_domain::Pin) carries neither a position
+//! nor a net, none is invented, so none is silently dropped on the way back. A copper-only design (no
+//! `components`) emits no footprints, exactly as before F3.
 //!
 //! Determinism (E4/testability): the same [`ImportedDesign`] always yields the byte-identical
 //! string. Nothing here reads a clock, a UUID source, or hash-ordered map — every list is walked in
@@ -20,15 +24,16 @@
 //! re-import class is re-inferred from the net name and the rest come back empty/`None`, exactly as
 //! the importer defines them.
 
-use crate::ImportedDesign;
+use crate::{ImportedComponent, ImportedDesign};
 use eak_domain::{BoardSide, Track};
 use eak_units::PhysicalQuantity;
 
 /// Serialize an [`ImportedDesign`] into a valid `(kicad_pcb …)` document.
 ///
-/// The `(net …)` and `(segment …)` nodes are exactly the shapes [`crate::import_kicad_pcb`] reads,
-/// so `import → export → import` is a fixed point over `board`, `nets`, and `tracks`. Deterministic:
-/// same input, same bytes.
+/// The `(net …)`, `(segment …)`, and `(footprint …)` nodes are exactly the shapes
+/// [`crate::import_kicad_pcb`] reads, so `import → export → import` is a fixed point over `board`,
+/// `nets`, `tracks`, and (since F3) `components`/placements/pins. Deterministic: same input, same
+/// bytes.
 pub fn export(design: &ImportedDesign) -> String {
     let mut out = String::new();
 
@@ -69,8 +74,61 @@ pub fn export(design: &ImportedDesign) -> String {
         out.push_str(&segment(track));
     }
 
+    // --- parts (F3): one footprint per imported component, in Vec order so the importer re-mints the
+    //     same component/pin/placement ids (20_000 + i / 30_000 + running / 40_000 + i) on re-import.
+    for ic in &design.components {
+        out.push_str(&footprint(ic));
+    }
+
     out.push_str(")\n");
     out
+}
+
+/// One `(footprint …)` node in the exact subset the importer parses back (F2 → F3 round-trip): the
+/// refdes as an `(fp_text reference …)`, the side `(layer …)`, the placement centre `(at …)`, a
+/// courtyard `(fp_rect …)` centred on the origin whose extent equals the placement's width × height
+/// (so `footprint_courtyard` re-derives that exact size instead of the class default), and one
+/// `(pad …)` per pin whose second atom is the pin's designation (all the importer reads from a pad).
+///
+/// Fields the importer does not read are handled honestly (P4/P9): the library-id is a self-labelled
+/// `"eak:<refdes>"` render scaffold — the importer identifies the part by its `(fp_text reference …)`,
+/// not this name — and pad geometry is minimal filler, because a [`Pin`](eak_domain::Pin) carries
+/// neither a position nor a net; all pads therefore sit at the footprint origin. None of these is
+/// asserted by the round-trip, so nothing invented is silently dropped.
+fn footprint(ic: &ImportedComponent) -> String {
+    let c = &ic.component;
+    let p = &ic.placement;
+    let (cu, crtyd, silks) = match p.side {
+        BoardSide::Top => ("F.Cu", "F.CrtYd", "F.SilkS"),
+        BoardSide::Bottom => ("B.Cu", "B.CrtYd", "B.SilkS"),
+    };
+    let (x, y) = (mm_str(&p.x), mm_str(&p.y));
+    // Courtyard half-extents in mm, snapped to the KiCad grid; extent (end - start) == placement size.
+    let w = p.width.si_magnitude() * 1_000.0;
+    let h = p.height.si_magnitude() * 1_000.0;
+    let (hw, hh) = (fmt_mm(w / 2.0), fmt_mm(h / 2.0));
+    let (nhw, nhh) = (fmt_mm(-w / 2.0), fmt_mm(-h / 2.0));
+
+    let mut s = String::new();
+    s.push_str(&format!(
+        "  (footprint {} (layer \"{cu}\") (at {x} {y})\n",
+        quote(&format!("eak:{}", c.refdes))
+    ));
+    s.push_str(&format!(
+        "    (fp_text reference {} (at 0 0) (layer \"{silks}\"))\n",
+        quote(&c.refdes)
+    ));
+    s.push_str(&format!(
+        "    (fp_rect (start {nhw} {nhh}) (end {hw} {hh}) (layer \"{crtyd}\") (width 0.05))\n"
+    ));
+    for pin in &ic.pins {
+        s.push_str(&format!(
+            "    (pad {} smd rect (at 0 0) (size 1 1) (layers \"{cu}\"))\n",
+            quote(&pin.designation)
+        ));
+    }
+    s.push_str("  )\n");
+    s
 }
 
 /// One `(segment …)` node in the exact field order/shape the importer's `sub()` lookups expect.
@@ -306,6 +364,89 @@ mod tests {
             assert!(q_eq(&a.x1, &b.x1));
             assert!(q_eq(&a.y2, &b.y2));
         }
+    }
+
+    // ------------------------------- F3: footprints -> (footprint …) -------------------------------
+
+    /// A board carrying parts: a top 0805 resistor with an explicit courtyard rect (2.0 x 1.4 mm) and
+    /// two pads, and a bottom SOIC-8 IC with no courtyard (class default 6 x 6 mm) and three pads.
+    /// Exercises both courtyard paths, both sides, and multi-pad→pin fan-out across the F3 round-trip.
+    const WITH_FOOTPRINTS: &str = r#"
+        (kicad_pcb
+          (net 0 "")
+          (net 1 "GND")
+          (net 2 "VCC")
+          (footprint "Resistor_SMD:R_0805" (layer "F.Cu") (at 20 30 90)
+            (fp_text reference "R1" (at 0 -2) (layer "F.SilkS"))
+            (fp_rect (start -1 -0.7) (end 1 0.7) (layer "F.CrtYd") (width 0.05))
+            (pad "1" smd roundrect (at -0.9 0) (size 1 1.2) (layers "F.Cu"))
+            (pad "2" smd roundrect (at 0.9 0) (size 1 1.2) (layers "F.Cu"))
+          )
+          (footprint "Package_SO:SOIC-8" (layer "B.Cu") (at 50 40)
+            (fp_text reference "U1" (at 0 -3) (layer "B.SilkS"))
+            (pad "1" smd rect (at -2 -1.9) (size 0.6 1.5) (layers "B.Cu"))
+            (pad "2" smd rect (at -2 -0.6) (size 0.6 1.5) (layers "B.Cu"))
+            (pad "3" smd rect (at -2 0.6) (size 0.6 1.5) (layers "B.Cu"))
+          )
+        )
+    "#;
+
+    #[test]
+    fn footprints_export_with_a_node_per_component_and_a_pad_per_pin() {
+        // String-shape assertion: the emitted document carries the parts, not just copper.
+        let d = import_kicad_pcb(WITH_FOOTPRINTS).unwrap();
+        assert_eq!(d.components.len(), 2);
+        let s = export(&d);
+        assert_eq!(s.matches("(footprint").count(), d.components.len());
+        let total_pins: usize = d.components.iter().map(|c| c.pins.len()).sum();
+        assert_eq!(total_pins, 5); // R1 (2) + U1 (3)
+        assert_eq!(s.matches("(pad").count(), total_pins);
+        // the refdes rides an (fp_text reference …) — the only shape footprint_refdes reads.
+        assert!(s.contains("(fp_text reference \"R1\""));
+        assert!(s.contains("(fp_text reference \"U1\""));
+    }
+
+    #[test]
+    fn footprints_round_trip_as_a_fixed_point() {
+        // The point of F3: import a board WITH parts, export it, re-import — and the components,
+        // placements, and pins land identically, ALONGSIDE the existing board/nets fixed point.
+        let d1 = import_kicad_pcb(WITH_FOOTPRINTS).unwrap();
+        let d2 = import_kicad_pcb(&export(&d1)).unwrap();
+
+        assert_eq!(d1.components.len(), d2.components.len());
+        for (a, b) in d1.components.iter().zip(&d2.components) {
+            // refdes survives; class is re-inferred from it, so it round-trips iff the refdes does.
+            assert_eq!(a.component.refdes, b.component.refdes);
+            assert_eq!(a.component.class, b.component.class);
+            // placement: side + centre position + courtyard size (explicit rect AND class default).
+            assert_eq!(a.placement.side, b.placement.side);
+            assert!(q_eq(&a.placement.x, &b.placement.x));
+            assert!(q_eq(&a.placement.y, &b.placement.y));
+            assert!(q_eq(&a.placement.width, &b.placement.width));
+            assert!(q_eq(&a.placement.height, &b.placement.height));
+            // pins: count + ordered designations + component binding all survive.
+            assert_eq!(a.pins.len(), b.pins.len());
+            let da: Vec<&str> = a.pins.iter().map(|p| p.designation.as_str()).collect();
+            let db: Vec<&str> = b.pins.iter().map(|p| p.designation.as_str()).collect();
+            assert_eq!(da, db);
+            assert!(b.pins.iter().all(|p| p.component == b.component.id));
+        }
+
+        // ...and the copper/outline fixed point still holds with parts present (no F2/F3 regression).
+        assert!(q_eq(&d1.board.width, &d2.board.width));
+        assert!(q_eq(&d1.board.height, &d2.board.height));
+        assert_eq!(d1.nets.len(), d2.nets.len());
+        assert_eq!(d1.tracks.len(), d2.tracks.len());
+    }
+
+    #[test]
+    fn copper_only_design_emits_no_footprints() {
+        // Regression guard: a parts-free board exports exactly as before F3 — no (footprint …) nodes.
+        let d = import_kicad_pcb(SAMPLE).unwrap();
+        assert!(d.components.is_empty());
+        let s = export(&d);
+        assert!(!s.contains("(footprint"));
+        assert!(!s.contains("(pad"));
     }
 
     #[test]
