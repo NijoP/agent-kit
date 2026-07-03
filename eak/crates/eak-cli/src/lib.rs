@@ -25,6 +25,7 @@ use eak_runtime::{
 };
 use eak_store::FileEventLog;
 use eak_units::{PhysicalQuantity, Unit};
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 pub use eak_domain::{EntityId, RelationType as Relation, RequirementStatus};
@@ -230,12 +231,22 @@ fn import_core() -> Result<RuntimeCore, CliError> {
 ///
 /// Parses `kicad_src` into an [`eak_kicad::ImportedDesign`], then commits its entities — in
 /// dependency order — through [`RuntimeCore::invoke`]: the single [`Board`](eak_domain::Board)
-/// outline first, then each [`Net`](eak_domain::Net), then each routed [`Track`](eak_domain::Track),
-/// and finally (F2) each imported footprint as a realized [`Component`](eak_domain::Component)
-/// (+its [`Pin`](eak_domain::Pin)s) with a [`Placement`](eak_domain::Placement). Every entity funnels
+/// outline first, then (F2) each imported footprint as a realized [`Component`](eak_domain::Component)
+/// (+its [`Pin`](eak_domain::Pin)s) with a [`Placement`](eak_domain::Placement), then each
+/// [`Net`](eak_domain::Net), then each routed [`Track`](eak_domain::Track). Every entity funnels
 /// through the runtime's `commit` (stamp -> append -> fold), identical to the generation path. Any
 /// parse failure or seam rejection is surfaced as a [`CliError`] — the model (and, here, the
 /// importer) is never trusted to bypass validation.
+///
+/// **Pad→pin→net membership (G1):** components are realized *before* nets, so by the time each
+/// [`Net`](eak_domain::Net) is created its member pins are already committed. As each footprint is
+/// realized, the importer's per-pad net annotation ([`ImportedComponent::pin_nets`]) is folded into a
+/// `net-index -> committed-pin-ids` map keyed by the KiCad net index (which equals the domain net's
+/// [`EntityId`]); each net is then created with `members` set to the real pin ids for its index. The
+/// nets stay [`NetOrigin::Physical`](eak_domain::NetOrigin), a net with no pads on it keeps empty
+/// members (still valid Physical), and because only *committed* pin ids ever enter the map the
+/// `CreateNet` seam's phantom-pin rule (ADR-0016) still rejects any member that is not a committed
+/// pin — the membership is real, never fabricated.
 ///
 /// **Footprints (F2, ADR-0017):** the `RealizeComponent` seam requires ≥1 pin and, for a
 /// [`Synthesized`](eak_domain::ComponentOrigin::Synthesized) component, a committed originating
@@ -245,8 +256,8 @@ fn import_core() -> Result<RuntimeCore, CliError> {
 /// (which would poison traceability — the architect rejected that). The ≥1-pin rule still holds
 /// honestly: the pins are the footprint's real pads. NO `IntentCaptured` / `RequirementCommitted` /
 /// `FunctionalBlockCommitted` is emitted for an import — the log carries only what the board actually
-/// declares. Pad→pin→net *membership* is a deliberate F2 follow-up: imported nets stay member-less
-/// `Physical`, so a realized pin is not yet joined to a net.
+/// declares. Since G1 an imported net carries its real pad members (see the membership note above),
+/// so a realized pin is joined to its net — through the seam, never fabricated.
 ///
 /// The runtime is returned so the caller can read the reconstructed state (`core.state`) and the
 /// recorded event log (`core.log()`), which together prove the import went through `commit`.
@@ -260,28 +271,33 @@ pub fn import_design(kicad_src: &str) -> Result<RuntimeCore, CliError> {
         board: design.board,
         links: vec![],
     })?;
-    for net in design.nets {
-        core.invoke(CapabilityRequest::CreateNet { net, links: vec![] })?;
-    }
-    for track in design.tracks {
-        core.invoke(CapabilityRequest::RouteNet {
-            track,
-            links: vec![],
-        })?;
-    }
 
-    // F2 (ADR-0017): land imported footprints as Components + Placements through the real seam. Each
-    // component is already tagged `ComponentOrigin::Imported` with a null `from_block` by the importer,
-    // so RealizeComponent accepts it WITHOUT a fabricated intent/requirement/block spine — an imported
+    // F2/G1 (ADR-0017): land imported footprints as Components + Placements through the real seam
+    // FIRST, before the nets — so each pad's Pin is committed (its EntityId real) by the time the net
+    // it belongs to is created, and the net can carry that pin as a genuine member. Each component is
+    // already tagged `ComponentOrigin::Imported` with a null `from_block` by the importer, so
+    // RealizeComponent accepts it WITHOUT a fabricated intent/requirement/block spine — an imported
     // board declares no functional decomposition, and the seam re-validates that honestly (≥1 pin, a
-    // board exists, no double-placement) exactly as it does for a generated part. A copper-only import
-    // simply iterates an empty vec, so it commits no component — byte-for-byte unchanged.
+    // board exists, no double-placement) exactly as it does for a generated part. As each footprint is
+    // realized, its `pin_nets` annotation is folded into `net_members`: net-index -> committed pin
+    // ids. A copper-only import iterates an empty vec, so it commits no component and the map stays
+    // empty — byte-for-byte unchanged from before.
+    let mut net_members: BTreeMap<u128, Vec<EntityId>> = BTreeMap::new();
     for imported in design.components {
         let ImportedComponent {
             component,
             pins,
             placement,
+            pin_nets,
         } = imported;
+        // Record pad -> pin -> net BEFORE `pins` is moved into the seam. Only kept net indices appear
+        // in `pin_nets` (the importer drops unconnected/dangling pads to `None`), so every recorded id
+        // is a real pin about to be committed — no phantom ever enters the map.
+        for (pin, net_idx) in pins.iter().zip(pin_nets.iter()) {
+            if let Some(idx) = net_idx {
+                net_members.entry(*idx).or_default().push(pin.id);
+            }
+        }
         core.invoke(CapabilityRequest::RealizeComponent {
             component,
             pins,
@@ -289,6 +305,26 @@ pub fn import_design(kicad_src: &str) -> Result<RuntimeCore, CliError> {
         })?;
         core.invoke(CapabilityRequest::PlaceComponent {
             placement,
+            links: vec![],
+        })?;
+    }
+
+    // Nets, now carrying their real committed pin members (G1). The KiCad net index equals the domain
+    // net's EntityId, so `net_members[net.id.0]` are the pins that landed on this net; a net with no
+    // pads keeps empty members (still a valid `Physical` net). The nets stay `NetOrigin::Physical`,
+    // and because every listed member is an already-committed pin, the CreateNet seam's phantom-pin
+    // rule (ADR-0016) passes for real reasons — it would still reject any fabricated id.
+    for mut net in design.nets {
+        if let Some(members) = net_members.get(&net.id.0) {
+            net.members = members.clone();
+        }
+        core.invoke(CapabilityRequest::CreateNet { net, links: vec![] })?;
+    }
+
+    // Tracks last: RouteNet re-validates that the realized net is committed, which it now is.
+    for track in design.tracks {
+        core.invoke(CapabilityRequest::RouteNet {
+            track,
             links: vec![],
         })?;
     }

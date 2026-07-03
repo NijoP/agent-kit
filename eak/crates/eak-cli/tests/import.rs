@@ -263,3 +263,145 @@ fn malformed_input_is_a_typed_error_not_a_panic() {
         Err(CliError::Import(_))
     ));
 }
+
+// ------------------------------- G1: pad -> pin -> net membership -------------------------------
+
+/// A board whose R1 pads BOTH sit on GND (net 1), R2 pad 1 sits on VCC (net 2) and R2 pad 2 references
+/// an undeclared net 9 (a dangling reference), plus one unconnected pad (net 0). Exercises shared
+/// membership, the graceful undeclared-net skip, and the unconnected case — all through the seam.
+const WITH_PAD_NETS: &str = r#"
+    (kicad_pcb
+      (net 0 "")
+      (net 1 "GND")
+      (net 2 "VCC")
+      (footprint "Resistor_SMD:R_0805" (layer "F.Cu") (at 20 30)
+        (fp_text reference "R1" (at 0 -2) (layer "F.SilkS"))
+        (pad "1" smd rect (at -0.9 0) (size 1 1) (layers "F.Cu") (net 1 "GND"))
+        (pad "2" smd rect (at 0.9 0) (size 1 1) (layers "F.Cu") (net 1 "GND"))
+      )
+      (footprint "Resistor_SMD:R_0805" (layer "F.Cu") (at 30 30)
+        (fp_text reference "R2" (at 0 -2) (layer "F.SilkS"))
+        (pad "1" smd rect (at -0.9 0) (size 1 1) (layers "F.Cu") (net 2 "VCC"))
+        (pad "2" smd rect (at 0.9 0) (size 1 1) (layers "F.Cu") (net 9 "MYSTERY"))
+        (pad "3" smd rect (at 2 0) (size 1 1) (layers "F.Cu") (net 0 ""))
+      )
+    )
+"#;
+
+#[test]
+fn shared_pad_net_becomes_real_committed_net_membership_through_the_seam() {
+    // G1: two pads on GND must make the imported GND net carry BOTH pins as members — real,
+    // committed pins joined through the CreateNet seam (not fabricated), the net still Physical.
+    let core = import_design(WITH_PAD_NETS).expect("pad-net import should succeed");
+
+    let gnd = core
+        .state
+        .nets
+        .iter()
+        .find(|n| n.name == "GND")
+        .expect("GND net committed");
+    // The whole point: the imported GND net carries its two real pad members.
+    assert_eq!(gnd.members.len(), 2, "GND joins both R1 pads");
+    // Nets stay Physical (imported copper), never re-tagged Logical.
+    assert!(core
+        .state
+        .nets
+        .iter()
+        .all(|n| n.origin == NetOrigin::Physical));
+    // Every listed member is a COMMITTED pin (the ADR-0016 phantom-pin rule holds for real reasons),
+    // and both belong to R1.
+    let r1 = core
+        .state
+        .components
+        .iter()
+        .find(|c| c.refdes == "R1")
+        .unwrap();
+    for pid in &gnd.members {
+        let pin = core.state.pin(*pid).expect("member is a committed pin");
+        assert_eq!(pin.component, r1.id, "GND members are R1's pads");
+    }
+    // VCC carries exactly R2's one pad.
+    let vcc = core.state.nets.iter().find(|n| n.name == "VCC").unwrap();
+    assert_eq!(vcc.members.len(), 1);
+
+    // Event-log proof (no back door): the NetCommitted for GND carries the two members — the seam
+    // committed the membership, it was not poked into state afterwards.
+    let records = core.log().read_all().expect("read committed events");
+    let gnd_committed = records
+        .iter()
+        .filter_map(|r| match &r.event {
+            Event::NetCommitted { net } if net.name == "GND" => Some(net),
+            _ => None,
+        })
+        .next()
+        .expect("a NetCommitted event for GND");
+    assert_eq!(
+        gnd_committed.members.len(),
+        2,
+        "the committed GND event carries both members"
+    );
+}
+
+#[test]
+fn pad_on_undeclared_net_is_graceful_no_phantom_no_abort() {
+    // G1: R2 pad 2 references undeclared net 9. The import must still SUCCEED, no net-9 net is
+    // fabricated, and that pin is a committed terminal that is simply a member of NO net — a phantom
+    // pin never reaches CreateNet, and the seam never aborts.
+    let core = import_design(WITH_PAD_NETS).expect("undeclared-net pad must not abort import");
+
+    // Only the two declared nets exist (GND, VCC) — net 9 was never fabricated.
+    assert_eq!(core.state.nets.len(), 2);
+    assert!(core
+        .state
+        .nets
+        .iter()
+        .all(|n| n.name == "GND" || n.name == "VCC"));
+
+    // Every net member across the design is a committed pin (the phantom-pin rule held throughout).
+    for net in &core.state.nets {
+        for pid in &net.members {
+            assert!(core.state.pin(*pid).is_some(), "no phantom pin in any net");
+        }
+    }
+    // R2 has three pads -> three committed pins, but only pad 1 is on a net; the net-9 and net-0 pins
+    // belong to no net.
+    let r2 = core
+        .state
+        .components
+        .iter()
+        .find(|c| c.refdes == "R2")
+        .unwrap();
+    let r2_pins: Vec<_> = core
+        .state
+        .pins
+        .iter()
+        .filter(|p| p.component == r2.id)
+        .collect();
+    assert_eq!(r2_pins.len(), 3);
+    let members_referencing_r2 = core
+        .state
+        .nets
+        .iter()
+        .flat_map(|n| n.members.iter())
+        .filter(|pid| r2_pins.iter().any(|p| p.id == **pid))
+        .count();
+    assert_eq!(members_referencing_r2, 1, "only R2 pad 1 joined a net");
+}
+
+#[test]
+fn copper_only_import_nets_stay_member_less_physical() {
+    // No-regression: a footprint-free board's nets have no pads to join, so they stay member-less
+    // Physical exactly as before G1 — the reorder introduces no membership where there are no pads.
+    let core = import_design(SAMPLE).expect("copper-only import should succeed");
+    assert_eq!(core.state.nets.len(), 3);
+    assert!(core
+        .state
+        .nets
+        .iter()
+        .all(|n| n.origin == NetOrigin::Physical));
+    assert!(
+        core.state.nets.iter().all(|n| n.members.is_empty()),
+        "copper-only nets have no pad members"
+    );
+    assert!(core.state.pins.is_empty());
+}

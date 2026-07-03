@@ -6,11 +6,13 @@
 //! also emits one `(footprint …)` per parsed [`crate::ImportedComponent`] (F2), completing the canvas
 //! round-trip for *parts*: the refdes as `(fp_text reference …)`, the side `(layer …)`, the placement
 //! centre `(at …)`, a courtyard `(fp_rect …)` sized to the placement so its width/height re-derive, and
-//! one `(pad …)` per [`Pin`](eak_domain::Pin) carrying that pin's designation. It emits **only the
-//! subset the importer parses back** (P4/P9): the footprint library-id is a self-labelled render
-//! scaffold and pad geometry is filler — because [`Pin`](eak_domain::Pin) carries neither a position
-//! nor a net, none is invented, so none is silently dropped on the way back. A copper-only design (no
-//! `components`) emits no footprints, exactly as before F3.
+//! one `(pad …)` per [`Pin`](eak_domain::Pin) carrying that pin's designation and — since increment G1
+//! — its `(net IDX "name")` when the pad was captured on a net ([`crate::ImportedComponent::pin_nets`]),
+//! so pad→net membership survives import→export→import too. It emits **only the subset the importer
+//! parses back** (P4/P9): the footprint library-id is a self-labelled render scaffold and pad geometry
+//! is filler — because [`Pin`](eak_domain::Pin) itself carries no position, none is invented; an
+//! unconnected pad (no captured net) emits no `(net …)` node, so nothing is invented there either. A
+//! copper-only design (no `components`) emits no footprints, exactly as before F3.
 //!
 //! Determinism (E4/testability): the same [`ImportedDesign`] always yields the byte-identical
 //! string. Nothing here reads a clock, a UUID source, or hash-ordered map — every list is walked in
@@ -27,6 +29,7 @@
 use crate::{ImportedComponent, ImportedDesign};
 use eak_domain::{BoardSide, Track};
 use eak_units::PhysicalQuantity;
+use std::collections::BTreeMap;
 
 /// Serialize an [`ImportedDesign`] into a valid `(kicad_pcb …)` document.
 ///
@@ -76,8 +79,14 @@ pub fn export(design: &ImportedDesign) -> String {
 
     // --- parts (F3): one footprint per imported component, in Vec order so the importer re-mints the
     //     same component/pin/placement ids (20_000 + i / 30_000 + running / 40_000 + i) on re-import.
+    //     A net index -> name lookup (G1) lets each connected pad re-emit its `(net IDX "name")`.
+    let net_names: BTreeMap<u128, &str> = design
+        .nets
+        .iter()
+        .map(|n| (n.id.0, n.name.as_str()))
+        .collect();
     for ic in &design.components {
-        out.push_str(&footprint(ic));
+        out.push_str(&footprint(ic, &net_names));
     }
 
     out.push_str(")\n");
@@ -88,14 +97,16 @@ pub fn export(design: &ImportedDesign) -> String {
 /// refdes as an `(fp_text reference …)`, the side `(layer …)`, the placement centre `(at …)`, a
 /// courtyard `(fp_rect …)` centred on the origin whose extent equals the placement's width × height
 /// (so `footprint_courtyard` re-derives that exact size instead of the class default), and one
-/// `(pad …)` per pin whose second atom is the pin's designation (all the importer reads from a pad).
+/// `(pad …)` per pin whose second atom is the pin's designation and which — since G1 — carries a
+/// `(net IDX "name")` when that pin was captured on a net (both the fields the importer reads).
 ///
 /// Fields the importer does not read are handled honestly (P4/P9): the library-id is a self-labelled
 /// `"eak:<refdes>"` render scaffold — the importer identifies the part by its `(fp_text reference …)`,
-/// not this name — and pad geometry is minimal filler, because a [`Pin`](eak_domain::Pin) carries
-/// neither a position nor a net; all pads therefore sit at the footprint origin. None of these is
-/// asserted by the round-trip, so nothing invented is silently dropped.
-fn footprint(ic: &ImportedComponent) -> String {
+/// not this name — and pad geometry is minimal filler, because a [`Pin`](eak_domain::Pin) itself
+/// carries no position; all pads therefore sit at the footprint origin. A pin captured on no net
+/// (`pin_nets` entry `None`) emits no `(net …)` node — an unconnected pad, invented nowhere. None of
+/// the filler is asserted by the round-trip, so nothing invented is silently dropped.
+fn footprint(ic: &ImportedComponent, net_names: &BTreeMap<u128, &str>) -> String {
     let c = &ic.component;
     let p = &ic.placement;
     let (cu, crtyd, silks) = match p.side {
@@ -121,9 +132,18 @@ fn footprint(ic: &ImportedComponent) -> String {
     s.push_str(&format!(
         "    (fp_rect (start {nhw} {nhh}) (end {hw} {hh}) (layer \"{crtyd}\") (width 0.05))\n"
     ));
-    for pin in &ic.pins {
+    for (pin, net) in ic.pins.iter().zip(ic.pin_nets.iter()) {
+        // Emit the pad's `(net IDX "name")` when it was captured on a net (G1); an unconnected pad
+        // (`None`) gets no net node — nothing invented. Names are quoted so any character survives.
+        let net_node = match net {
+            Some(idx) => format!(
+                " (net {idx} {})",
+                quote(net_names.get(idx).copied().unwrap_or(""))
+            ),
+            None => String::new(),
+        };
         s.push_str(&format!(
-            "    (pad {} smd rect (at 0 0) (size 1 1) (layers \"{cu}\"))\n",
+            "    (pad {} smd rect (at 0 0) (size 1 1) (layers \"{cu}\"){net_node})\n",
             quote(&pin.designation)
         ));
     }
@@ -437,6 +457,56 @@ mod tests {
         assert!(q_eq(&d1.board.height, &d2.board.height));
         assert_eq!(d1.nets.len(), d2.nets.len());
         assert_eq!(d1.tracks.len(), d2.tracks.len());
+    }
+
+    /// A board whose two pads share net 1 (GND) plus a pad on net 2 (VCC) and an unconnected pad —
+    /// so the export round-trip exercises captured membership AND the no-net (unconnected) pad.
+    const WITH_PAD_NETS: &str = r#"
+        (kicad_pcb
+          (net 0 "")
+          (net 1 "GND")
+          (net 2 "VCC")
+          (footprint "Resistor_SMD:R_0805" (layer "F.Cu") (at 20 30)
+            (fp_text reference "R1" (at 0 -2) (layer "F.SilkS"))
+            (pad "1" smd rect (at -0.9 0) (size 1 1) (layers "F.Cu") (net 1 "GND"))
+            (pad "2" smd rect (at 0.9 0) (size 1 1) (layers "F.Cu") (net 2 "VCC"))
+          )
+          (footprint "Connector:Conn_01x02" (layer "F.Cu") (at 5 5)
+            (fp_text reference "J1" (at 0 -2) (layer "F.SilkS"))
+            (pad "1" thru_hole circle (at 0 0) (size 1.7 1.7) (layers "*.Cu") (net 1 "GND"))
+            (pad "2" thru_hole circle (at 2.54 0) (size 1.7 1.7) (layers "*.Cu") (net 0 ""))
+          )
+        )
+    "#;
+
+    #[test]
+    fn pad_nets_survive_the_export_round_trip() {
+        // G1: the pad's captured `(net IDX …)` must re-emit and re-import, so pad→net membership is a
+        // fixed point — not just the pins themselves.
+        let d1 = import_kicad_pcb(WITH_PAD_NETS).unwrap();
+        let s = export(&d1);
+        // Connected pads carry a (net …) node; the unconnected J1.2 does not.
+        assert!(s.contains("(net 1 \"GND\")"));
+        assert!(s.contains("(net 2 \"VCC\")"));
+        let d2 = import_kicad_pcb(&s).unwrap();
+
+        assert_eq!(d1.components.len(), d2.components.len());
+        for (a, b) in d1.components.iter().zip(&d2.components) {
+            assert_eq!(a.pin_nets, b.pin_nets, "pad→net membership must round-trip");
+        }
+        // Concretely: R1 both pins on their nets, J1.1 on GND, J1.2 unconnected.
+        let r1 = d2
+            .components
+            .iter()
+            .find(|c| c.component.refdes == "R1")
+            .unwrap();
+        assert_eq!(r1.pin_nets, vec![Some(1), Some(2)]);
+        let j1 = d2
+            .components
+            .iter()
+            .find(|c| c.component.refdes == "J1")
+            .unwrap();
+        assert_eq!(j1.pin_nets, vec![Some(1), None]);
     }
 
     #[test]

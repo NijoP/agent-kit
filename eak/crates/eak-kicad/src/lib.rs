@@ -11,8 +11,11 @@
 //! outline — AND, since increment F2, `(footprint …)` nodes as domain [`Component`]s + [`Placement`]s
 //! (each footprint's `(pad …)`s become [`Pin`]s so the part is realizable at the seam), so an
 //! imported real board carries *parts* for the canvas + review, not just copper. Vias, zones, and
-//! arcs remain recognised-but-skipped; pad→pin→net *membership* is a deliberate F2 follow-up (imported
-//! nets stay member-less `Physical`). See `project-plans/03-roadmap.md` (Hero Flow) and
+//! arcs remain recognised-but-skipped. Since increment G1 each `(pad …)`'s `(net IDX …)` is captured
+//! alongside the [`Pin`] it mints (see [`ImportedComponent::pin_nets`]), so an imported net can carry
+//! its real pad members once the pins are committed — the seam wiring lives in `eak-cli`'s
+//! `import_design`, which joins those committed pins to the net; the importer only surfaces the
+//! pad→net association it can see (P4/P9 honesty). See `project-plans/03-roadmap.md` (Hero Flow) and
 //! `07-engineering-backlog.md`.
 
 use eak_domain::{
@@ -55,6 +58,15 @@ pub struct ImportedComponent {
     pub component: Component,
     pub pins: Vec<Pin>,
     pub placement: Placement,
+    /// Per-pin net membership (G1), positionally parallel to [`pins`](Self::pins): entry `i` is the
+    /// KiCad net index the `i`-th pad declared via `(net IDX …)`, or `None` when the pad is
+    /// unconnected (`(net 0 …)` / no `(net …)` node) or referenced a net the board never declared
+    /// (skipped-and-warned, see [`ImportWarning::PadUnknownNet`]). Only *kept* net indices appear
+    /// here, so a consumer wiring pin→net membership at the seam never fabricates a phantom net —
+    /// the importer states only the pad→net association it can actually resolve (P4/P9). The importer
+    /// itself does not mutate [`Net::members`]; that join is performed downstream (`eak-cli`
+    /// `import_design`) once the pins are committed and their [`EntityId`]s are real.
+    pub pin_nets: Vec<Option<u128>>,
 }
 
 /// A non-fatal problem recorded during import: the affected content is skipped, but the skip is
@@ -74,6 +86,16 @@ pub enum ImportWarning {
     /// rejects a pin-less component (it could never join a net and would pass ERC vacuously), and the
     /// importer will not fabricate a phantom pin, so the part was skipped and the skip surfaced here.
     FootprintNoPads { refdes: String },
+    /// A `(pad …)` referenced a net index with no reviewable `(net …)` declaration — a non-zero,
+    /// non-empty-name index the board never declared (G1). The pin is still minted (the pad is real
+    /// copper), but it is joined to NO net rather than to a phantom one, so `CreateNet` never receives
+    /// a member for a net it cannot resolve. Net 0 / a pad with no `(net …)` node is genuinely
+    /// *unconnected* and is dropped silently, not surfaced here — only a dangling reference is.
+    PadUnknownNet {
+        refdes: String,
+        pad: String,
+        net_id: u128,
+    },
 }
 
 impl std::fmt::Display for ImportWarning {
@@ -89,6 +111,16 @@ impl std::fmt::Display for ImportWarning {
                 write!(
                     f,
                     "footprint {refdes} skipped: no pads (cannot realize a pin-less component)"
+                )
+            }
+            ImportWarning::PadUnknownNet {
+                refdes,
+                pad,
+                net_id,
+            } => {
+                write!(
+                    f,
+                    "pad {refdes}.{pad} references unknown net {net_id}: pin joined to no net"
                 )
             }
         }
@@ -522,26 +554,45 @@ pub fn import_kicad_pcb(src: &str) -> Result<ImportedDesign, ImportError> {
         let component_id = EntityId(20_000 + components.len() as u128);
         // Pads → pins. A Pin carries no geometry, only an addressed terminal; the pad name is its
         // designation (falling back to its 1-based index when a pad is unnamed). Electrical type is
-        // Passive — a PCB pad states no schematic role, so we do not over-claim one. Pin→net
-        // membership is a deliberate F2 follow-up, so these pins are not joined to any net yet.
-        let pins: Vec<Pin> = pads
-            .iter()
-            .enumerate()
-            .map(|(pi, pad)| {
-                let designation = atom_str(pad, 1)
-                    .map(str::to_string)
-                    .filter(|s| !s.trim().is_empty())
-                    .unwrap_or_else(|| (pi + 1).to_string());
-                let pin = Pin {
-                    id: EntityId(30_000 + pin_counter),
-                    component: component_id,
-                    designation,
-                    electrical_type: PinElectricalType::Passive,
-                };
-                pin_counter += 1;
-                pin
-            })
-            .collect();
+        // Passive — a PCB pad states no schematic role, so we do not over-claim one. Each pad's
+        // `(net IDX …)` is captured into `pin_nets` (G1) so the pin can join that net's membership
+        // downstream at the seam; the importer only records the association it can resolve.
+        let mut pins: Vec<Pin> = Vec::with_capacity(pads.len());
+        let mut pin_nets: Vec<Option<u128>> = Vec::with_capacity(pads.len());
+        for (pi, pad) in pads.iter().enumerate() {
+            let designation = atom_str(pad, 1)
+                .map(str::to_string)
+                .filter(|s| !s.trim().is_empty())
+                .unwrap_or_else(|| (pi + 1).to_string());
+            // The pad's net: `(net IDX "name")`. Only a *kept* (declared, non-empty-name) index is
+            // carried as a join target — so downstream membership never references a phantom net. A
+            // pad on net 0 / with no `(net …)` node is unconnected (join to nothing, silent); a pad
+            // on a non-zero index the board never declared is a dangling reference (join to nothing,
+            // surfaced as a warning), never a fabricated net.
+            let pad_net = sub(pad, "net")
+                .and_then(|n| atom_f64(n, 0))
+                .map(|v| v as u128);
+            let joined = match pad_net {
+                Some(idx) if kept_net_ids.contains(&idx) => Some(idx),
+                Some(idx) if idx != 0 => {
+                    warnings.push(ImportWarning::PadUnknownNet {
+                        refdes: refdes.clone(),
+                        pad: designation.clone(),
+                        net_id: idx,
+                    });
+                    None
+                }
+                _ => None,
+            };
+            pins.push(Pin {
+                id: EntityId(30_000 + pin_counter),
+                component: component_id,
+                designation,
+                electrical_type: PinElectricalType::Passive,
+            });
+            pin_nets.push(joined);
+            pin_counter += 1;
+        }
 
         let (cw, ch) = footprint_courtyard(l, class);
         // Grow the outline to enclose the placed courtyard (centre ± half-extent) so a placed part
@@ -579,6 +630,7 @@ pub fn import_kicad_pcb(src: &str) -> Result<ImportedDesign, ImportError> {
             component,
             pins,
             placement,
+            pin_nets,
         });
     }
 
@@ -857,5 +909,78 @@ mod tests {
         assert!(d.components.is_empty());
         assert_eq!(d.tracks.len(), 3);
         assert!(d.warnings.is_empty());
+    }
+
+    // ------------------------------- G1: pad -> net capture -------------------------------
+
+    /// A board where R1's two pads share net 1 (GND) and R2's two pads sit on net 2 (VCC) and an
+    /// undeclared net 9, plus an unconnected pad (net 0). Exercises shared membership, the unknown-net
+    /// warning, and the silent unconnected case.
+    const WITH_PAD_NETS: &str = r#"
+        (kicad_pcb
+          (net 0 "")
+          (net 1 "GND")
+          (net 2 "VCC")
+          (footprint "Resistor_SMD:R_0805" (layer "F.Cu") (at 20 30)
+            (fp_text reference "R1" (at 0 -2) (layer "F.SilkS"))
+            (pad "1" smd roundrect (at -0.9 0) (size 1 1.2) (layers "F.Cu") (net 1 "GND"))
+            (pad "2" smd roundrect (at 0.9 0) (size 1 1.2) (layers "F.Cu") (net 1 "GND"))
+          )
+          (footprint "Resistor_SMD:R_0805" (layer "F.Cu") (at 30 30)
+            (fp_text reference "R2" (at 0 -2) (layer "F.SilkS"))
+            (pad "1" smd roundrect (at -0.9 0) (size 1 1.2) (layers "F.Cu") (net 2 "VCC"))
+            (pad "2" smd roundrect (at 0.9 0) (size 1 1.2) (layers "F.Cu") (net 9 "MYSTERY"))
+          )
+          (footprint "Connector:Conn_01x01" (layer "F.Cu") (at 5 5)
+            (fp_text reference "J1" (at 0 -2) (layer "F.SilkS"))
+            (pad "1" thru_hole circle (at 0 0) (size 1.7 1.7) (layers "*.Cu") (net 0 ""))
+          )
+        )
+    "#;
+
+    #[test]
+    fn pad_net_index_is_captured_per_pin_for_kept_nets() {
+        let d = import_kicad_pcb(WITH_PAD_NETS).unwrap();
+        // R1: both pads on net 1 -> both pin_nets = Some(1), parallel to pins.
+        let r1 = comp(&d, "R1");
+        assert_eq!(r1.pin_nets.len(), r1.pins.len());
+        assert_eq!(r1.pin_nets, vec![Some(1), Some(1)]);
+        // R2: pad 1 on kept net 2, pad 2 on undeclared net 9 -> Some(2), None.
+        let r2 = comp(&d, "R2");
+        assert_eq!(r2.pin_nets, vec![Some(2), None]);
+    }
+
+    #[test]
+    fn pad_on_undeclared_net_is_warned_and_joined_to_nothing() {
+        let d = import_kicad_pcb(WITH_PAD_NETS).unwrap();
+        // The dangling net-9 reference is surfaced (honesty) but the pin is still minted, joined to no
+        // net — no phantom net is fabricated.
+        assert!(d.warnings.contains(&ImportWarning::PadUnknownNet {
+            refdes: "R2".into(),
+            pad: "2".into(),
+            net_id: 9,
+        }));
+        // The unconnected pad (net 0) is silent — genuinely unconnected, not a dangling reference.
+        assert!(!d
+            .warnings
+            .iter()
+            .any(|w| matches!(w, ImportWarning::PadUnknownNet { net_id: 0, .. })));
+        let j1 = comp(&d, "J1");
+        assert_eq!(j1.pin_nets, vec![None]);
+    }
+
+    #[test]
+    fn pads_without_net_nodes_capture_no_membership() {
+        // Regression: the F2 fixture declares no pad nets, so every pin_nets entry is None — an
+        // imported net stays member-less exactly as before G1 (no fabricated membership).
+        let d = import_kicad_pcb(WITH_FOOTPRINTS).unwrap();
+        assert!(d
+            .components
+            .iter()
+            .all(|c| c.pin_nets.iter().all(Option::is_none)));
+        assert!(d
+            .warnings
+            .iter()
+            .all(|w| !matches!(w, ImportWarning::PadUnknownNet { .. })));
     }
 }
