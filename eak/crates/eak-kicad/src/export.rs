@@ -282,6 +282,7 @@ mod tests {
             board,
             nets,
             tracks,
+            warnings: vec![],
         };
 
         let d2 = import_kicad_pcb(&export(&d1)).unwrap();

@@ -13,16 +13,44 @@
 
 use eak_domain::{Board, BoardSide, EntityId, LayerStack, Net, NetClass, NetOrigin, Track};
 use eak_units::{PhysicalQuantity, Unit};
+use std::collections::HashSet;
 
 mod export;
 pub use export::export;
 
-/// A design imported from a `.kicad_pcb` file: the outline plus the copper the review rules read.
+/// A design imported from a `.kicad_pcb` file: the outline plus the copper the review rules read,
+/// alongside any non-fatal [`ImportWarning`]s recorded while skipping content that could not be
+/// resolved (e.g. a segment on an undeclared net). A well-formed board imports with `warnings` empty.
 #[derive(Debug, Clone)]
 pub struct ImportedDesign {
     pub board: Board,
     pub nets: Vec<Net>,
     pub tracks: Vec<Track>,
+    /// Non-fatal problems recorded during import: content that could not be carried was skipped, but
+    /// the skip is surfaced here rather than hidden (honesty), so the caller can report e.g.
+    /// "N segments skipped: unknown net" without aborting the whole import.
+    pub warnings: Vec<ImportWarning>,
+}
+
+/// A non-fatal problem recorded during import: the affected content is skipped, but the skip is
+/// surfaced rather than silently dropped, so the review stays honest about what it did not carry.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ImportWarning {
+    /// A `(segment …)` referenced a net id with no reviewable `(net …)` declaration — an undeclared
+    /// index, or net 0 / an empty-name net (which the importer drops). The track could not be
+    /// resolved to a committed net, so it was skipped rather than emitting a phantom-net track that
+    /// `RouteNet` would reject downstream, aborting the entire import.
+    SegmentUnknownNet { net_id: u128 },
+}
+
+impl std::fmt::Display for ImportWarning {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ImportWarning::SegmentUnknownNet { net_id } => {
+                write!(f, "segment skipped: references unknown net {net_id}")
+            }
+        }
+    }
 }
 
 /// Why an import could not produce a well-formed design.
@@ -38,6 +66,9 @@ pub enum ImportError {
     Malformed(&'static str),
     /// A produced entity failed a domain invariant (carries the domain message).
     Invalid(String),
+    /// The s-expression nested past the safe recursion depth — corrupt or adversarial input that
+    /// would otherwise overflow the parser's stack; refused cleanly instead.
+    TooDeep,
 }
 
 impl std::fmt::Display for ImportError {
@@ -48,6 +79,12 @@ impl std::fmt::Display for ImportError {
             ImportError::NotKicadPcb => write!(f, "root node is not (kicad_pcb ...)"),
             ImportError::Malformed(what) => write!(f, "malformed {what}"),
             ImportError::Invalid(msg) => write!(f, "imported entity is invalid: {msg}"),
+            ImportError::TooDeep => {
+                write!(
+                    f,
+                    "s-expression nested too deeply (malformed or adversarial input)"
+                )
+            }
         }
     }
 }
@@ -61,7 +98,18 @@ enum Sexp {
     List(Vec<Sexp>),
 }
 
-fn parse_node(it: &mut std::iter::Peekable<std::str::Chars>) -> Result<Sexp, ImportError> {
+/// Maximum s-expression nesting depth. Real boards nest only a handful of levels (`kicad_pcb` →
+/// `segment` → `start` is three); this bound turns adversarial deeply-nested input into a clean
+/// [`ImportError::TooDeep`] instead of a stack overflow, without affecting any well-formed board.
+const MAX_PARSE_DEPTH: usize = 256;
+
+fn parse_node(
+    it: &mut std::iter::Peekable<std::str::Chars>,
+    depth: usize,
+) -> Result<Sexp, ImportError> {
+    if depth > MAX_PARSE_DEPTH {
+        return Err(ImportError::TooDeep);
+    }
     skip_ws(it);
     match it.peek() {
         Some('(') => {
@@ -75,7 +123,7 @@ fn parse_node(it: &mut std::iter::Peekable<std::str::Chars>) -> Result<Sexp, Imp
                         return Ok(Sexp::List(list));
                     }
                     None => return Err(ImportError::Unbalanced),
-                    _ => list.push(parse_node(it)?),
+                    _ => list.push(parse_node(it, depth + 1)?),
                 }
             }
         }
@@ -186,88 +234,109 @@ fn mm(v: f64) -> PhysicalQuantity {
 /// (a placeholder until `Edge.Cuts` parsing lands). Produced entities are domain-validated, so a
 /// malformed board is a typed error, never a silently bad design.
 pub fn import_kicad_pcb(src: &str) -> Result<ImportedDesign, ImportError> {
-    let root = parse_node(&mut src.chars().peekable())?;
+    let root = parse_node(&mut src.chars().peekable(), 0)?;
     let items = match root {
         Sexp::List(items) if head(&items) == Some("kicad_pcb") => items,
         _ => return Err(ImportError::NotKicadPcb),
     };
 
     let mut nets = Vec::new();
+    // The ids of the nets we actually keep, so a segment can be resolved to a *committed* net. Net 0
+    // / empty-name nets are dropped and thus absent here, exactly as they are absent from `nets`.
+    let mut kept_net_ids: HashSet<u128> = HashSet::new();
     let mut tracks = Vec::new();
+    let mut warnings = Vec::new();
     let (mut max_x, mut max_y) = (0.0_f64, 0.0_f64);
 
+    // First pass — nets. Collected before any segment so a segment can be resolved regardless of the
+    // order the two appear in the file (real boards declare nets first, but we do not depend on it).
     for item in &items {
         let Sexp::List(l) = item else { continue };
-        match head(l) {
-            Some("net") => {
-                // (net <id> "<name>")
-                let id = atom_f64(l, 1).ok_or(ImportError::Malformed("net id"))? as u128;
-                let name = atom_str(l, 2).unwrap_or("").to_string();
-                if name.trim().is_empty() {
-                    continue; // net 0 / unconnected: no reviewable net
-                }
-                let class = classify(&name);
-                let net = Net {
-                    id: EntityId(id),
-                    name,
-                    class,
-                    // Imported copper carries no parsed pins yet, so the net is member-less; it is
-                    // tagged `Physical` so the CreateNet seam applies the physical-origin invariant
-                    // (member-less is allowed) rather than rejecting it as a logical-synthesis defect.
-                    members: vec![],
-                    current: None,
-                    impedance_target: None,
-                    origin: NetOrigin::Physical,
-                };
-                net.validate()
-                    .map_err(|e| ImportError::Invalid(e.to_string()))?;
-                nets.push(net);
-            }
-            Some("segment") => {
-                let start = sub(l, "start").ok_or(ImportError::Malformed("segment start"))?;
-                let end = sub(l, "end").ok_or(ImportError::Malformed("segment end"))?;
-                let width = sub(l, "width").and_then(|w| atom_f64(w, 0));
-                let layer = sub(l, "layer")
-                    .and_then(|ly| atom_str(ly, 0))
-                    .unwrap_or("F.Cu");
-                let net_id = sub(l, "net").and_then(|n| atom_f64(n, 0));
-
-                let (x1, y1) = (
-                    atom_f64(start, 0).ok_or(ImportError::Malformed("segment start x"))?,
-                    atom_f64(start, 1).ok_or(ImportError::Malformed("segment start y"))?,
-                );
-                let (x2, y2) = (
-                    atom_f64(end, 0).ok_or(ImportError::Malformed("segment end x"))?,
-                    atom_f64(end, 1).ok_or(ImportError::Malformed("segment end y"))?,
-                );
-                let width = width.ok_or(ImportError::Malformed("segment width"))?;
-                let net_id = net_id.ok_or(ImportError::Malformed("segment net"))? as u128;
-                let side = if layer.starts_with("B.") {
-                    BoardSide::Bottom
-                } else {
-                    BoardSide::Top
-                };
-
-                let track = Track {
-                    // Track ids are offset well clear of the small KiCad net ids they reference.
-                    id: EntityId(10_000 + tracks.len() as u128),
-                    net: EntityId(net_id),
-                    layer: side,
-                    width: mm(width),
-                    x1: mm(x1),
-                    y1: mm(y1),
-                    x2: mm(x2),
-                    y2: mm(y2),
-                };
-                track
-                    .validate()
-                    .map_err(|e| ImportError::Invalid(e.to_string()))?;
-                tracks.push(track);
-                max_x = max_x.max(x1).max(x2);
-                max_y = max_y.max(y1).max(y2);
-            }
-            _ => {} // footprints/vias/zones/arcs: recognised board content, skipped for now.
+        if head(l) != Some("net") {
+            continue; // footprints/vias/zones/arcs and segments are handled elsewhere.
         }
+        // (net <id> "<name>")
+        let id = atom_f64(l, 1).ok_or(ImportError::Malformed("net id"))? as u128;
+        let name = atom_str(l, 2).unwrap_or("").to_string();
+        if name.trim().is_empty() {
+            continue; // net 0 / unconnected: no reviewable net
+        }
+        let class = classify(&name);
+        let net = Net {
+            id: EntityId(id),
+            name,
+            class,
+            // Imported copper carries no parsed pins yet, so the net is member-less; it is
+            // tagged `Physical` so the CreateNet seam applies the physical-origin invariant
+            // (member-less is allowed) rather than rejecting it as a logical-synthesis defect.
+            members: vec![],
+            current: None,
+            impedance_target: None,
+            origin: NetOrigin::Physical,
+        };
+        net.validate()
+            .map_err(|e| ImportError::Invalid(e.to_string()))?;
+        kept_net_ids.insert(id);
+        nets.push(net);
+    }
+
+    // Second pass — segments. A segment whose net id has no reviewable `(net …)` declaration cannot
+    // be resolved to a committed net; emitting it would produce a phantom-net track that `RouteNet`
+    // rejects downstream, aborting the ENTIRE import. Instead we skip it and record a warning, so a
+    // single bad segment never sinks an otherwise reviewable board (honesty: recorded, not dropped).
+    for item in &items {
+        let Sexp::List(l) = item else { continue };
+        if head(l) != Some("segment") {
+            continue;
+        }
+        let start = sub(l, "start").ok_or(ImportError::Malformed("segment start"))?;
+        let end = sub(l, "end").ok_or(ImportError::Malformed("segment end"))?;
+        let width = sub(l, "width").and_then(|w| atom_f64(w, 0));
+        let layer = sub(l, "layer")
+            .and_then(|ly| atom_str(ly, 0))
+            .unwrap_or("F.Cu");
+        let net_id = sub(l, "net").and_then(|n| atom_f64(n, 0));
+
+        let (x1, y1) = (
+            atom_f64(start, 0).ok_or(ImportError::Malformed("segment start x"))?,
+            atom_f64(start, 1).ok_or(ImportError::Malformed("segment start y"))?,
+        );
+        let (x2, y2) = (
+            atom_f64(end, 0).ok_or(ImportError::Malformed("segment end x"))?,
+            atom_f64(end, 1).ok_or(ImportError::Malformed("segment end y"))?,
+        );
+        let width = width.ok_or(ImportError::Malformed("segment width"))?;
+        let net_id = net_id.ok_or(ImportError::Malformed("segment net"))? as u128;
+
+        // Unresolvable copper: reference to net 0 / an undeclared / an empty-name net. Skip + record.
+        if !kept_net_ids.contains(&net_id) {
+            warnings.push(ImportWarning::SegmentUnknownNet { net_id });
+            continue;
+        }
+
+        let side = if layer.starts_with("B.") {
+            BoardSide::Bottom
+        } else {
+            BoardSide::Top
+        };
+
+        let track = Track {
+            // Track ids are offset well clear of the small KiCad net ids they reference.
+            id: EntityId(10_000 + tracks.len() as u128),
+            net: EntityId(net_id),
+            layer: side,
+            width: mm(width),
+            x1: mm(x1),
+            y1: mm(y1),
+            x2: mm(x2),
+            y2: mm(y2),
+        };
+        track
+            .validate()
+            .map_err(|e| ImportError::Invalid(e.to_string()))?;
+        tracks.push(track);
+        max_x = max_x.max(x1).max(x2);
+        max_y = max_y.max(y1).max(y2);
     }
 
     // Outline placeholder: a standard 2-layer FR-4 stack sized to the copper bounding box + margin
@@ -286,6 +355,7 @@ pub fn import_kicad_pcb(src: &str) -> Result<ImportedDesign, ImportError> {
         board,
         nets,
         tracks,
+        warnings,
     })
 }
 
@@ -322,6 +392,51 @@ mod tests {
         assert!((sda.width.si_magnitude() - 0.25e-3).abs() < 1e-12); // 0.25 mm
                                                                      // board sized to the copper bounding box (x up to 40) + margin.
         assert!(d.board.width.si_magnitude() > 40e-3);
+    }
+
+    #[test]
+    fn well_formed_board_imports_with_zero_warnings() {
+        // Regression guard: the ordinary path must stay warning-free (F1 must not perturb it).
+        let d = import_kicad_pcb(SAMPLE).unwrap();
+        assert!(d.warnings.is_empty(), "clean board must have no warnings");
+        assert_eq!(d.tracks.len(), 3);
+    }
+
+    #[test]
+    fn segment_on_unknown_net_is_skipped_and_warned_not_aborted() {
+        // Finding #3: one segment references net 7, which is never declared, and one references net 0
+        // (dropped). Both are unresolvable copper. The import must SUCCEED — skipping those two and
+        // recording a warning each — while the valid GND track (net 1) still lands.
+        let src = r#"
+            (kicad_pcb
+              (net 0 "")
+              (net 1 "GND")
+              (segment (start 0 0) (end 10 0) (width 0.2) (layer "F.Cu") (net 1))
+              (segment (start 0 2) (end 10 2) (width 0.2) (layer "F.Cu") (net 7))
+              (segment (start 0 4) (end 10 4) (width 0.2) (layer "F.Cu") (net 0))
+            )
+        "#;
+        let d = import_kicad_pcb(src).unwrap();
+
+        // Only the resolvable GND track survives.
+        assert_eq!(d.tracks.len(), 1);
+        assert_eq!(d.tracks[0].net, EntityId(1));
+
+        // Both skips are recorded (honesty), naming the unresolved net ids — not silently dropped.
+        assert_eq!(d.warnings.len(), 2);
+        assert!(d
+            .warnings
+            .contains(&ImportWarning::SegmentUnknownNet { net_id: 7 }));
+        assert!(d
+            .warnings
+            .contains(&ImportWarning::SegmentUnknownNet { net_id: 0 }));
+    }
+
+    #[test]
+    fn pathologically_deep_input_is_a_clean_error_not_a_stack_overflow() {
+        // Finding #4: adversarial deeply-nested input must fail with a typed error, never overflow.
+        let deep = "(".repeat(100_000);
+        assert!(matches!(import_kicad_pcb(&deep), Err(ImportError::TooDeep)));
     }
 
     #[test]
