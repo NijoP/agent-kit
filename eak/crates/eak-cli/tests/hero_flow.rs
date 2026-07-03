@@ -17,43 +17,62 @@
 //! state shape): this test pins the specific hero intent AND cross-checks the released IR's recorded
 //! `Event::ManufacturingGenerated` counts against committed state.
 //!
-//! HONESTY NOTE (E7 open item — no green-but-hollow test): the default cassette is intent-independent
-//! — it carries a `default` response and no keyed `entries`, so ANY intent (the hero one included)
-//! resolves to the SAME canned requirements the other end-to-end tests use, and therefore reaches
-//! release on the generic board. Authoring a *curated* hero cassette whose recorded requirements are
-//! specific to the I²C-temperature-sensor / < 1 W design (so the released IR is genuinely the hero
-//! board rather than the generic one) is the remaining E7 item. This smoke test pins the hero flow's
-//! release + replay contract regardless of that follow-up.
+//! CURATED HERO CASSETTE (E7, DONE): the hero run is now driven by `fixtures/hero_cassette.json`
+//! — an AUTHORED, offline stand-in for the reasoning model (labelled as such in that file's `_note`)
+//! whose `requirement_candidates_v1` response encodes requirements SPECIFIC to the hero design
+//! (a USB-C power input, an I²C temperature-sensor IC, a < 1 W power budget, a compact board),
+//! and whose `part_candidates_v1` response names catalog-carried MPNs for the two classes those
+//! requirements realize (Connector + Ic). So the released IR is genuinely the hero board — an
+//! on-topic USB-C / I²C / temperature / < 1 W design — not the generic one, while still reaching a
+//! clean release and replaying byte-identically. The cassette is authored to fit the existing
+//! deterministic phases (no Regulator, whose catalog part is EOL and would block release; no
+//! Fabrication/frequency/thermal/current targets, so those gates stay silent), NOT the other way
+//! round — the phase/classify logic is untouched.
 
-use eak_cli::{replay_cmd, run, PhaseOutcome, ReasoningChoice, RunConfig};
+use eak_cli::{replay_cmd, run, PhaseOutcome, ReasoningChoice, Relation, RunConfig};
+use eak_domain::RequirementCategory;
 use eak_ports::{Event, EventLog};
 use eak_store::FileEventLog;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// The overview's hero demo intent (epic E7): the < 1 W USB-C powered I²C temperature sensor.
 const HERO_INTENT: &str = "USB-C powered I²C temperature sensor, < 1 W";
 
-fn hero_log() -> PathBuf {
+/// The curated hero cassette (E7): authored requirements + part candidates specific to the hero
+/// design. Resolved relative to this crate so the test is CWD-independent.
+fn hero_cassette() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/hero_cassette.json")
+}
+
+fn hero_log(tag: &str) -> PathBuf {
     let mut p = std::env::temp_dir();
-    p.push(format!("eak-cli-hero-{}.jsonl", std::process::id()));
+    p.push(format!("eak-cli-hero-{}-{}.jsonl", tag, std::process::id()));
     p
+}
+
+/// The hero run configuration: the frozen hero intent on the curated hero cassette, with a pinned
+/// seed + logical clock so the run is fully reproducible (P4). Shared by both hero guards.
+fn hero_config(log: &Path) -> RunConfig {
+    RunConfig {
+        intent: HERO_INTENT.into(),
+        reasoning: ReasoningChoice::Fixture,
+        // The CURATED hero cassette (E7): offline, fixed, no API key (network-free CI), but its
+        // recorded requirements + part candidates are authored for THIS design, so the released IR
+        // is the hero board rather than the generic one. Selecting it explicitly (vs the intent-
+        // generic default cassette) is how the hero run is keyed to hero-specific judgement.
+        cassette: Some(hero_cassette()),
+        log: log.to_path_buf(),
+        model: "fixture".into(),
+        seed: 1,
+        deterministic_clock: true,
+    }
 }
 
 #[test]
 fn hero_flow_releases_manufacturing_ir_and_replays_byte_identically() {
-    let log = hero_log();
+    let log = hero_log("release");
     let _ = std::fs::remove_file(&log);
-    let config = RunConfig {
-        intent: HERO_INTENT.into(),
-        reasoning: ReasoningChoice::Fixture,
-        // The default deterministic cassette: offline, fixed responses, no API key (network-free CI).
-        cassette: None,
-        log: log.clone(),
-        model: "fixture".into(),
-        // Pinned seed + logical clock -> the run is fully reproducible (P4).
-        seed: 1,
-        deterministic_clock: true,
-    };
+    let config = hero_config(&log);
 
     let report = run(&config).expect("hero run succeeds");
 
@@ -90,6 +109,97 @@ fn hero_flow_releases_manufacturing_ir_and_replays_byte_identically() {
     assert!(
         !report.state.tracks.is_empty(),
         "nets are realized in copper"
+    );
+
+    // (1b) HERO-SPECIFIC — the released design is genuinely the demo's USB-C / I²C / temperature /
+    // < 1 W sensor, not the generic board. These pin the CURATED cassette's on-topic requirements
+    // and the parts they source. We assert on domain STRUCTURE (categories, targets, component
+    // classes, catalog MPNs) rather than brittle prose, so wording can be re-authored without
+    // breaking the guard — but we do check the hero keywords survive into the committed requirements.
+    let reqs = &report.state.requirements;
+    assert_eq!(
+        reqs.len(),
+        4,
+        "the curated hero cassette commits its four authored requirements"
+    );
+
+    // The requirement statements, lowercased, so keyword checks are case-insensitive.
+    let statements: Vec<String> = reqs.iter().map(|r| r.statement.to_lowercase()).collect();
+    let mentions = |needle: &str| statements.iter().any(|s| s.contains(needle));
+
+    // The hero domain is present in the committed requirements: USB-C power entry, an I²C
+    // temperature sensor, and an explicit power budget.
+    assert!(
+        mentions("usb-c"),
+        "a requirement names the USB-C power input"
+    );
+    assert!(
+        mentions("i²c"),
+        "a requirement names the I²C sensor interface"
+    );
+    assert!(
+        mentions("temperature"),
+        "a requirement names the temperature-sensor function"
+    );
+
+    // The < 1 W power budget is a real, machine-checkable constraint: an Electrical requirement
+    // carrying a 1 W (or tighter) power ceiling, lowered into a constraint the gates verified clean.
+    let power_budget = reqs.iter().find(|r| {
+        r.category == RequirementCategory::Electrical
+            && r.statement.to_lowercase().contains("power")
+            && r.targets
+                .iter()
+                .any(|t| t.dimension() == eak_units::Dimension::Power && t.magnitude <= 1.0)
+    });
+    assert!(
+        power_budget.is_some(),
+        "the < 1 W power budget is a committed Electrical requirement with a <= 1 W power target"
+    );
+    assert!(
+        !report.state.constraints.is_empty(),
+        "the hero requirements lowered to machine-checkable constraints"
+    );
+
+    // The design synthesizes the right hardware for the hero intent: a USB-C power source
+    // (Connector) driving the I²C sensor host (Ic) — and, per the moat, both are sourced to the
+    // catalog parts the cassette PROPOSED and the kernel VALIDATED (the model never wrote state).
+    use eak_domain::ComponentClass;
+    assert!(
+        report
+            .state
+            .components
+            .iter()
+            .any(|c| c.class == ComponentClass::Connector),
+        "a USB-C connector realizes the power input"
+    );
+    assert!(
+        report
+            .state
+            .components
+            .iter()
+            .any(|c| c.class == ComponentClass::Ic),
+        "an IC realizes the I²C temperature-sensor host"
+    );
+    // No Regulator was synthesized (the hero wording avoids the EOL catalog regulator that would
+    // block release) — the curated design is catalog-clean by construction.
+    assert!(
+        report
+            .state
+            .components
+            .iter()
+            .all(|c| c.class != ComponentClass::Regulator),
+        "the curated hero design carries no (EOL) regulator, so it releases clean"
+    );
+
+    // The BOM sources hero-appropriate, catalog-valid parts: the USB-C receptacle and the host IC.
+    let mpns: Vec<&str> = report.state.parts.iter().map(|p| p.mpn.as_str()).collect();
+    assert!(
+        mpns.contains(&"USB4110-GF-A"),
+        "the BOM sources the USB-C receptacle part"
+    );
+    assert!(
+        mpns.contains(&"STM32L010F4P6"),
+        "the BOM sources the host-IC part"
     );
 
     // The RELEASE MILESTONE is real, not merely a green phase: the terminal Manufacturing IR was
@@ -153,6 +263,96 @@ fn hero_flow_releases_manufacturing_ir_and_replays_byte_identically() {
     let replayed = replay_cmd(&log).expect("replay succeeds");
     assert_eq!(report.state, replayed);
     assert_eq!(report.state.canonical_json(), replayed.canonical_json());
+
+    let _ = std::fs::remove_file(&log);
+}
+
+/// E7 — the CURATED HERO CASSETTE actually drove the run, and every committed requirement is
+/// provenance-traceable to the hero intent. This is the moat made testable for the hero demo: the
+/// reasoning boundary recorded the AUTHORED hero judgement verbatim (an `Event::ReasoningCall`
+/// under the `requirement_candidates_v1` schema), and the deterministic half then committed only
+/// validated requirements, each rooted in the captured design intent. Complementary to the
+/// release+replay guard above: that one pins the *output* IR; this one pins that the on-topic
+/// requirements came through the reasoning seam (not a hardcoded phase) and are fully traceable.
+#[test]
+fn hero_run_is_cassette_driven_and_every_requirement_traces_to_intent() {
+    let log = hero_log("provenance");
+    let _ = std::fs::remove_file(&log);
+    let report = run(&hero_config(&log)).expect("hero run succeeds");
+
+    let intent = report.state.intent.as_ref().expect("intent captured");
+    assert_eq!(intent.statement, HERO_INTENT);
+
+    // The reasoning boundary recorded the curated hero judgement: at least one `ReasoningCall`
+    // under the requirement schema whose RESPONSE candidates carry the hero domain and the < 1 W
+    // power budget. Because replay re-folds this recorded response WITHOUT calling the model, the
+    // hero requirements are reproducible offline (P4) — the cassette, not a phase, produced them.
+    let records = FileEventLog::open(&log)
+        .expect("open event log")
+        .read_all()
+        .expect("read event log");
+    let requirement_calls: Vec<&eak_ports::ReasoningResponse> = records
+        .iter()
+        .filter_map(|r| match &r.event {
+            Event::ReasoningCall { request, response }
+                if request.schema_name == "requirement_candidates_v1" =>
+            {
+                Some(response)
+            }
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        requirement_calls.len(),
+        1,
+        "the Requirement agent made exactly one recorded reasoning call"
+    );
+    let proposed = requirement_calls[0];
+    let proposed_lc: Vec<String> = proposed
+        .candidates
+        .iter()
+        .map(|c| c.statement.to_lowercase())
+        .collect();
+    assert!(
+        proposed_lc.iter().any(|s| s.contains("usb-c")),
+        "the recorded reasoning proposed a USB-C requirement"
+    );
+    assert!(
+        proposed_lc.iter().any(|s| s.contains("i²c")),
+        "the recorded reasoning proposed an I²C requirement"
+    );
+    assert!(
+        proposed.candidates.iter().any(|c| c
+            .targets
+            .iter()
+            .any(|t| t.dimension() == eak_units::Dimension::Power && t.magnitude <= 1.0)),
+        "the recorded reasoning proposed the < 1 W power budget"
+    );
+
+    // Provenance-by-construction: every committed requirement is rooted in the hero intent (its
+    // source is the intent AND a DerivedFrom link backs the hop), and is justified by a decision
+    // that points back at the reasoning call. Unvalidated model text never becomes a requirement.
+    assert!(!report.state.requirements.is_empty());
+    for r in &report.state.requirements {
+        assert_eq!(
+            r.source, intent.id,
+            "requirement is rooted in the hero intent"
+        );
+        assert!(
+            report.state.links.iter().any(|l| l.from == r.id
+                && l.to == intent.id
+                && l.relation == Relation::DerivedFrom),
+            "a DerivedFrom link backs requirement -> intent"
+        );
+        assert!(
+            report
+                .state
+                .links
+                .iter()
+                .any(|l| l.from == r.id && l.relation == Relation::JustifiedBy),
+            "the requirement is justified by a decision"
+        );
+    }
 
     let _ = std::fs::remove_file(&log);
 }

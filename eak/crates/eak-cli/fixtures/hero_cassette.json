@@ -1,0 +1,63 @@
+{
+  "_note": "CURATED HERO CASSETTE (E7). These requirements + part candidates are AUTHORED, not live-derived: a deterministic, offline stand-in for the reasoning model so the hero demo intent 'USB-C powered I²C temperature sensor, < 1 W' produces on-topic requirements that flow clean through all 15 phases to a released ManufacturingIr, and replay byte-identically. Loaded by eak-cli/tests/hero_flow.rs via RunConfig.cassette. A single `default` response serves both the requirement_candidates_v1 and part_candidates_v1 schemas (the requirement agent reads `candidates`, the part agent reads `part_candidates`), exactly like default_cassette.json. Geometry is deliberately catalog-clean: the wording classifies into Connector + Ic only (NO Regulator, whose catalog part is EOL and would block release), no Fabrication/frequency/thermal/current targets are stated (so those DRC/DFM/EMC/thermal rules stay silent), and the 50 mm board comfortably fits the 4 courtyards. The part candidates name only catalog-carried MPNs, so every proposal is ACCEPTED at the catalog seam (the moat: model proposes, kernel validates).",
+  "default": {
+    "candidates": [
+      {
+        "statement": "Device shall draw operating power from a USB-C receptacle",
+        "category": "Functional",
+        "priority": "High",
+        "acceptance_criterion": "A USB-C receptacle is present and the device draws bus power when connected",
+        "source_hint": "design intent: USB-C powered",
+        "confidence": 0.94,
+        "rationale": "The intent names USB-C as the power-entry interface.",
+        "targets": []
+      },
+      {
+        "statement": "Digital temperature sensor shall report die temperature over the I²C bus",
+        "category": "Functional",
+        "priority": "High",
+        "acceptance_criterion": "The sensor returns a valid temperature reading over I²C at the addressed device",
+        "source_hint": "design intent: I²C temperature sensor",
+        "confidence": 0.93,
+        "rationale": "The intent's core function is an I²C-addressable temperature sensor.",
+        "targets": []
+      },
+      {
+        "statement": "Total board input power shall not exceed 1 W",
+        "category": "Electrical",
+        "priority": "High",
+        "acceptance_criterion": "Measured total input power under nominal load is < 1 W",
+        "source_hint": "design intent: < 1 W",
+        "confidence": 0.95,
+        "rationale": "The intent states a 1 W power ceiling for the whole board.",
+        "targets": [{ "magnitude": 1.0, "unit": "Watt", "tolerance": "None" }]
+      },
+      {
+        "statement": "Board outline shall fit within a 50 x 50 mm area",
+        "category": "Mechanical",
+        "priority": "Medium",
+        "acceptance_criterion": "Maximum board extent <= 50 mm on each axis",
+        "source_hint": "design intent: compact sensor board",
+        "confidence": 0.88,
+        "rationale": "A compact USB-C sensor peripheral fits a small square outline.",
+        "targets": [{ "magnitude": 50.0, "unit": "Millimetre", "tolerance": "None" }]
+      }
+    ],
+    "part_candidates": [
+      {
+        "component_class": "Connector",
+        "mpn": "USB4110-GF-A",
+        "rationale": "USB-C receptacle realizing the USB-C power-entry connector class.",
+        "confidence": 0.95
+      },
+      {
+        "component_class": "Ic",
+        "mpn": "STM32L010F4P6",
+        "rationale": "Low-power host controller for the I²C temperature-sensor load class (catalog part for the Ic class).",
+        "confidence": 0.92
+      }
+    ],
+    "clarifying_questions": [],
+    "raw": "curated-hero-fixture"
+  }
+}
