@@ -7,7 +7,8 @@
 use eak_domain::{
     Assumption, AssumptionStatus, Board, BomLineItem, Component, Constraint, Decision,
     DesignIntent, EntityId, Evidence, FunctionalBlock, ModelFidelity, Net, Part, Pin, Placement,
-    ProvenanceLink, Requirement, Track, Violation, ViolationStatus, Waiver,
+    ProvenanceLink, Requirement, Risk, RiskSeverity, RiskStatus, Track, Violation, ViolationStatus,
+    Waiver,
 };
 use eak_ports::{Event, Seq};
 use serde::{Deserialize, Serialize};
@@ -77,6 +78,10 @@ pub struct EngineeringState {
     // any entity — folding here never mutates a tagged entity, so the tag stays advisory-only.
     // Kept in insertion (event) order so a run and its replay serialize byte-identically.
     pub fidelity_tags: Vec<FidelityTag>,
+    // Band A (increment 3): first-class, auditable risks (Map 46). TRACKED TRUTH — a Risk is
+    // surfaced ([`Self::unaccepted_critical_risks`]) but does NOT block release in v0; the human
+    // owns acceptance of residual risk (`00` Principle 11).
+    pub risks: Vec<Risk>,
 }
 
 impl EngineeringState {
@@ -158,6 +163,15 @@ impl EngineeringState {
                 fidelity: fidelity.clone(),
                 reasoning_call_seq: *reasoning_call_seq,
             }),
+            // Band A (increment 3): risk posture. Raise pushes; accept finds by id and flips
+            // status -> Accepted (human authority, Principle 11). Folding both here keeps replay
+            // byte-identical to the live run (P4).
+            Event::RiskRaised { risk } => self.risks.push(risk.clone()),
+            Event::RiskAccepted { risk, .. } => {
+                if let Some(r) = self.risks.iter_mut().find(|r| r.id == *risk) {
+                    r.status = RiskStatus::Accepted;
+                }
+            }
             // Audit-only events (phase lifecycle, reasoning calls, IR-boundary milestones)
             // carry no state and are intentionally not folded. AUDIT: any NEW state-bearing
             // event variant MUST get an explicit arm above, or replay will silently diverge.
@@ -256,6 +270,21 @@ impl EngineeringState {
         self.assumptions
             .iter()
             .filter(|a| a.is_blocking())
+            .collect()
+    }
+
+    pub fn risk(&self, id: EntityId) -> Option<&Risk> {
+        self.risks.iter().find(|r| r.id == id)
+    }
+
+    /// Risks whose RESIDUAL severity is `Critical` and that have NOT yet been accepted by a
+    /// human. Band A (increment 3): this is a READ, not a gate — Risk is tracked truth and does
+    /// NOT block release in v0. It surfaces the risk posture for the human, who owns acceptance
+    /// of the residual (`00` Principle 11).
+    pub fn unaccepted_critical_risks(&self) -> Vec<&Risk> {
+        self.risks
+            .iter()
+            .filter(|r| r.residual == RiskSeverity::Critical && r.status != RiskStatus::Accepted)
             .collect()
     }
 

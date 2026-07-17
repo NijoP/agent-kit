@@ -12,7 +12,7 @@
 use eak_domain::{
     Assumption, Board, BomLineItem, Component, Constraint, Decision, DesignIntent, Discharge,
     Evidence, FunctionalBlock, ModelFidelity, Net, Part, Pin, Placement, Priority, ProvenanceLink,
-    Requirement, RequirementCategory, Track, Violation, Waiver,
+    Requirement, RequirementCategory, Risk, Track, Violation, Waiver,
 };
 use eak_units::PhysicalQuantity;
 use serde::{Deserialize, Serialize};
@@ -224,6 +224,21 @@ pub enum Event {
         target: eak_domain::EntityId,
         fidelity: ModelFidelity,
         reasoning_call_seq: Option<Seq>,
+    },
+
+    // ---- Band A (increment 3): risk posture — tracked truth (Map 46) ----
+    /// A first-class [`Risk`] was raised, made auditable (Map 46). A state delta: the fold
+    /// pushes the risk into `EngineeringState::risks`. Risk is TRACKED TRUTH — it does NOT
+    /// block release in v0; the human owns acceptance of residual risk (`00` Principle 11).
+    RiskRaised {
+        risk: Risk,
+    },
+    /// A [`Risk`] was accepted by a named human. A state delta: the fold finds it by id and
+    /// flips its `status` to `Accepted` (human authority, Principle 11). `accepted_by` names
+    /// the decider (like [`Waiver::decided_by`], Principle 10).
+    RiskAccepted {
+        risk: eak_domain::EntityId,
+        accepted_by: String,
     },
 }
 
@@ -439,6 +454,43 @@ mod tests {
                 target: EntityId(4),
                 decided_by: "engineer".into(),
             },
+        };
+        let s = serde_json::to_string(&ev).unwrap();
+        let back: Event = serde_json::from_str(&s).unwrap();
+        assert_eq!(ev, back);
+    }
+
+    // ===================== Band A (increment 3): Risk events =====================
+    //
+    // TDD: every new state-delta Event variant carries a serde round-trip test so its on-disk
+    // form is pinned and replay-from-log is byte-stable (P4).
+
+    #[test]
+    fn risk_raised_event_roundtrips_through_json() {
+        use eak_domain::{EntityId, Risk, RiskLikelihood, RiskSeverity, RiskStatus};
+        let ev = Event::RiskRaised {
+            risk: Risk {
+                id: EntityId(11),
+                statement: "an ESD strike on the USB-C connector could latch up the MCU".into(),
+                likelihood: RiskLikelihood::Medium,
+                severity: RiskSeverity::High,
+                mitigation: "add a TVS diode on the USB-C VBUS".into(),
+                residual: RiskSeverity::Low,
+                owner: "hardware lead".into(),
+                status: RiskStatus::Open,
+            },
+        };
+        let s = serde_json::to_string(&ev).unwrap();
+        let back: Event = serde_json::from_str(&s).unwrap();
+        assert_eq!(ev, back);
+    }
+
+    #[test]
+    fn risk_accepted_event_roundtrips_through_json() {
+        use eak_domain::EntityId;
+        let ev = Event::RiskAccepted {
+            risk: EntityId(11),
+            accepted_by: "hardware lead".into(),
         };
         let s = serde_json::to_string(&ev).unwrap();
         let back: Event = serde_json::from_str(&s).unwrap();

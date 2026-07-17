@@ -7,7 +7,7 @@
 use eak_domain::{
     Assumption, Board, BomLineItem, Component, Constraint, Decision, DesignIntent, Discharge,
     EntityId, Evidence, FunctionalBlock, Net, Part, Pin, Placement, ProvenanceLink, Requirement,
-    Track, Violation, Waiver,
+    Risk, Track, Violation, Waiver,
 };
 use eak_ports::{Event, ReasoningError, ReasoningRequest, ReasoningResponse, Seq, StoreError};
 
@@ -138,6 +138,19 @@ pub enum CapabilityRequest {
         assumption: EntityId,
         discharge: Discharge,
     },
+    /// Raise a first-class [`Risk`] with its provenance links (Band A, increment 3). The runtime
+    /// re-validates it (non-empty statement + owner) before committing. Follows the
+    /// `{payload, links}` shape of [`CapabilityRequest::CreateConstraint`]. Risk is tracked truth
+    /// — raising one never blocks release in v0.
+    RaiseRisk {
+        risk: Risk,
+        links: Vec<ProvenanceLink>,
+    },
+    /// A named human accepts an existing [`Risk`]'s residual (Band A, increment 3; `00`
+    /// Principle 11 — humans own acceptance). The runtime checks the target risk exists; folding
+    /// the event flips its status to `Accepted`. Id-targeting, no links (mirrors
+    /// [`CapabilityRequest::GrantWaiver`]).
+    AcceptRisk { risk: EntityId, accepted_by: String },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -196,6 +209,9 @@ pub trait AgentContext {
     /// Band A: undischarged CRITICAL assumptions — the honesty-gate reader (mirrors how the
     /// manufacturing gate reads blocking violations). Owned clones, like every other reader.
     fn undischarged_critical_assumptions(&self) -> Vec<Assumption>;
+    /// Band A (increment 3): read the committed risks (the auditable risk posture). Owned clones,
+    /// like every other reader. Risk is tracked truth — this reader never gates a phase in v0.
+    fn risks(&self) -> Vec<Risk>;
     /// Call the reasoning engine, record the call (returning its event [`Seq`]), and
     /// return the judgement. Recording here is what makes replay deterministic (P4).
     fn reason(&mut self, req: ReasoningRequest)

@@ -923,6 +923,77 @@ impl ModelFidelity {
     }
 }
 
+// ===================== Band A (increment 3): Risk =====================
+//
+// An auditable risk-posture object (Map 46; `00` Principle 11 — humans own goals/acceptance).
+// A `Risk` states a hazard, its `likelihood`/`severity`, a `mitigation`, the `residual`
+// severity that remains after mitigation, the `owner` who is accountable, and a lifecycle
+// (Open -> Mitigated -> Accepted). The HUMAN owns acceptance of residual risk: the
+// `AcceptRisk` seam/fold (not `validate()`) enforces that authority. Risk is TRACKED TRUTH —
+// it does NOT block release in v0. `validate()` reuses existing `DomainError` variants only
+// (non-empty statement + owner). `Risk` has no `f64`/`PhysicalQuantity` field, so `Eq` is
+// legal (like `Assumption`, unlike `Component`/`Net`).
+
+/// How likely the hazard is to occur. Explicit on every risk (no `Default`), like
+/// [`AssumptionCriticality`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum RiskLikelihood {
+    Low,
+    Medium,
+    High,
+}
+
+/// How damaging the hazard is if it occurs. Reused for both the raw `severity` and the
+/// `residual` severity that remains after mitigation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum RiskSeverity {
+    Low,
+    Medium,
+    High,
+    Critical,
+}
+
+/// Lifecycle of a [`Risk`]: `Open` (raised, unmitigated), `Mitigated` (a mitigation is in
+/// place but residual remains), `Accepted` (a named human owner has accepted the residual).
+/// The `Open -> Accepted` transition is a human-authority act enforced at the seam/fold.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum RiskStatus {
+    Open,
+    Mitigated,
+    Accepted,
+}
+
+/// A first-class, auditable risk. See the module comment above.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Risk {
+    pub id: EntityId,
+    pub statement: String,
+    pub likelihood: RiskLikelihood,
+    pub severity: RiskSeverity,
+    pub mitigation: String,
+    /// The severity that remains AFTER the mitigation is applied.
+    pub residual: RiskSeverity,
+    /// The named human accountable for this risk (Principle 11). Required non-empty.
+    pub owner: String,
+    pub status: RiskStatus,
+}
+
+impl Risk {
+    /// Domain invariants (reuses existing [`DomainError`] variants only): a non-empty
+    /// `statement` and a non-empty `owner` (a risk with no accountable owner cannot be owned
+    /// or accepted). `validate()` is status-agnostic — the `Open -> Accepted` transition and
+    /// the human-acceptance authority live at the seam/fold, like [`Assumption`]'s discharge.
+    pub fn validate(&self) -> Result<(), DomainError> {
+        if self.statement.trim().is_empty() {
+            return Err(DomainError::EmptyStatement);
+        }
+        if self.owner.trim().is_empty() {
+            return Err(DomainError::EmptyField("risk owner"));
+        }
+        Ok(())
+    }
+}
+
 /// A violated domain invariant.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DomainError {
@@ -1707,5 +1778,67 @@ mod tests {
         // would silently admit NaN.
         let f = fidelity("undefined", FidelityMethod::Calculated, f64::NAN);
         assert!(matches!(f.validate(), Err(DomainError::Inconsistent(_))));
+    }
+
+    // ===================== Band A (increment 3): Risk =====================
+    //
+    // TDD (written before the object): the auditable risk-posture object (Map 46). A `Risk`
+    // states a hazard, its `likelihood`/`severity`, a `mitigation`, the `residual` severity
+    // that remains after mitigation, the `owner` who is accountable, and a lifecycle
+    // (Open -> Mitigated -> Accepted). The HUMAN owns acceptance of residual risk (`00`
+    // Principle 11 — humans own goals), which the `AcceptRisk` seam/fold enforces (inc. 3).
+    // `validate()` reuses existing `DomainError` variants only (non-empty statement + owner).
+    // A `Risk` has no `f64`/`PhysicalQuantity` field, so `Eq` is legal (like `Assumption`).
+
+    fn open_risk(statement: &str, owner: &str, residual: RiskSeverity) -> Risk {
+        Risk {
+            id: EntityId(1),
+            statement: statement.into(),
+            likelihood: RiskLikelihood::Medium,
+            severity: RiskSeverity::High,
+            mitigation: "add a TVS diode on the USB-C VBUS".into(),
+            residual,
+            owner: owner.into(),
+            status: RiskStatus::Open,
+        }
+    }
+
+    #[test]
+    fn risk_rejects_empty_statement() {
+        let r = open_risk("   ", "hardware lead", RiskSeverity::Low);
+        assert_eq!(r.validate(), Err(DomainError::EmptyStatement));
+    }
+
+    #[test]
+    fn risk_rejects_empty_owner() {
+        // A risk with no accountable owner cannot be owned or accepted (Principle 11) — reject it.
+        let r = open_risk("ESD on the exposed connector", "  ", RiskSeverity::Medium);
+        assert_eq!(r.validate(), Err(DomainError::EmptyField("risk owner")));
+    }
+
+    #[test]
+    fn well_formed_open_risk_validates() {
+        let r = open_risk(
+            "an ESD strike on the USB-C connector could latch up the MCU",
+            "hardware lead",
+            RiskSeverity::Low,
+        );
+        assert!(r.validate().is_ok());
+    }
+
+    #[test]
+    fn risk_validate_is_status_agnostic() {
+        // validate() checks only the intrinsic invariants (non-empty statement + owner); the
+        // Open->Accepted transition and the human-acceptance authority live at the seam/fold,
+        // exactly as Assumption's discharge lifecycle does.
+        let mut r = open_risk(
+            "thermal runaway under sustained load",
+            "thermal owner",
+            RiskSeverity::Critical,
+        );
+        r.status = RiskStatus::Mitigated;
+        assert!(r.validate().is_ok());
+        r.status = RiskStatus::Accepted;
+        assert!(r.validate().is_ok());
     }
 }

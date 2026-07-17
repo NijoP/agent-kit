@@ -55,7 +55,8 @@ mod kernel_tests {
         Component, ComponentClass, ComponentOrigin, Decision, Discharge, DischargeResolution,
         EntityId, FidelityMethod, FunctionalBlock, LayerStack, ModelFidelity, Net, NetClass,
         NetOrigin, Part, PartLifecycle, Pin, PinElectricalType, Placement, Priority, Requirement,
-        RequirementCategory, RequirementStatus, Track,
+        RequirementCategory, RequirementStatus, Risk, RiskLikelihood, RiskSeverity, RiskStatus,
+        Track,
     };
     use eak_ports::{
         Event, EventLog, EventRecord, ReasoningEngine, ReasoningError, ReasoningRequest,
@@ -1532,6 +1533,205 @@ mod kernel_tests {
         // Insertion order preserved: `thermal` before `electrical`.
         assert_eq!(tags[0].concern, "thermal");
         assert_eq!(tags[1].concern, "electrical");
+
+        let replayed = replay(core.log()).unwrap();
+        assert_eq!(core.state, replayed);
+        assert_eq!(core.state.canonical_json(), replayed.canonical_json());
+    }
+
+    // ===================== Band A (increment 3): Risk seam =====================
+    //
+    // TDD (written before the seam handlers / fold arms exist): the auditable risk-posture
+    // object (Map 46) flows through the same seam as every other object. `RaiseRisk`
+    // re-validates (non-empty statement + owner) and links its provenance; `AcceptRisk`
+    // targets an existing risk by id and folds its `status -> Accepted` — the HUMAN owns
+    // acceptance of residual risk (`00` Principle 11). Risk is TRACKED TRUTH: it does NOT
+    // block release in v0; the read query `unaccepted_critical_risks()` surfaces the posture.
+    // The whole log replays byte-identically (P4). No new `DomainError` variant.
+
+    /// A helper building an Open risk with a resolvable-by-caller residual severity.
+    fn open_risk(id: EntityId, statement: &str, owner: &str, residual: RiskSeverity) -> Risk {
+        Risk {
+            id,
+            statement: statement.into(),
+            likelihood: RiskLikelihood::Medium,
+            severity: RiskSeverity::High,
+            mitigation: "add a TVS diode on the USB-C VBUS".into(),
+            residual,
+            owner: owner.into(),
+            status: RiskStatus::Open,
+        }
+    }
+
+    #[test]
+    fn raise_risk_seam_accepts_valid_then_folds_and_replays_byte_identically() {
+        let mut core = new_core();
+        // A committed requirement gives the risk's provenance link a real anchor (mirrors how
+        // an assumption rests on a committed entity); the seam links but does not gate on it.
+        let rid = seed_requirement(&mut core);
+        let risk_id = core.fresh_id();
+        let link_id = core.fresh_id();
+
+        core.invoke(CapabilityRequest::RaiseRisk {
+            risk: open_risk(
+                risk_id,
+                "an ESD strike on the USB-C connector could latch up the MCU",
+                "hardware lead",
+                RiskSeverity::Low,
+            ),
+            links: vec![eak_domain::ProvenanceLink {
+                id: link_id,
+                from: risk_id,
+                to: rid,
+                relation: eak_domain::RelationType::TracesTo,
+            }],
+        })
+        .expect("a well-formed risk with a valid owner is accepted at the seam");
+
+        // The fold pushed exactly one Open risk and the accessor reads it back by id.
+        assert_eq!(core.state.risks.len(), 1);
+        let r = core.state.risk(risk_id).expect("risk folded by id");
+        assert_eq!(r.status, RiskStatus::Open);
+        assert_eq!(r.owner, "hardware lead");
+
+        // Byte-identical replay with the risk (and its link) in the log (P4).
+        let replayed = replay(core.log()).unwrap();
+        assert_eq!(core.state, replayed);
+        assert_eq!(core.state.canonical_json(), replayed.canonical_json());
+    }
+
+    #[test]
+    fn raise_risk_seam_rejects_malformed_proposals_and_commits_nothing() {
+        let mut core = new_core();
+        seed_requirement(&mut core);
+        let (r_empty_stmt, r_empty_owner) = (core.fresh_id(), core.fresh_id());
+
+        // (1) Empty statement — domain validate() rejects; nothing enters the log.
+        let err = core
+            .invoke(CapabilityRequest::RaiseRisk {
+                risk: open_risk(r_empty_stmt, "   ", "hardware lead", RiskSeverity::Low),
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // (2) Empty owner — a risk with no accountable owner cannot be owned/accepted
+        // (Principle 11) and is rejected at the seam.
+        let err = core
+            .invoke(CapabilityRequest::RaiseRisk {
+                risk: open_risk(
+                    r_empty_owner,
+                    "ESD on the connector",
+                    "  ",
+                    RiskSeverity::High,
+                ),
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // Nothing entered the log: every malformed proposal was rejected pre-commit (P3).
+        assert!(core.state.risks.is_empty());
+    }
+
+    #[test]
+    fn accept_risk_seam_flips_status_to_accepted_and_replays() {
+        let mut core = new_core();
+        seed_requirement(&mut core);
+        let risk_id = core.fresh_id();
+
+        core.invoke(CapabilityRequest::RaiseRisk {
+            risk: open_risk(
+                risk_id,
+                "thermal runaway under sustained full load",
+                "thermal owner",
+                RiskSeverity::Critical,
+            ),
+            links: vec![],
+        })
+        .unwrap();
+        // Before acceptance, a Critical-residual, non-Accepted risk is surfaced by the read query.
+        assert_eq!(core.state.unaccepted_critical_risks().len(), 1);
+
+        // The HUMAN accepts the residual risk (Principle 11) — the fold flips status -> Accepted.
+        core.invoke(CapabilityRequest::AcceptRisk {
+            risk: risk_id,
+            accepted_by: "founder".into(),
+        })
+        .expect("accepting an existing risk is accepted at the seam");
+
+        let r = core
+            .state
+            .risk(risk_id)
+            .expect("still present after accept");
+        assert_eq!(r.status, RiskStatus::Accepted);
+        // Once accepted, it no longer counts as unaccepted-critical (human owns the residual).
+        assert!(core.state.unaccepted_critical_risks().is_empty());
+
+        // Byte-identical replay across raise + accept (P4).
+        let replayed = replay(core.log()).unwrap();
+        assert_eq!(core.state, replayed);
+        assert_eq!(core.state.canonical_json(), replayed.canonical_json());
+    }
+
+    #[test]
+    fn accept_risk_seam_rejects_unknown_target_and_commits_nothing() {
+        let mut core = new_core();
+        seed_requirement(&mut core);
+
+        // Accepting a risk that was never raised is meaningless — reject it (P3).
+        let err = core
+            .invoke(CapabilityRequest::AcceptRisk {
+                risk: EntityId(0xDEAD_BEEF),
+                accepted_by: "founder".into(),
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+        assert!(core.state.risks.is_empty());
+    }
+
+    #[test]
+    fn risk_does_not_block_release_but_the_read_query_surfaces_the_posture() {
+        // Risk is TRACKED TRUTH in v0: an open Critical-residual risk is NOT a release blocker
+        // (unlike an undischarged critical Assumption). The read query merely surfaces the posture
+        // for the human, who owns acceptance (Principle 11). This test pins that boundary:
+        // `unaccepted_critical_risks` filters on residual == Critical AND status != Accepted, and
+        // it is a READ, not a gate.
+        let mut core = new_core();
+        seed_requirement(&mut core);
+        let (crit_id, low_id) = (core.fresh_id(), core.fresh_id());
+
+        // A Critical-residual open risk: surfaced.
+        core.invoke(CapabilityRequest::RaiseRisk {
+            risk: open_risk(
+                crit_id,
+                "unmitigated brownout",
+                "power owner",
+                RiskSeverity::Critical,
+            ),
+            links: vec![],
+        })
+        .unwrap();
+        // A Low-residual open risk: NOT surfaced by the critical read query.
+        core.invoke(CapabilityRequest::RaiseRisk {
+            risk: open_risk(
+                low_id,
+                "minor cosmetic silkscreen error",
+                "layout owner",
+                RiskSeverity::Low,
+            ),
+            links: vec![],
+        })
+        .unwrap();
+
+        assert_eq!(core.state.risks.len(), 2);
+        let surfaced = core.state.unaccepted_critical_risks();
+        assert_eq!(
+            surfaced.len(),
+            1,
+            "only the Critical-residual, non-Accepted risk is surfaced"
+        );
+        assert_eq!(surfaced[0].id, crit_id);
 
         let replayed = replay(core.log()).unwrap();
         assert_eq!(core.state, replayed);

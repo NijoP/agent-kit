@@ -11,7 +11,7 @@ use crate::state::EngineeringState;
 use eak_domain::{
     Assumption, Board, BomLineItem, Component, ComponentOrigin, Constraint, Decision, DesignIntent,
     Discharge, EntityId, Evidence, FunctionalBlock, Net, NetOrigin, Part, Pin, Placement,
-    ProvenanceLink, Requirement, Track, Violation, Waiver,
+    ProvenanceLink, Requirement, Risk, Track, Violation, Waiver,
 };
 use eak_ports::{
     Event, EventLog, EventRecord, EventSink, ReasoningEngine, ReasoningError, ReasoningRequest,
@@ -663,6 +663,47 @@ impl RuntimeCore {
             .map_err(|e| CapabilityError::Rejected(e.to_string()))?;
         Ok(CapabilityAck { committed: seqs })
     }
+
+    fn handle_raise_risk(
+        &mut self,
+        risk: Risk,
+        links: Vec<ProvenanceLink>,
+    ) -> Result<CapabilityAck, CapabilityError> {
+        // The seam (P3): re-validate the risk (non-empty statement + owner) before committing —
+        // the model is never trusted. A risk with no accountable owner cannot be owned/accepted
+        // (Principle 11), and `validate()` rejects it.
+        risk.validate()
+            .map_err(|e| CapabilityError::Rejected(e.to_string()))?;
+
+        let mut events = vec![Event::RiskRaised { risk }];
+        for link in links {
+            events.push(Event::ProvenanceLinked { link });
+        }
+        let seqs = self
+            .commit(events)
+            .map_err(|e| CapabilityError::Rejected(e.to_string()))?;
+        Ok(CapabilityAck { committed: seqs })
+    }
+
+    fn handle_accept_risk(
+        &mut self,
+        risk: EntityId,
+        accepted_by: String,
+    ) -> Result<CapabilityAck, CapabilityError> {
+        // The target risk must exist — accepting a risk that was never raised is meaningless
+        // (P3). Acceptance is a human-authority act (Principle 11); folding flips status ->
+        // Accepted. v0 does NOT gate release on risk, so no further lifecycle guard is required.
+        if self.state.risk(risk).is_none() {
+            return Err(CapabilityError::Rejected(format!(
+                "accept targets unknown risk {}",
+                risk.short()
+            )));
+        }
+        let seqs = self
+            .commit(vec![Event::RiskAccepted { risk, accepted_by }])
+            .map_err(|e| CapabilityError::Rejected(e.to_string()))?;
+        Ok(CapabilityAck { committed: seqs })
+    }
 }
 
 impl AgentContext for RuntimeCore {
@@ -750,6 +791,10 @@ impl AgentContext for RuntimeCore {
             .collect()
     }
 
+    fn risks(&self) -> Vec<Risk> {
+        self.state.risks.clone()
+    }
+
     fn reason(
         &mut self,
         mut req: ReasoningRequest,
@@ -809,6 +854,10 @@ impl AgentContext for RuntimeCore {
                 assumption,
                 discharge,
             } => self.handle_discharge_assumption(assumption, discharge),
+            CapabilityRequest::RaiseRisk { risk, links } => self.handle_raise_risk(risk, links),
+            CapabilityRequest::AcceptRisk { risk, accepted_by } => {
+                self.handle_accept_risk(risk, accepted_by)
+            }
         }
     }
 
