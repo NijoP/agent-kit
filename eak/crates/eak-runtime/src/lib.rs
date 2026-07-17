@@ -51,12 +51,12 @@ mod dependency_rule {
 mod kernel_tests {
     use super::*;
     use eak_domain::{
-        Assumption, AssumptionCriticality, AssumptionStatus, Board, BoardSide, BomLineItem,
-        Component, ComponentClass, ComponentOrigin, Decision, Discharge, DischargeResolution,
-        EntityId, FidelityMethod, FunctionalBlock, LayerStack, ModelFidelity, Net, NetClass,
-        NetOrigin, Part, PartLifecycle, Pin, PinElectricalType, Placement, Priority, Requirement,
-        RequirementCategory, RequirementStatus, Risk, RiskLikelihood, RiskSeverity, RiskStatus,
-        Track,
+        Alternative, Assumption, AssumptionCriticality, AssumptionStatus, Board, BoardSide,
+        BomLineItem, Component, ComponentClass, ComponentOrigin, Decision, Discharge,
+        DischargeResolution, EntityId, FidelityMethod, FunctionalBlock, LayerStack, ModelFidelity,
+        Net, NetClass, NetOrigin, Objective, Part, PartLifecycle, Pin, PinElectricalType,
+        Placement, Priority, Requirement, RequirementCategory, RequirementStatus, Risk,
+        RiskLikelihood, RiskSeverity, RiskStatus, Track, Tradeoff,
     };
     use eak_ports::{
         Event, EventLog, EventRecord, ReasoningEngine, ReasoningError, ReasoningRequest,
@@ -1732,6 +1732,278 @@ mod kernel_tests {
             "only the Critical-residual, non-Accepted risk is surfaced"
         );
         assert_eq!(surfaced[0].id, crit_id);
+
+        let replayed = replay(core.log()).unwrap();
+        assert_eq!(core.state, replayed);
+        assert_eq!(core.state.canonical_json(), replayed.canonical_json());
+    }
+
+    // ===================== Band A (increment 4): Objective / Tradeoff seam =====================
+    //
+    // TDD (written before the seam handlers / fold arms / readers exist): the weighed-and-
+    // rejected space, preserved (Map 11, exit criterion 3). `RecordObjective` re-validates a
+    // weighted goal and links its provenance to a committed source; `RecordTradeoff` re-validates
+    // the tradeoff (>=2 alternatives, `chosen` in range and NOT rejected, >=1 rejected preserved)
+    // and links its provenance. Both fold into their own stores, replay byte-identically (P4), and
+    // a `Decision` may cite the `Tradeoff` it resolved via a ProvenanceLink (ties the choice to its
+    // rejected space, `02` Map 11). No new `DomainError` variant.
+
+    /// A well-formed 3-alternative tradeoff, mirroring the domain helper — `chosen == 0` is not
+    /// rejected and two rejected alternatives are preserved. `id` is caller-supplied so the seam
+    /// tests can mint a fresh id.
+    fn well_formed_tradeoff(id: EntityId) -> Tradeoff {
+        Tradeoff {
+            id,
+            question: "Which regulator topology for the 3.3 V rail?".into(),
+            alternatives: vec![
+                Alternative {
+                    label: "buck".into(),
+                    description: "switching buck converter".into(),
+                    scores: vec![0.9, 0.6],
+                    rejected: false,
+                },
+                Alternative {
+                    label: "ldo".into(),
+                    description: "linear low-dropout regulator".into(),
+                    scores: vec![0.4, 0.9],
+                    rejected: true,
+                },
+                Alternative {
+                    label: "charge-pump".into(),
+                    description: "switched-capacitor charge pump".into(),
+                    scores: vec![0.3, 0.5],
+                    rejected: true,
+                },
+            ],
+            criteria: vec!["efficiency".into(), "simplicity".into()],
+            chosen: 0,
+            rationale: "efficiency dominates at this load; the LDO's droop is unacceptable".into(),
+            decided_by: "hardware lead".into(),
+        }
+    }
+
+    #[test]
+    fn record_objective_seam_accepts_valid_then_folds_and_replays_byte_identically() {
+        let mut core = new_core();
+        // A committed requirement is a real `source` anchor for the objective's provenance.
+        let rid = seed_requirement(&mut core);
+        let obj_id = core.fresh_id();
+        let link_id = core.fresh_id();
+
+        core.invoke(CapabilityRequest::RecordObjective {
+            objective: Objective {
+                id: obj_id,
+                statement: "minimize board area".into(),
+                weight: 0.7,
+                source: rid,
+            },
+            links: vec![eak_domain::ProvenanceLink {
+                id: link_id,
+                from: obj_id,
+                to: rid,
+                relation: eak_domain::RelationType::TracesTo,
+            }],
+        })
+        .expect("a well-formed objective rooted in a committed source is accepted at the seam");
+
+        // The fold pushed exactly one objective and the reader/accessor reads it back by id.
+        assert_eq!(core.state.objectives.len(), 1);
+        let o = core
+            .state
+            .objective(obj_id)
+            .expect("objective folded by id");
+        assert_eq!(o.statement, "minimize board area");
+        assert_eq!(o.weight, 0.7);
+
+        // Byte-identical replay with the objective (and its link) in the log (P4).
+        let replayed = replay(core.log()).unwrap();
+        assert_eq!(core.state, replayed);
+        assert_eq!(core.state.canonical_json(), replayed.canonical_json());
+    }
+
+    #[test]
+    fn record_objective_seam_rejects_empty_statement_and_commits_nothing() {
+        let mut core = new_core();
+        let rid = seed_requirement(&mut core);
+        let obj_id = core.fresh_id();
+
+        // Empty statement — domain validate() rejects; nothing enters the log (P3).
+        let err = core
+            .invoke(CapabilityRequest::RecordObjective {
+                objective: Objective {
+                    id: obj_id,
+                    statement: "   ".into(),
+                    weight: 0.7,
+                    source: rid,
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+        assert!(core.state.objectives.is_empty());
+    }
+
+    #[test]
+    fn record_tradeoff_seam_accepts_valid_then_folds_and_replays_byte_identically() {
+        let mut core = new_core();
+        let _rid = seed_requirement(&mut core);
+        let td_id = core.fresh_id();
+
+        core.invoke(CapabilityRequest::RecordTradeoff {
+            tradeoff: well_formed_tradeoff(td_id),
+            links: vec![],
+        })
+        .expect("a well-formed tradeoff preserving the rejected space is accepted at the seam");
+
+        // The fold pushed exactly one tradeoff and the accessor reads it back by id, WITH its
+        // rejected space intact (exit criterion 3: the design remembers what it did not choose).
+        assert_eq!(core.state.tradeoffs.len(), 1);
+        let t = core.state.tradeoff(td_id).expect("tradeoff folded by id");
+        assert_eq!(t.chosen, 0);
+        assert!(!t.alternatives[t.chosen].rejected, "chosen is not rejected");
+        let rejected_preserved = t.alternatives.iter().filter(|a| a.rejected).count();
+        assert_eq!(rejected_preserved, 2, "the rejected space is preserved");
+
+        // Byte-identical replay with the tradeoff in the log (P4).
+        let replayed = replay(core.log()).unwrap();
+        assert_eq!(core.state, replayed);
+        assert_eq!(core.state.canonical_json(), replayed.canonical_json());
+    }
+
+    #[test]
+    fn record_tradeoff_seam_rejects_malformed_proposals_and_commits_nothing() {
+        let mut core = new_core();
+        seed_requirement(&mut core);
+        let (t_one_alt, t_chosen_oob, t_chosen_rejected, t_no_rejected) = (
+            core.fresh_id(),
+            core.fresh_id(),
+            core.fresh_id(),
+            core.fresh_id(),
+        );
+
+        // (1) Fewer than two alternatives — nothing was weighed against anything.
+        let mut single = well_formed_tradeoff(t_one_alt);
+        single.alternatives = vec![Alternative {
+            label: "buck".into(),
+            description: "the only option".into(),
+            scores: vec![0.9],
+            rejected: false,
+        }];
+        single.chosen = 0;
+        let err = core
+            .invoke(CapabilityRequest::RecordTradeoff {
+                tradeoff: single,
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // (2) `chosen` out of range.
+        let mut oob = well_formed_tradeoff(t_chosen_oob);
+        oob.chosen = 3; // len is 3.
+        let err = core
+            .invoke(CapabilityRequest::RecordTradeoff {
+                tradeoff: oob,
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // (3) `chosen` points at a REJECTED alternative (self-contradiction).
+        let mut chosen_rejected = well_formed_tradeoff(t_chosen_rejected);
+        chosen_rejected.chosen = 1; // index 1 is rejected == true.
+        let err = core
+            .invoke(CapabilityRequest::RecordTradeoff {
+                tradeoff: chosen_rejected,
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // (4) No rejected alternative preserved — the rejected space was thrown away (exit
+        // criterion 3 is violated), so the seam rejects it.
+        let mut no_rejected = well_formed_tradeoff(t_no_rejected);
+        for alt in &mut no_rejected.alternatives {
+            alt.rejected = false;
+        }
+        no_rejected.chosen = 0;
+        let err = core
+            .invoke(CapabilityRequest::RecordTradeoff {
+                tradeoff: no_rejected,
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // Nothing entered the log: every malformed proposal was rejected pre-commit (P3).
+        assert!(core.state.tradeoffs.is_empty());
+    }
+
+    #[test]
+    fn a_decision_may_cite_the_tradeoff_it_resolved_via_a_provenance_link() {
+        // Map 11: the choice is tied to its rejected space. A recorded Tradeoff is cited by a
+        // Decision through a ProvenanceLink, so the design can always trace WHY the chosen option
+        // won over the preserved-and-rejected ones.
+        let mut core = new_core();
+        let rid = seed_requirement(&mut core);
+        let td_id = core.fresh_id();
+        core.invoke(CapabilityRequest::RecordTradeoff {
+            tradeoff: well_formed_tradeoff(td_id),
+            links: vec![],
+        })
+        .unwrap();
+
+        // A Decision (justifying the chosen alternative) cites the Tradeoff it resolved.
+        let req_id = core.fresh_id();
+        let did = core.fresh_id();
+        let link_id = core.fresh_id();
+        core.invoke(CapabilityRequest::CreateRequirement {
+            requirement: Requirement {
+                id: req_id,
+                statement: "The 3.3 V rail shall use a buck converter".into(),
+                category: RequirementCategory::Electrical,
+                priority: Priority::High,
+                acceptance_criterion: "topology is a buck".into(),
+                status: RequirementStatus::Accepted,
+                source: rid,
+                targets: vec![],
+            },
+            decision: Decision {
+                id: did,
+                subject: rid,
+                rationale: "buck chosen per the topology tradeoff".into(),
+                decider: "hardware lead".into(),
+                reasoning_call_seq: None,
+                evidence: vec![],
+                confidence: 1.0,
+            },
+            evidence: vec![],
+            links: vec![eak_domain::ProvenanceLink {
+                id: link_id,
+                from: did,
+                to: td_id,
+                relation: eak_domain::RelationType::JustifiedBy,
+            }],
+        })
+        .unwrap();
+
+        // The link resolves: it connects the committed Decision to the committed Tradeoff.
+        let link = core
+            .state
+            .links
+            .iter()
+            .find(|l| l.id == link_id)
+            .expect("the decision->tradeoff link was committed");
+        assert_eq!(link.from, did);
+        assert_eq!(link.to, td_id);
+        assert!(
+            core.state.decision(did).is_some(),
+            "the citing decision is committed"
+        );
+        assert!(
+            core.state.tradeoff(td_id).is_some(),
+            "the cited tradeoff is committed"
+        );
 
         let replayed = replay(core.log()).unwrap();
         assert_eq!(core.state, replayed);

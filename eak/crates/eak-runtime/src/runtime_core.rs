@@ -10,8 +10,8 @@ use crate::protocol::{AgentContext, Autonomy, CapabilityAck, CapabilityError, Ca
 use crate::state::EngineeringState;
 use eak_domain::{
     Assumption, Board, BomLineItem, Component, ComponentOrigin, Constraint, Decision, DesignIntent,
-    Discharge, EntityId, Evidence, FunctionalBlock, Net, NetOrigin, Part, Pin, Placement,
-    ProvenanceLink, Requirement, Risk, Track, Violation, Waiver,
+    Discharge, EntityId, Evidence, FunctionalBlock, Net, NetOrigin, Objective, Part, Pin,
+    Placement, ProvenanceLink, Requirement, Risk, Track, Tradeoff, Violation, Waiver,
 };
 use eak_ports::{
     Event, EventLog, EventRecord, EventSink, ReasoningEngine, ReasoningError, ReasoningRequest,
@@ -704,6 +704,56 @@ impl RuntimeCore {
             .map_err(|e| CapabilityError::Rejected(e.to_string()))?;
         Ok(CapabilityAck { committed: seqs })
     }
+
+    fn handle_record_objective(
+        &mut self,
+        objective: Objective,
+        links: Vec<ProvenanceLink>,
+    ) -> Result<CapabilityAck, CapabilityError> {
+        // The seam (P3): re-validate the objective (non-empty statement) before committing.
+        objective
+            .validate()
+            .map_err(|e| CapabilityError::Rejected(e.to_string()))?;
+        // Referential integrity at the seam: an objective's `source` must be a committed entity, so
+        // a weighted goal can never dangle (P3, P5).
+        if objective.source.is_null() || !self.resolves_to_committed_entity(objective.source) {
+            return Err(CapabilityError::Rejected(format!(
+                "objective is rooted in unknown source {}",
+                objective.source.short()
+            )));
+        }
+
+        let mut events = vec![Event::ObjectiveRecorded { objective }];
+        for link in links {
+            events.push(Event::ProvenanceLinked { link });
+        }
+        let seqs = self
+            .commit(events)
+            .map_err(|e| CapabilityError::Rejected(e.to_string()))?;
+        Ok(CapabilityAck { committed: seqs })
+    }
+
+    fn handle_record_tradeoff(
+        &mut self,
+        tradeoff: Tradeoff,
+        links: Vec<ProvenanceLink>,
+    ) -> Result<CapabilityAck, CapabilityError> {
+        // The seam (P3): re-validate the tradeoff — >=2 alternatives, `chosen` in range and NOT
+        // rejected, and >=1 rejected alternative PRESERVED (exit criterion 3). The model is never
+        // trusted to have kept its own rejected space; the runtime re-checks it before committing.
+        tradeoff
+            .validate()
+            .map_err(|e| CapabilityError::Rejected(e.to_string()))?;
+
+        let mut events = vec![Event::TradeoffRecorded { tradeoff }];
+        for link in links {
+            events.push(Event::ProvenanceLinked { link });
+        }
+        let seqs = self
+            .commit(events)
+            .map_err(|e| CapabilityError::Rejected(e.to_string()))?;
+        Ok(CapabilityAck { committed: seqs })
+    }
 }
 
 impl AgentContext for RuntimeCore {
@@ -795,6 +845,14 @@ impl AgentContext for RuntimeCore {
         self.state.risks.clone()
     }
 
+    fn objectives(&self) -> Vec<Objective> {
+        self.state.objectives.clone()
+    }
+
+    fn tradeoffs(&self) -> Vec<Tradeoff> {
+        self.state.tradeoffs.clone()
+    }
+
     fn reason(
         &mut self,
         mut req: ReasoningRequest,
@@ -857,6 +915,12 @@ impl AgentContext for RuntimeCore {
             CapabilityRequest::RaiseRisk { risk, links } => self.handle_raise_risk(risk, links),
             CapabilityRequest::AcceptRisk { risk, accepted_by } => {
                 self.handle_accept_risk(risk, accepted_by)
+            }
+            CapabilityRequest::RecordObjective { objective, links } => {
+                self.handle_record_objective(objective, links)
+            }
+            CapabilityRequest::RecordTradeoff { tradeoff, links } => {
+                self.handle_record_tradeoff(tradeoff, links)
             }
         }
     }

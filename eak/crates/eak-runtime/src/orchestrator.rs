@@ -132,8 +132,8 @@ mod tests {
     use crate::protocol::{Autonomy, CapabilityAck, CapabilityError, CapabilityRequest};
     use eak_domain::{
         Assumption, Board, BomLineItem, Component, Constraint, DesignIntent, EntityId,
-        FunctionalBlock, Net, Part, Pin, Placement, ProvenanceLink, Requirement, Risk, Track,
-        Violation,
+        FunctionalBlock, Net, Objective, Part, Pin, Placement, ProvenanceLink, Requirement, Risk,
+        Track, Tradeoff, Violation,
     };
     use eak_ports::{Event, ReasoningError, ReasoningRequest, ReasoningResponse, Seq, StoreError};
 
@@ -202,6 +202,12 @@ mod tests {
             vec![]
         }
         fn risks(&self) -> Vec<Risk> {
+            vec![]
+        }
+        fn objectives(&self) -> Vec<Objective> {
+            vec![]
+        }
+        fn tradeoffs(&self) -> Vec<Tradeoff> {
             vec![]
         }
         fn reason(

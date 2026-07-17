@@ -11,8 +11,8 @@
 
 use eak_domain::{
     Assumption, Board, BomLineItem, Component, Constraint, Decision, DesignIntent, Discharge,
-    Evidence, FunctionalBlock, ModelFidelity, Net, Part, Pin, Placement, Priority, ProvenanceLink,
-    Requirement, RequirementCategory, Risk, Track, Violation, Waiver,
+    Evidence, FunctionalBlock, ModelFidelity, Net, Objective, Part, Pin, Placement, Priority,
+    ProvenanceLink, Requirement, RequirementCategory, Risk, Track, Tradeoff, Violation, Waiver,
 };
 use eak_units::PhysicalQuantity;
 use serde::{Deserialize, Serialize};
@@ -239,6 +239,19 @@ pub enum Event {
     RiskAccepted {
         risk: eak_domain::EntityId,
         accepted_by: String,
+    },
+
+    // ---- Band A (increment 4): objective / tradeoff — the weighed-and-rejected space (Map 11) ----
+    /// A first-class [`Objective`] (a weighted design goal) was recorded. A state delta: the fold
+    /// pushes the objective into `EngineeringState::objectives`.
+    ObjectiveRecorded {
+        objective: Objective,
+    },
+    /// A first-class [`Tradeoff`] was recorded, PRESERVING its rejected space (`00` Principle 7,
+    /// exit criterion 3). A state delta: the fold pushes it into `EngineeringState::tradeoffs`. A
+    /// [`Decision`] may later cite the tradeoff it resolved via a [`ProvenanceLink`].
+    TradeoffRecorded {
+        tradeoff: Tradeoff,
     },
 }
 
@@ -491,6 +504,61 @@ mod tests {
         let ev = Event::RiskAccepted {
             risk: EntityId(11),
             accepted_by: "hardware lead".into(),
+        };
+        let s = serde_json::to_string(&ev).unwrap();
+        let back: Event = serde_json::from_str(&s).unwrap();
+        assert_eq!(ev, back);
+    }
+
+    // ===================== Band A (increment 4): Objective / Tradeoff events =====================
+    //
+    // TDD: every new state-delta Event variant carries a serde round-trip test so its on-disk
+    // form is pinned and replay-from-log is byte-stable (P4). The `Tradeoff` event carries the
+    // preserved rejected space (Map 11, exit criterion 3), so the round-trip proves that space
+    // survives serialization intact.
+
+    #[test]
+    fn objective_recorded_event_roundtrips_through_json() {
+        use eak_domain::{EntityId, Objective};
+        let ev = Event::ObjectiveRecorded {
+            objective: Objective {
+                id: EntityId(19),
+                statement: "minimize board area".into(),
+                weight: 0.7,
+                source: EntityId(3),
+            },
+        };
+        let s = serde_json::to_string(&ev).unwrap();
+        let back: Event = serde_json::from_str(&s).unwrap();
+        assert_eq!(ev, back);
+    }
+
+    #[test]
+    fn tradeoff_recorded_event_roundtrips_through_json() {
+        use eak_domain::{Alternative, EntityId, Tradeoff};
+        let ev = Event::TradeoffRecorded {
+            tradeoff: Tradeoff {
+                id: EntityId(20),
+                question: "Which regulator topology for the 3.3 V rail?".into(),
+                alternatives: vec![
+                    Alternative {
+                        label: "buck".into(),
+                        description: "switching buck converter".into(),
+                        scores: vec![0.9, 0.6],
+                        rejected: false,
+                    },
+                    Alternative {
+                        label: "ldo".into(),
+                        description: "linear low-dropout regulator".into(),
+                        scores: vec![0.4, 0.9],
+                        rejected: true,
+                    },
+                ],
+                criteria: vec!["efficiency".into(), "simplicity".into()],
+                chosen: 0,
+                rationale: "efficiency dominates at this load".into(),
+                decided_by: "hardware lead".into(),
+            },
         };
         let s = serde_json::to_string(&ev).unwrap();
         let back: Event = serde_json::from_str(&s).unwrap();

@@ -35,6 +35,9 @@ Phase 1 (implementation start) records the technology and scoping decisions Phas
 | [0016](0016-net-origin-logical-vs-physical.md) | `NetOrigin`: logical (synthesised) vs physical (imported) nets | Accepted |
 | [0017](0017-component-origin-synthesized-vs-imported.md) | `ComponentOrigin`: synthesized vs imported components | Accepted |
 | [0018](0018-band-a-assumption.md) | `Assumption`: the honesty object and the release-blocking honesty gate | Accepted |
+| [0019](0019-band-a-fidelity.md) | `ModelFidelity`: an advisory trust-tag on derived facts | Accepted |
+| [0020](0020-band-a-risk.md) | `Risk`: an auditable risk posture the human owns (tracked truth) | Accepted |
+| [0021](0021-band-a-tradeoff.md) | `Objective`/`Tradeoff`: the weighed-and-rejected space, preserved | Accepted |
 
 ## The ADR lifecycle
 

@@ -6,8 +6,8 @@
 
 use eak_domain::{
     Assumption, Board, BomLineItem, Component, Constraint, Decision, DesignIntent, Discharge,
-    EntityId, Evidence, FunctionalBlock, Net, Part, Pin, Placement, ProvenanceLink, Requirement,
-    Risk, Track, Violation, Waiver,
+    EntityId, Evidence, FunctionalBlock, Net, Objective, Part, Pin, Placement, ProvenanceLink,
+    Requirement, Risk, Track, Tradeoff, Violation, Waiver,
 };
 use eak_ports::{Event, ReasoningError, ReasoningRequest, ReasoningResponse, Seq, StoreError};
 
@@ -151,6 +151,22 @@ pub enum CapabilityRequest {
     /// the event flips its status to `Accepted`. Id-targeting, no links (mirrors
     /// [`CapabilityRequest::GrantWaiver`]).
     AcceptRisk { risk: EntityId, accepted_by: String },
+    /// Record a first-class [`Objective`] (a weighted design goal) with its provenance links
+    /// (Band A, increment 4). The runtime re-validates it (non-empty statement) and checks its
+    /// `source` resolves to a committed entity before committing (P3). Follows the `{payload, links}`
+    /// shape of [`CapabilityRequest::CreateConstraint`].
+    RecordObjective {
+        objective: Objective,
+        links: Vec<ProvenanceLink>,
+    },
+    /// Record a first-class [`Tradeoff`], PRESERVING its rejected space (Band A, increment 4; `00`
+    /// Principle 7, exit criterion 3). The runtime re-validates it (>=2 alternatives, `chosen` in
+    /// range and NOT rejected, >=1 rejected preserved) before committing (P3). A [`Decision`] may
+    /// later cite the recorded tradeoff via a [`ProvenanceLink`].
+    RecordTradeoff {
+        tradeoff: Tradeoff,
+        links: Vec<ProvenanceLink>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -212,6 +228,11 @@ pub trait AgentContext {
     /// Band A (increment 3): read the committed risks (the auditable risk posture). Owned clones,
     /// like every other reader. Risk is tracked truth — this reader never gates a phase in v0.
     fn risks(&self) -> Vec<Risk>;
+    /// Band A (increment 4): read the committed objectives (the weighed goals). Owned clones.
+    fn objectives(&self) -> Vec<Objective>;
+    /// Band A (increment 4): read the committed tradeoffs, each with its PRESERVED rejected space
+    /// (Map 11, exit criterion 3). Owned clones, like every other reader.
+    fn tradeoffs(&self) -> Vec<Tradeoff>;
     /// Call the reasoning engine, record the call (returning its event [`Seq`]), and
     /// return the judgement. Recording here is what makes replay deterministic (P4).
     fn reason(&mut self, req: ReasoningRequest)

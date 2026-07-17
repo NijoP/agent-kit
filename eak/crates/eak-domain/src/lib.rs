@@ -994,6 +994,97 @@ impl Risk {
     }
 }
 
+// ===================== Band A (increment 4): Objective / Tradeoff =====================
+//
+// The weighed-and-rejected space, preserved (Map 11; `00` Principle 7 — the design remembers
+// what it did NOT choose and why). An [`Objective`] is a weighted goal rooted in a committed
+// `source`. A [`Tradeoff`] records the [`Alternative`]s that were considered, the `criteria` they
+// were scored against, the `chosen` index, the `rationale`, and — critically — PRESERVES the
+// rejected space: at least one rejected alternative must survive, and the chosen one may not itself
+// be marked rejected. `validate()` reuses existing `DomainError` variants only (`EmptyStatement` /
+// `Inconsistent`). Both carry an `f64` (weight / scores), so — unlike [`Assumption`]/[`Risk`] —
+// they derive `PartialEq` but NOT `Eq` (mirrors [`Decision`]/[`Component`]).
+
+/// A single option that was weighed in a [`Tradeoff`]. `scores` are its raw scores against the
+/// tradeoff's `criteria` (positional). `rejected` records whether the design set it aside — the
+/// rejected space is what a tradeoff exists to preserve (`00` Principle 7).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Alternative {
+    pub label: String,
+    pub description: String,
+    pub scores: Vec<f64>,
+    pub rejected: bool,
+}
+
+/// A weighted design goal, rooted in the entity it derives from (`source`). `weight` expresses its
+/// relative importance among competing objectives. Map 11.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Objective {
+    pub id: EntityId,
+    pub statement: String,
+    pub weight: f64,
+    /// The entity (e.g. a [`Requirement`] or [`DesignIntent`]) this objective is rooted in.
+    pub source: EntityId,
+}
+
+impl Objective {
+    /// Domain invariant (reuses existing [`DomainError`] variants only): a non-empty `statement`.
+    pub fn validate(&self) -> Result<(), DomainError> {
+        if self.statement.trim().is_empty() {
+            return Err(DomainError::EmptyStatement);
+        }
+        Ok(())
+    }
+}
+
+/// A recorded decision among weighed [`Alternative`]s, preserving the rejected space (Map 11). The
+/// `chosen` index selects the winning alternative; `criteria`/`rationale`/`decided_by` record how
+/// and by whom (Principle 10, named authority). A [`Decision`] may later cite the `Tradeoff` it
+/// resolved via a [`ProvenanceLink`], tying the choice to what it beat.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Tradeoff {
+    pub id: EntityId,
+    pub question: String,
+    pub alternatives: Vec<Alternative>,
+    pub criteria: Vec<String>,
+    pub chosen: usize,
+    pub rationale: String,
+    /// The named human/agent who decided (Principle 10), like [`Waiver::decided_by`].
+    pub decided_by: String,
+}
+
+impl Tradeoff {
+    /// Domain invariants (reuses existing [`DomainError`] variants only): (1) at least two
+    /// alternatives were weighed (a single option is no tradeoff); (2) `chosen` is a valid index;
+    /// (3) the chosen alternative is not itself marked rejected (self-contradiction); (4) at least
+    /// one rejected alternative is PRESERVED — the whole point of the object is to remember the
+    /// space it did not choose (`00` Principle 7, exit criterion 3).
+    pub fn validate(&self) -> Result<(), DomainError> {
+        if self.alternatives.len() < 2 {
+            return Err(DomainError::Inconsistent(
+                "a tradeoff must weigh at least two alternatives",
+            ));
+        }
+        let chosen = self
+            .alternatives
+            .get(self.chosen)
+            .ok_or(DomainError::Inconsistent(
+                "tradeoff chosen index is out of range",
+            ))?;
+        if chosen.rejected {
+            return Err(DomainError::Inconsistent(
+                "the chosen alternative may not be marked rejected",
+            ));
+        }
+        if !self.alternatives.iter().any(|a| a.rejected) {
+            return Err(DomainError::Inconsistent(
+                "a tradeoff must preserve at least one rejected alternative",
+            ));
+        }
+        Ok(())
+    }
+}
+
 /// A violated domain invariant.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DomainError {
@@ -1840,5 +1931,115 @@ mod tests {
         assert!(r.validate().is_ok());
         r.status = RiskStatus::Accepted;
         assert!(r.validate().is_ok());
+    }
+
+    // ============ Band A (increment 4): Objective / Tradeoff domain invariants ============
+    //
+    // TDD (RED before the objects exist): the weighed-and-rejected space, preserved (Map 11,
+    // exit criterion 3). An `Objective` is a weighted goal rooted in a source; a `Tradeoff`
+    // records the alternatives considered, the criteria they were scored on, the chosen index,
+    // and — critically — PRESERVES the rejected space (`00` Principle 7 honesty: the design
+    // remembers what it did NOT choose and why). `validate()` reuses only existing DomainError
+    // variants (`EmptyStatement`/`EmptyField`/`Inconsistent`) — no new variant is invented.
+
+    /// A well-formed 3-alternative tradeoff: `chosen == 0` is not rejected; two rejected
+    /// alternatives are preserved. Helper so each rejection test mutates one facet at a time.
+    fn well_formed_tradeoff() -> Tradeoff {
+        Tradeoff {
+            id: EntityId(20),
+            question: "Which regulator topology for the 3.3 V rail?".into(),
+            alternatives: vec![
+                Alternative {
+                    label: "buck".into(),
+                    description: "switching buck converter".into(),
+                    scores: vec![0.9, 0.6],
+                    rejected: false,
+                },
+                Alternative {
+                    label: "ldo".into(),
+                    description: "linear low-dropout regulator".into(),
+                    scores: vec![0.4, 0.9],
+                    rejected: true,
+                },
+                Alternative {
+                    label: "charge-pump".into(),
+                    description: "switched-capacitor charge pump".into(),
+                    scores: vec![0.3, 0.5],
+                    rejected: true,
+                },
+            ],
+            criteria: vec!["efficiency".into(), "simplicity".into()],
+            chosen: 0,
+            rationale: "efficiency dominates at this load; the LDO's droop is unacceptable".into(),
+            decided_by: "hardware lead".into(),
+        }
+    }
+
+    #[test]
+    fn well_formed_objective_validates() {
+        let o = Objective {
+            id: EntityId(19),
+            statement: "minimize board area".into(),
+            weight: 0.7,
+            source: EntityId(3),
+        };
+        assert!(o.validate().is_ok());
+    }
+
+    #[test]
+    fn objective_rejects_empty_statement() {
+        let o = Objective {
+            id: EntityId(19),
+            statement: "   ".into(),
+            weight: 0.7,
+            source: EntityId(3),
+        };
+        assert_eq!(o.validate(), Err(DomainError::EmptyStatement));
+    }
+
+    #[test]
+    fn well_formed_tradeoff_validates() {
+        assert!(well_formed_tradeoff().validate().is_ok());
+    }
+
+    #[test]
+    fn tradeoff_rejects_fewer_than_two_alternatives() {
+        // A "tradeoff" with a single option weighed nothing — it is not a tradeoff (P7).
+        let mut t = well_formed_tradeoff();
+        t.alternatives = vec![Alternative {
+            label: "buck".into(),
+            description: "the only option".into(),
+            scores: vec![0.9],
+            rejected: false,
+        }];
+        t.chosen = 0;
+        assert!(matches!(t.validate(), Err(DomainError::Inconsistent(_))));
+    }
+
+    #[test]
+    fn tradeoff_rejects_chosen_index_out_of_range() {
+        let mut t = well_formed_tradeoff();
+        t.chosen = 3; // len is 3, so index 3 is out of range.
+        assert!(matches!(t.validate(), Err(DomainError::Inconsistent(_))));
+    }
+
+    #[test]
+    fn tradeoff_rejects_a_chosen_alternative_that_is_marked_rejected() {
+        // The design cannot both choose an alternative and mark it rejected (self-contradiction).
+        let mut t = well_formed_tradeoff();
+        t.chosen = 1; // index 1 is the LDO, which is rejected == true.
+        assert!(matches!(t.validate(), Err(DomainError::Inconsistent(_))));
+    }
+
+    #[test]
+    fn tradeoff_rejects_when_no_rejected_alternative_is_preserved() {
+        // The whole point of the object is to PRESERVE the rejected space (exit criterion 3). A
+        // tradeoff where every alternative is un-rejected has thrown that space away.
+        let mut t = well_formed_tradeoff();
+        for alt in &mut t.alternatives {
+            alt.rejected = false;
+        }
+        t.chosen = 0;
+        assert!(matches!(t.validate(), Err(DomainError::Inconsistent(_))));
     }
 }

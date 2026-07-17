@@ -6,9 +6,9 @@
 
 use eak_domain::{
     Assumption, AssumptionStatus, Board, BomLineItem, Component, Constraint, Decision,
-    DesignIntent, EntityId, Evidence, FunctionalBlock, ModelFidelity, Net, Part, Pin, Placement,
-    ProvenanceLink, Requirement, Risk, RiskSeverity, RiskStatus, Track, Violation, ViolationStatus,
-    Waiver,
+    DesignIntent, EntityId, Evidence, FunctionalBlock, ModelFidelity, Net, Objective, Part, Pin,
+    Placement, ProvenanceLink, Requirement, Risk, RiskSeverity, RiskStatus, Track, Tradeoff,
+    Violation, ViolationStatus, Waiver,
 };
 use eak_ports::{Event, Seq};
 use serde::{Deserialize, Serialize};
@@ -82,6 +82,12 @@ pub struct EngineeringState {
     // surfaced ([`Self::unaccepted_critical_risks`]) but does NOT block release in v0; the human
     // owns acceptance of residual risk (`00` Principle 11).
     pub risks: Vec<Risk>,
+    // Band A (increment 4): the weighed-and-rejected space, preserved (Map 11). Objectives are
+    // weighted goals; tradeoffs record the alternatives considered and preserve the rejected ones
+    // (`00` Principle 7). Kept in insertion (event) order so a run and its replay serialize
+    // byte-identically.
+    pub objectives: Vec<Objective>,
+    pub tradeoffs: Vec<Tradeoff>,
 }
 
 impl EngineeringState {
@@ -172,6 +178,12 @@ impl EngineeringState {
                     r.status = RiskStatus::Accepted;
                 }
             }
+            // Band A (increment 4): the weighed-and-rejected space. Recording an objective or a
+            // tradeoff pushes it into its own store — the tradeoff carries its PRESERVED rejected
+            // alternatives, so folding it (here and on replay) reconstructs that space byte-for-byte
+            // (P4, exit criterion 3).
+            Event::ObjectiveRecorded { objective } => self.objectives.push(objective.clone()),
+            Event::TradeoffRecorded { tradeoff } => self.tradeoffs.push(tradeoff.clone()),
             // Audit-only events (phase lifecycle, reasoning calls, IR-boundary milestones)
             // carry no state and are intentionally not folded. AUDIT: any NEW state-bearing
             // event variant MUST get an explicit arm above, or replay will silently diverge.
@@ -286,6 +298,14 @@ impl EngineeringState {
             .iter()
             .filter(|r| r.residual == RiskSeverity::Critical && r.status != RiskStatus::Accepted)
             .collect()
+    }
+
+    pub fn objective(&self, id: EntityId) -> Option<&Objective> {
+        self.objectives.iter().find(|o| o.id == id)
+    }
+
+    pub fn tradeoff(&self, id: EntityId) -> Option<&Tradeoff> {
+        self.tradeoffs.iter().find(|t| t.id == id)
     }
 
     /// Deterministic serialization used to assert byte-identity between a run and its
