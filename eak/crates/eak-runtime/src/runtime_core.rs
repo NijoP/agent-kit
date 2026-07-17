@@ -9,9 +9,9 @@ use crate::clock::{Clock, IdSource};
 use crate::protocol::{AgentContext, Autonomy, CapabilityAck, CapabilityError, CapabilityRequest};
 use crate::state::EngineeringState;
 use eak_domain::{
-    Board, BomLineItem, Component, ComponentOrigin, Constraint, Decision, DesignIntent, EntityId,
-    Evidence, FunctionalBlock, Net, NetOrigin, Part, Pin, Placement, ProvenanceLink, Requirement,
-    Track, Violation, Waiver,
+    Assumption, Board, BomLineItem, Component, ComponentOrigin, Constraint, Decision, DesignIntent,
+    Discharge, EntityId, Evidence, FunctionalBlock, Net, NetOrigin, Part, Pin, Placement,
+    ProvenanceLink, Requirement, Track, Violation, Waiver,
 };
 use eak_ports::{
     Event, EventLog, EventRecord, EventSink, ReasoningEngine, ReasoningError, ReasoningRequest,
@@ -572,6 +572,97 @@ impl RuntimeCore {
             .map_err(|e| CapabilityError::Rejected(e.to_string()))?;
         Ok(CapabilityAck { committed: seqs })
     }
+
+    /// Does `id` resolve to ANY committed entity an assumption may trace to (P3)? v0 accepts a
+    /// requirement, decision, functional block, or constraint — the traceable spine so far.
+    fn resolves_to_committed_entity(&self, id: EntityId) -> bool {
+        self.state.requirement(id).is_some()
+            || self.state.decision(id).is_some()
+            || self.state.functional_block(id).is_some()
+            || self.state.constraint(id).is_some()
+    }
+
+    fn handle_raise_assumption(
+        &mut self,
+        assumption: Assumption,
+        links: Vec<ProvenanceLink>,
+    ) -> Result<CapabilityAck, CapabilityError> {
+        // The seam (P3): re-validate the assumption (non-empty statement, discharge/status
+        // consistency) before committing — the model is never trusted.
+        assumption
+            .validate()
+            .map_err(|e| CapabilityError::Rejected(e.to_string()))?;
+        // An assumption that rests on nothing would be untraceable — reject it (P3).
+        if assumption.rests_on.is_null() {
+            return Err(CapabilityError::Rejected(
+                "assumption rests on no entity (would be untraceable)".into(),
+            ));
+        }
+        // Referential integrity at the seam: `rests_on` must be a committed entity (requirement /
+        // decision / functional block), so an assumption can never dangle (P3, P5).
+        if self.state.requirement(assumption.rests_on).is_none()
+            && self.state.decision(assumption.rests_on).is_none()
+            && self.state.functional_block(assumption.rests_on).is_none()
+        {
+            return Err(CapabilityError::Rejected(format!(
+                "assumption rests on unknown entity {}",
+                assumption.rests_on.short()
+            )));
+        }
+        // A raised assumption is never born discharged — it must start Open.
+        if !assumption.is_open() {
+            return Err(CapabilityError::Rejected(
+                "a raised assumption must be Open".into(),
+            ));
+        }
+
+        let mut events = vec![Event::AssumptionRaised { assumption }];
+        for link in links {
+            events.push(Event::ProvenanceLinked { link });
+        }
+        let seqs = self
+            .commit(events)
+            .map_err(|e| CapabilityError::Rejected(e.to_string()))?;
+        Ok(CapabilityAck { committed: seqs })
+    }
+
+    fn handle_discharge_assumption(
+        &mut self,
+        assumption: EntityId,
+        discharge: Discharge,
+    ) -> Result<CapabilityAck, CapabilityError> {
+        // The target assumption must exist and still be Open (cannot re-discharge, nor discharge
+        // an Invalidated one) — the seam guards the lifecycle (P3).
+        match self.state.assumption(assumption) {
+            None => {
+                return Err(CapabilityError::Rejected(format!(
+                    "discharge targets unknown assumption {}",
+                    assumption.short()
+                )));
+            }
+            Some(a) if !a.is_open() => {
+                return Err(CapabilityError::Rejected("assumption is not open".into()));
+            }
+            Some(_) => {}
+        }
+        // The discharge target must resolve to some committed entity, so a discharge can never
+        // point at a phantom (P3). v0 does NOT yet tighten AcceptedRisk -> Risk (Risk lands in a
+        // later increment); the target is a free EntityId that must merely resolve.
+        if discharge.target.is_null() || !self.resolves_to_committed_entity(discharge.target) {
+            return Err(CapabilityError::Rejected(format!(
+                "discharge target {} does not exist",
+                discharge.target.short()
+            )));
+        }
+
+        let seqs = self
+            .commit(vec![Event::AssumptionDischarged {
+                assumption,
+                discharge,
+            }])
+            .map_err(|e| CapabilityError::Rejected(e.to_string()))?;
+        Ok(CapabilityAck { committed: seqs })
+    }
 }
 
 impl AgentContext for RuntimeCore {
@@ -647,6 +738,18 @@ impl AgentContext for RuntimeCore {
         self.state.tracks.clone()
     }
 
+    fn assumptions(&self) -> Vec<Assumption> {
+        self.state.assumptions.clone()
+    }
+
+    fn undischarged_critical_assumptions(&self) -> Vec<Assumption> {
+        self.state
+            .undischarged_critical_assumptions()
+            .into_iter()
+            .cloned()
+            .collect()
+    }
+
     fn reason(
         &mut self,
         mut req: ReasoningRequest,
@@ -699,6 +802,13 @@ impl AgentContext for RuntimeCore {
                 self.handle_place_component(placement, links)
             }
             CapabilityRequest::RouteNet { track, links } => self.handle_route_net(track, links),
+            CapabilityRequest::RaiseAssumption { assumption, links } => {
+                self.handle_raise_assumption(assumption, links)
+            }
+            CapabilityRequest::DischargeAssumption {
+                assumption,
+                discharge,
+            } => self.handle_discharge_assumption(assumption, discharge),
         }
     }
 

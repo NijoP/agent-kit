@@ -42,7 +42,10 @@ pub use schematic_planning::SchematicPlanningMachine;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use eak_domain::{NetClass, Priority, RequirementCategory, ViolationStatus, Waiver};
+    use eak_domain::{
+        Assumption, AssumptionCriticality, AssumptionStatus, Discharge, DischargeResolution,
+        EntityId, NetClass, Priority, RequirementCategory, ViolationStatus, Waiver,
+    };
     use eak_ports::{
         CandidateRequirement, Event, EventLog, EventRecord, ReasoningEngine, ReasoningError,
         ReasoningRequest, ReasoningResponse, Seq, StoreError, Timestamp,
@@ -1431,6 +1434,179 @@ mod tests {
         assert!(core.state.nets.iter().any(|n| n.name == "VOUT"));
 
         // replay identity holds across the split-rail synthesis.
+        let replayed = replay(core.log()).unwrap();
+        assert_eq!(core.state, replayed);
+    }
+
+    // ===================== Band A (increment 1): the honesty gate =====================
+    //
+    // TDD (written before the gate extension): the GLOBAL manufacturing gate refuses to
+    // release a design that carries an undischarged CRITICAL assumption — the marquee
+    // "AI you can trust" story (exit criterion 1). It passes once the assumption is
+    // discharged, and it never blocks on a merely-Normal open assumption. The gate is the
+    // sibling of `manufacturing_blocks_on_open_blocking_violation`, keyed on the new
+    // `undischarged_critical_assumptions()` query instead of open blocking violations.
+
+    /// Build a clean, releasable design (the happy 14-phase chain up to — but not including —
+    /// Manufacturing Generation) so the honesty gate can be tested in isolation: with no open
+    /// blocking violation, the ONLY thing that can block release is an open critical assumption.
+    fn releasable_core() -> RuntimeCore {
+        let mut core = RuntimeCore::new(
+            Box::new(MemLog { records: vec![] }),
+            Box::new(SourcedReasoner),
+            Box::new(SeededIdSource::new(7)),
+            Box::new(LogicalClock::new()),
+            Autonomy::Autonomous,
+        );
+        core.capture_intent("USB-C powered sensor node, < 5 W", "engineer")
+            .unwrap();
+        let mut plan = WorkflowPlan::new(vec![
+            Box::new(RequirementPlanningMachine::new()),
+            Box::new(EngineeringAnalysisMachine::new()),
+            Box::new(ConstraintExtractionMachine::new()),
+            Box::new(ConstraintVerificationMachine::new()),
+            Box::new(SchematicPlanningMachine::new()),
+            Box::new(ErcVerificationMachine::new()),
+            Box::new(BomPlanningMachine::new()),
+            Box::new(BomVerificationMachine::new()),
+            Box::new(PcbFloorPlanningMachine::new()),
+            Box::new(ComponentPlacementMachine::new()),
+            Box::new(RoutingPlanningMachine::new()),
+            Box::new(DrcVerificationMachine::new()),
+            Box::new(DfmVerificationMachine::new()),
+            Box::new(EmcAnalysisMachine::new()),
+        ]);
+        let results = Orchestrator::new().run(&mut plan, &mut core);
+        assert!(results.iter().all(|(_, o)| *o == PhaseOutcome::Success));
+        assert!(core.state.open_blocking_violations().is_empty());
+        core
+    }
+
+    /// A committed requirement id an assumption can legitimately rest on / discharge to.
+    fn first_requirement_id(core: &RuntimeCore) -> EntityId {
+        core.state.requirements.first().expect("a requirement").id
+    }
+
+    #[test]
+    fn manufacturing_blocks_on_undischarged_critical_assumption() {
+        let mut core = releasable_core();
+        let rid = first_requirement_id(&core);
+
+        // Raise a CRITICAL, Open assumption on the otherwise-clean design.
+        let aid = core.fresh_id();
+        core.invoke(CapabilityRequest::RaiseAssumption {
+            assumption: Assumption {
+                id: aid,
+                statement: "the USB-C source actually delivers 5 V @ 3 A".into(),
+                rests_on: rid,
+                criticality: AssumptionCriticality::Critical,
+                status: AssumptionStatus::Open,
+                discharge: None,
+            },
+            links: vec![],
+        })
+        .unwrap();
+        assert_eq!(core.state.undischarged_critical_assumptions().len(), 1);
+        // The design has NO open blocking violation — only the honesty gate can stop it now.
+        assert!(core.state.open_blocking_violations().is_empty());
+
+        // The global gate must refuse to release and generate nothing (state untouched).
+        let assumptions_before = core.state.assumptions.len();
+        let mut mfg = ManufacturingGenerationMachine::new();
+        let outcome = ExecutionEngine::new().run(&mut mfg, &mut core);
+        assert!(
+            matches!(outcome, PhaseOutcome::Failed(_)),
+            "release is BLOCKED while a critical assumption is undischarged"
+        );
+        assert_eq!(core.state.assumptions.len(), assumptions_before);
+
+        // replay identity holds across the blocked run (P4).
+        let replayed = replay(core.log()).unwrap();
+        assert_eq!(core.state, replayed);
+    }
+
+    #[test]
+    fn manufacturing_releases_once_the_critical_assumption_is_discharged() {
+        let mut core = releasable_core();
+        let rid = first_requirement_id(&core);
+
+        let aid = core.fresh_id();
+        core.invoke(CapabilityRequest::RaiseAssumption {
+            assumption: Assumption {
+                id: aid,
+                statement: "the USB-C source actually delivers 5 V @ 3 A".into(),
+                rests_on: rid,
+                criticality: AssumptionCriticality::Critical,
+                status: AssumptionStatus::Open,
+                discharge: None,
+            },
+            links: vec![],
+        })
+        .unwrap();
+
+        // First: blocked while open.
+        let mut mfg = ManufacturingGenerationMachine::new();
+        let blocked = ExecutionEngine::new().run(&mut mfg, &mut core);
+        assert!(matches!(blocked, PhaseOutcome::Failed(_)));
+
+        // Discharge it (grounded against the committed requirement), then release.
+        core.invoke(CapabilityRequest::DischargeAssumption {
+            assumption: aid,
+            discharge: Discharge {
+                resolution: DischargeResolution::EnforcedConstraint,
+                target: rid,
+                decided_by: "engineer".into(),
+            },
+        })
+        .unwrap();
+        assert!(core.state.undischarged_critical_assumptions().is_empty());
+
+        let mut mfg = ManufacturingGenerationMachine::new();
+        let released = ExecutionEngine::new().run(&mut mfg, &mut core);
+        assert_eq!(
+            released,
+            PhaseOutcome::Success,
+            "release PASSES once the critical assumption is discharged"
+        );
+
+        // replay identity holds across raise + block + discharge + release (P4).
+        let replayed = replay(core.log()).unwrap();
+        assert_eq!(core.state, replayed);
+        assert_eq!(core.state.canonical_json(), replayed.canonical_json());
+    }
+
+    #[test]
+    fn manufacturing_releases_with_only_a_normal_open_assumption() {
+        // A merely-Normal open assumption is SURFACED, never blocking (the gate keys on
+        // Critical only, matching the roadmap's "undischarged *critical*").
+        let mut core = releasable_core();
+        let rid = first_requirement_id(&core);
+
+        let aid = core.fresh_id();
+        core.invoke(CapabilityRequest::RaiseAssumption {
+            assumption: Assumption {
+                id: aid,
+                statement: "the enclosure is vented".into(),
+                rests_on: rid,
+                criticality: AssumptionCriticality::Normal,
+                status: AssumptionStatus::Open,
+                discharge: None,
+            },
+            links: vec![],
+        })
+        .unwrap();
+        // It is open, but Normal — so it is not in the blocking set.
+        assert_eq!(core.state.assumptions.len(), 1);
+        assert!(core.state.undischarged_critical_assumptions().is_empty());
+
+        let mut mfg = ManufacturingGenerationMachine::new();
+        let outcome = ExecutionEngine::new().run(&mut mfg, &mut core);
+        assert_eq!(
+            outcome,
+            PhaseOutcome::Success,
+            "an open Normal assumption does not block release"
+        );
+
         let replayed = replay(core.log()).unwrap();
         assert_eq!(core.state, replayed);
     }

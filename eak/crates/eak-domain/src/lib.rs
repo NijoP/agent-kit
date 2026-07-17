@@ -780,6 +780,100 @@ impl Track {
     }
 }
 
+// =================== Band A (Phase 3, increment 1): the honesty object ===================
+//
+// An [`Assumption`] makes the reasoning's presumptions first-class and auditable (Map 10;
+// `00` Principle 7 — honesty). It states what was presumed, `rests_on` a committed entity
+// (so it is always traceable), carries a [`AssumptionCriticality`], and moves through a
+// lifecycle (Open -> Discharged | Invalidated). A Critical + Open assumption BLOCKS release
+// (mirrors [`Violation::is_blocking`]) — the honesty gate. Discharging it resolves it to a
+// grounded fact, an enforced constraint, or an accepted risk. `validate()` reuses existing
+// [`DomainError`] variants only. `Assumption` has no `f64`/`PhysicalQuantity` field, so `Eq`
+// is legal (unlike `Component`/`Net`).
+
+/// How load-bearing an [`Assumption`] is. A `Critical` open assumption blocks release; a
+/// `Normal` one is surfaced but never blocking. Every assumption states its criticality
+/// explicitly (no `Default`), like [`ViolationSeverity`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum AssumptionCriticality {
+    Critical,
+    Normal,
+}
+
+/// Lifecycle of an [`Assumption`], mirroring [`ViolationStatus`]. An `Open` assumption is
+/// still relied upon (and, if `Critical`, blocks); a `Discharged` one has been grounded; an
+/// `Invalidated` one is no longer relied upon.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum AssumptionStatus {
+    Open,
+    Discharged,
+    Invalidated,
+}
+
+/// How an [`Assumption`] was discharged: grounded in a fact, enforced by a constraint, or
+/// accepted as a (tracked) risk.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum DischargeResolution {
+    GroundedFact,
+    EnforcedConstraint,
+    AcceptedRisk,
+}
+
+/// The record of discharging an [`Assumption`]: how it was resolved, the `target` entity it
+/// resolved to, and the human/agent who decided (`decided_by` mirrors [`Waiver::decided_by`],
+/// `00` Principle 10 — the decider is named).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Discharge {
+    pub resolution: DischargeResolution,
+    pub target: EntityId,
+    pub decided_by: String,
+}
+
+/// A first-class, auditable presumption the reasoning made. See the module comment above.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Assumption {
+    pub id: EntityId,
+    pub statement: String,
+    /// The committed entity (requirement / decision / functional block) this rests on — the
+    /// traceability anchor. Referential integrity is re-checked at the capability seam (P3).
+    pub rests_on: EntityId,
+    pub criticality: AssumptionCriticality,
+    pub status: AssumptionStatus,
+    /// Set exactly when `status == Discharged`.
+    pub discharge: Option<Discharge>,
+}
+
+impl Assumption {
+    /// Still relied upon.
+    pub fn is_open(&self) -> bool {
+        self.status == AssumptionStatus::Open
+    }
+
+    /// An assumption blocks release iff it is Critical AND still Open (mirrors
+    /// [`Violation::is_blocking`] exactly — the honesty gate reads this).
+    pub fn is_blocking(&self) -> bool {
+        self.criticality == AssumptionCriticality::Critical && self.status == AssumptionStatus::Open
+    }
+
+    /// Domain invariants (reuses existing [`DomainError`] variants only): a non-empty
+    /// statement; and a discharge record present iff (and only iff) `status == Discharged`.
+    /// The `rests_on`/discharge-target referential checks live at the capability seam (P3).
+    pub fn validate(&self) -> Result<(), DomainError> {
+        if self.statement.trim().is_empty() {
+            return Err(DomainError::EmptyStatement);
+        }
+        match (self.status, self.discharge.is_some()) {
+            (AssumptionStatus::Discharged, false) => Err(DomainError::Inconsistent(
+                "discharged assumption must record a discharge",
+            )),
+            (status, true) if status != AssumptionStatus::Discharged => Err(
+                DomainError::Inconsistent("only a discharged assumption may carry a discharge"),
+            ),
+            _ => Ok(()),
+        }
+    }
+}
+
 /// A violated domain invariant.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DomainError {
@@ -1388,5 +1482,118 @@ mod tests {
     #[test]
     fn well_formed_track_validates() {
         assert!(track(0.25).validate().is_ok());
+    }
+
+    // ===================== Band A (increment 1): Assumption =====================
+    //
+    // TDD (written before the object): the honesty object. An [`Assumption`] states what
+    // the reasoning presumed, rests on a committed entity, carries a criticality, and moves
+    // through a lifecycle (Open -> Discharged | Invalidated). A Critical + Open assumption
+    // BLOCKS release (mirrors `Violation::is_blocking`). `validate()` reuses existing
+    // `DomainError` variants only (no new variant).
+
+    fn open_assumption(statement: &str, crit: AssumptionCriticality) -> Assumption {
+        Assumption {
+            id: EntityId(1),
+            statement: statement.into(),
+            rests_on: EntityId(2),
+            criticality: crit,
+            status: AssumptionStatus::Open,
+            discharge: None,
+        }
+    }
+
+    #[test]
+    fn assumption_rejects_empty_statement() {
+        let a = open_assumption("   ", AssumptionCriticality::Critical);
+        assert_eq!(a.validate(), Err(DomainError::EmptyStatement));
+    }
+
+    #[test]
+    fn well_formed_open_assumption_validates() {
+        let a = open_assumption(
+            "the load draws at most 500 mA",
+            AssumptionCriticality::Normal,
+        );
+        assert!(a.validate().is_ok());
+    }
+
+    #[test]
+    fn discharged_assumption_without_a_discharge_is_inconsistent() {
+        // Rule (2): status == Discharged but discharge is None -> Inconsistent.
+        let mut a = open_assumption("the rail is 3.3 V", AssumptionCriticality::Critical);
+        a.status = AssumptionStatus::Discharged;
+        a.discharge = None;
+        assert_eq!(
+            a.validate(),
+            Err(DomainError::Inconsistent(
+                "discharged assumption must record a discharge"
+            ))
+        );
+    }
+
+    #[test]
+    fn non_discharged_assumption_carrying_a_discharge_is_inconsistent() {
+        // Rule (3): status != Discharged but discharge is Some -> Inconsistent. An Open (or
+        // Invalidated) assumption may not already carry a discharge record.
+        let mut a = open_assumption("the rail is 3.3 V", AssumptionCriticality::Critical);
+        a.status = AssumptionStatus::Open;
+        a.discharge = Some(Discharge {
+            resolution: DischargeResolution::GroundedFact,
+            target: EntityId(3),
+            decided_by: "engineer".into(),
+        });
+        assert_eq!(
+            a.validate(),
+            Err(DomainError::Inconsistent(
+                "only a discharged assumption may carry a discharge"
+            ))
+        );
+    }
+
+    #[test]
+    fn well_formed_discharged_assumption_validates() {
+        let a = Assumption {
+            id: EntityId(1),
+            statement: "the rail is 3.3 V".into(),
+            rests_on: EntityId(2),
+            criticality: AssumptionCriticality::Critical,
+            status: AssumptionStatus::Discharged,
+            discharge: Some(Discharge {
+                resolution: DischargeResolution::EnforcedConstraint,
+                target: EntityId(3),
+                decided_by: "engineer".into(),
+            }),
+        };
+        assert!(a.validate().is_ok());
+    }
+
+    #[test]
+    fn only_open_critical_assumptions_block() {
+        // is_blocking mirrors Violation::is_blocking exactly: Critical AND Open blocks; a
+        // discharged/invalidated Critical does not, and an open Normal does not.
+        let mut a = open_assumption("critical presumption", AssumptionCriticality::Critical);
+        assert!(a.is_open());
+        assert!(a.is_blocking());
+
+        // Discharged Critical: no longer blocks (it is grounded).
+        a.status = AssumptionStatus::Discharged;
+        a.discharge = Some(Discharge {
+            resolution: DischargeResolution::AcceptedRisk,
+            target: EntityId(3),
+            decided_by: "engineer".into(),
+        });
+        assert!(!a.is_open());
+        assert!(!a.is_blocking());
+
+        // Invalidated Critical: no longer blocks either (it is no longer relied upon).
+        a.status = AssumptionStatus::Invalidated;
+        a.discharge = None;
+        assert!(!a.is_blocking());
+
+        // Open but only Normal: surfaced, never blocking.
+        let normal = open_assumption("normal presumption", AssumptionCriticality::Normal);
+        assert!(normal.is_open());
+        assert!(!normal.is_blocking());
     }
 }

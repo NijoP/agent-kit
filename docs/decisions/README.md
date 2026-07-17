@@ -34,6 +34,7 @@ Phase 1 (implementation start) records the technology and scoping decisions Phas
 | [0015](0015-phase1-autonomous-hitl-deferred.md) | Phase 1 runs autonomously; human-in-the-loop deferred | Accepted |
 | [0016](0016-net-origin-logical-vs-physical.md) | `NetOrigin`: logical (synthesised) vs physical (imported) nets | Accepted |
 | [0017](0017-component-origin-synthesized-vs-imported.md) | `ComponentOrigin`: synthesized vs imported components | Accepted |
+| [0018](0018-band-a-assumption.md) | `Assumption`: the honesty object and the release-blocking honesty gate | Accepted |
 
 ## The ADR lifecycle
 

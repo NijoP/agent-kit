@@ -61,8 +61,18 @@ impl Machine for ManufacturingGenerationMachine {
                 // release; an unwaived error does.
                 let open_blocking = ctx.violations().iter().filter(|v| v.is_blocking()).count();
                 if open_blocking > 0 {
-                    Ok(StepResult::Failed(format!(
+                    return Ok(StepResult::Failed(format!(
                         "blocked: {open_blocking} open blocking violation(s) remain across the design"
+                    )));
+                }
+                // The HONESTY gate (Band A, exit criterion 1): the AI must discharge its own
+                // load-bearing presumptions before a design is released. An undischarged CRITICAL
+                // assumption refuses release with a distinct message; a merely-Normal open
+                // assumption is surfaced elsewhere but does NOT block here.
+                let open_critical_assumptions = ctx.undischarged_critical_assumptions().len();
+                if open_critical_assumptions > 0 {
+                    Ok(StepResult::Failed(format!(
+                        "blocked: {open_critical_assumptions} undischarged critical assumption(s) remain — the design rests on unverified presumptions"
                     )))
                 } else {
                     Ok(StepResult::Continue("Generating".into()))

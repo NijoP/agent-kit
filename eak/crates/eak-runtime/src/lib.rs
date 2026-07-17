@@ -51,7 +51,8 @@ mod dependency_rule {
 mod kernel_tests {
     use super::*;
     use eak_domain::{
-        Board, BoardSide, BomLineItem, Component, ComponentClass, ComponentOrigin, Decision,
+        Assumption, AssumptionCriticality, AssumptionStatus, Board, BoardSide, BomLineItem,
+        Component, ComponentClass, ComponentOrigin, Decision, Discharge, DischargeResolution,
         EntityId, FunctionalBlock, LayerStack, Net, NetClass, NetOrigin, Part, PartLifecycle, Pin,
         PinElectricalType, Placement, Priority, Requirement, RequirementCategory,
         RequirementStatus, Track,
@@ -1133,6 +1134,301 @@ mod kernel_tests {
 
         // Both segments landed; replay reconstructs byte-identical state.
         assert_eq!(core.state.tracks.len(), 2);
+        let replayed = replay(core.log()).unwrap();
+        assert_eq!(core.state, replayed);
+        assert_eq!(core.state.canonical_json(), replayed.canonical_json());
+    }
+
+    // ===================== Band A (increment 1): Assumption seam =====================
+    //
+    // TDD (written before the seam handlers exist): the epistemic honesty object flows
+    // through the same seam as every Phase-2/3 object. RaiseAssumption re-validates and
+    // checks `rests_on` referential integrity (P3); DischargeAssumption requires an Open
+    // target and a resolvable discharge target. The fold pushes on raise and flips
+    // status/discharge on discharge — and the whole log replays byte-identically (P4).
+
+    /// Commit a real requirement so an assumption has a committed entity to rest on. Returns
+    /// the requirement id (the resolvable `rests_on`/discharge target for the seam checks).
+    fn seed_requirement(core: &mut RuntimeCore) -> EntityId {
+        core.capture_intent("USB-C powered IoT sensor node, 3.3 V rail", "engineer")
+            .unwrap();
+        let src = core.state.intent.as_ref().unwrap().id;
+        let rid = core.fresh_id();
+        let did = core.fresh_id();
+        core.invoke(CapabilityRequest::CreateRequirement {
+            requirement: Requirement {
+                id: rid,
+                statement: "Device shall regulate to 3.3 V".into(),
+                category: RequirementCategory::Electrical,
+                priority: Priority::High,
+                acceptance_criterion: "rail measures 3.3 V".into(),
+                status: RequirementStatus::Accepted,
+                source: src,
+                targets: vec![],
+            },
+            decision: Decision {
+                id: did,
+                subject: rid,
+                rationale: "from intent".into(),
+                decider: "test".into(),
+                reasoning_call_seq: None,
+                evidence: vec![],
+                confidence: 1.0,
+            },
+            evidence: vec![],
+            links: vec![],
+        })
+        .unwrap();
+        rid
+    }
+
+    #[test]
+    fn raise_assumption_seam_accepts_valid_then_folds_and_replays_byte_identically() {
+        let mut core = new_core();
+        let rid = seed_requirement(&mut core);
+
+        let aid = core.fresh_id();
+        core.invoke(CapabilityRequest::RaiseAssumption {
+            assumption: Assumption {
+                id: aid,
+                statement: "the USB-C source can deliver 5 V @ 3 A".into(),
+                rests_on: rid,
+                criticality: AssumptionCriticality::Critical,
+                status: AssumptionStatus::Open,
+                discharge: None,
+            },
+            links: vec![],
+        })
+        .expect("a well-formed assumption resting on a committed requirement is accepted");
+
+        // The fold pushed exactly one Open assumption and the query reads it back.
+        assert_eq!(core.state.assumptions.len(), 1);
+        let a = core.state.assumption(aid).expect("assumption folded by id");
+        assert!(a.is_open());
+        assert!(a.is_blocking());
+        assert_eq!(core.state.undischarged_critical_assumptions().len(), 1);
+
+        // Byte-identical replay with the assumption in the log (P4).
+        let replayed = replay(core.log()).unwrap();
+        assert_eq!(core.state, replayed);
+        assert_eq!(core.state.canonical_json(), replayed.canonical_json());
+    }
+
+    #[test]
+    fn raise_assumption_seam_rejects_malformed_and_dangling_proposals() {
+        let mut core = new_core();
+        let rid = seed_requirement(&mut core);
+        let (a_empty, a_null, a_phantom, a_born_discharged) = (
+            core.fresh_id(),
+            core.fresh_id(),
+            core.fresh_id(),
+            core.fresh_id(),
+        );
+
+        // (1) Empty statement — domain validate() rejects.
+        let err = core
+            .invoke(CapabilityRequest::RaiseAssumption {
+                assumption: Assumption {
+                    id: a_empty,
+                    statement: "   ".into(),
+                    rests_on: rid,
+                    criticality: AssumptionCriticality::Normal,
+                    status: AssumptionStatus::Open,
+                    discharge: None,
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // (2) Null rests_on — an untraceable assumption is rejected at the seam (P3).
+        let err = core
+            .invoke(CapabilityRequest::RaiseAssumption {
+                assumption: Assumption {
+                    id: a_null,
+                    statement: "rests on nothing".into(),
+                    rests_on: EntityId::NULL,
+                    criticality: AssumptionCriticality::Critical,
+                    status: AssumptionStatus::Open,
+                    discharge: None,
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // (3) Dangling rests_on — resolves to no committed entity (P3).
+        let err = core
+            .invoke(CapabilityRequest::RaiseAssumption {
+                assumption: Assumption {
+                    id: a_phantom,
+                    statement: "rests on a phantom".into(),
+                    rests_on: EntityId(0xDEAD_BEEF),
+                    criticality: AssumptionCriticality::Critical,
+                    status: AssumptionStatus::Open,
+                    discharge: None,
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // (4) Born non-Open — a raised assumption must be Open (never born discharged).
+        let err = core
+            .invoke(CapabilityRequest::RaiseAssumption {
+                assumption: Assumption {
+                    id: a_born_discharged,
+                    statement: "already discharged at birth".into(),
+                    rests_on: rid,
+                    criticality: AssumptionCriticality::Critical,
+                    status: AssumptionStatus::Discharged,
+                    discharge: Some(Discharge {
+                        resolution: DischargeResolution::GroundedFact,
+                        target: rid,
+                        decided_by: "test".into(),
+                    }),
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // Nothing entered the log: every malformed/dangling proposal was rejected pre-commit.
+        assert!(core.state.assumptions.is_empty());
+    }
+
+    #[test]
+    fn discharge_assumption_seam_flips_status_records_resolution_and_replays() {
+        let mut core = new_core();
+        let rid = seed_requirement(&mut core);
+
+        let aid = core.fresh_id();
+        core.invoke(CapabilityRequest::RaiseAssumption {
+            assumption: Assumption {
+                id: aid,
+                statement: "the ambient stays below 60 C".into(),
+                rests_on: rid,
+                criticality: AssumptionCriticality::Critical,
+                status: AssumptionStatus::Open,
+                discharge: None,
+            },
+            links: vec![],
+        })
+        .unwrap();
+        assert_eq!(core.state.undischarged_critical_assumptions().len(), 1);
+
+        // Discharge it against the committed requirement (a resolvable target).
+        core.invoke(CapabilityRequest::DischargeAssumption {
+            assumption: aid,
+            discharge: Discharge {
+                resolution: DischargeResolution::EnforcedConstraint,
+                target: rid,
+                decided_by: "engineer".into(),
+            },
+        })
+        .expect("discharging an open assumption against a committed entity is accepted");
+
+        // The fold flipped status -> Discharged and recorded the resolution.
+        let a = core
+            .state
+            .assumption(aid)
+            .expect("still present after discharge");
+        assert_eq!(a.status, AssumptionStatus::Discharged);
+        assert!(!a.is_open());
+        assert!(!a.is_blocking());
+        let d = a
+            .discharge
+            .as_ref()
+            .expect("discharge recorded on the assumption");
+        assert_eq!(d.resolution, DischargeResolution::EnforcedConstraint);
+        assert_eq!(d.target, rid);
+        // No critical assumption is undischarged any more.
+        assert!(core.state.undischarged_critical_assumptions().is_empty());
+
+        // Byte-identical replay across raise + discharge (P4).
+        let replayed = replay(core.log()).unwrap();
+        assert_eq!(core.state, replayed);
+        assert_eq!(core.state.canonical_json(), replayed.canonical_json());
+    }
+
+    #[test]
+    fn discharge_assumption_seam_rejects_unknown_target_non_open_and_dangling_discharge() {
+        let mut core = new_core();
+        let rid = seed_requirement(&mut core);
+
+        // (1) Target assumption does not exist.
+        let err = core
+            .invoke(CapabilityRequest::DischargeAssumption {
+                assumption: EntityId(0xDEAD_BEEF),
+                discharge: Discharge {
+                    resolution: DischargeResolution::GroundedFact,
+                    target: rid,
+                    decided_by: "engineer".into(),
+                },
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // Raise a real critical assumption to exercise the remaining rejections.
+        let aid = core.fresh_id();
+        core.invoke(CapabilityRequest::RaiseAssumption {
+            assumption: Assumption {
+                id: aid,
+                statement: "the connector is genuine USB-C".into(),
+                rests_on: rid,
+                criticality: AssumptionCriticality::Critical,
+                status: AssumptionStatus::Open,
+                discharge: None,
+            },
+            links: vec![],
+        })
+        .unwrap();
+
+        // (2) Discharge target is dangling (resolves to no committed entity).
+        let err = core
+            .invoke(CapabilityRequest::DischargeAssumption {
+                assumption: aid,
+                discharge: Discharge {
+                    resolution: DischargeResolution::GroundedFact,
+                    target: EntityId(0xFEED_FACE),
+                    decided_by: "engineer".into(),
+                },
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+        // Still open — the rejected discharge committed nothing.
+        assert!(core.state.assumption(aid).unwrap().is_open());
+
+        // A legitimate discharge to move it out of Open.
+        core.invoke(CapabilityRequest::DischargeAssumption {
+            assumption: aid,
+            discharge: Discharge {
+                resolution: DischargeResolution::GroundedFact,
+                target: rid,
+                decided_by: "engineer".into(),
+            },
+        })
+        .unwrap();
+
+        // (3) Re-discharging an already-discharged (non-Open) assumption is rejected.
+        let err = core
+            .invoke(CapabilityRequest::DischargeAssumption {
+                assumption: aid,
+                discharge: Discharge {
+                    resolution: DischargeResolution::AcceptedRisk,
+                    target: rid,
+                    decided_by: "engineer".into(),
+                },
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // Exactly one assumption, discharged once — the rejected calls changed nothing.
+        assert_eq!(core.state.assumptions.len(), 1);
+        assert_eq!(
+            core.state.assumption(aid).unwrap().status,
+            AssumptionStatus::Discharged
+        );
         let replayed = replay(core.log()).unwrap();
         assert_eq!(core.state, replayed);
         assert_eq!(core.state.canonical_json(), replayed.canonical_json());

@@ -5,9 +5,9 @@
 //! run and during [`crate::replay`], guaranteeing identical reconstruction.
 
 use eak_domain::{
-    Board, BomLineItem, Component, Constraint, Decision, DesignIntent, EntityId, Evidence,
-    FunctionalBlock, Net, Part, Pin, Placement, ProvenanceLink, Requirement, Track, Violation,
-    ViolationStatus, Waiver,
+    Assumption, AssumptionStatus, Board, BomLineItem, Component, Constraint, Decision,
+    DesignIntent, EntityId, Evidence, FunctionalBlock, Net, Part, Pin, Placement, ProvenanceLink,
+    Requirement, Track, Violation, ViolationStatus, Waiver,
 };
 use eak_ports::{Event, Seq};
 use serde::{Deserialize, Serialize};
@@ -57,6 +57,9 @@ pub struct EngineeringState {
     // E6 (C1): advisory, model-authored explanations of raised violations. A SEPARATE store from
     // `violations` — folding here never touches a `Violation`, so the explainer stays advisory-only.
     pub violation_explanations: Vec<ViolationExplanation>,
+    // Band A (Phase 3): first-class, auditable presumptions. An Open + Critical one blocks
+    // release at the honesty gate ([`Self::undischarged_critical_assumptions`]).
+    pub assumptions: Vec<Assumption>,
 }
 
 impl EngineeringState {
@@ -112,6 +115,19 @@ impl EngineeringState {
                 suggested_fix: suggested_fix.clone(),
                 reasoning_call_seq: *reasoning_call_seq,
             }),
+            // Band A (Phase 3): epistemic state deltas. Raise pushes; discharge finds by id,
+            // flips status -> Discharged, and records the discharge on the assumption. Folding
+            // both here keeps replay byte-identical to the live run (P4).
+            Event::AssumptionRaised { assumption } => self.assumptions.push(assumption.clone()),
+            Event::AssumptionDischarged {
+                assumption,
+                discharge,
+            } => {
+                if let Some(a) = self.assumptions.iter_mut().find(|a| a.id == *assumption) {
+                    a.status = AssumptionStatus::Discharged;
+                    a.discharge = Some(discharge.clone());
+                }
+            }
             // Audit-only events (phase lifecycle, reasoning calls, IR-boundary milestones)
             // carry no state and are intentionally not folded. AUDIT: any NEW state-bearing
             // event variant MUST get an explicit arm above, or replay will silently diverge.
@@ -187,6 +203,19 @@ impl EngineeringState {
     /// Open, blocking (error-severity) violations — the workflow gate (P13).
     pub fn open_blocking_violations(&self) -> Vec<&Violation> {
         self.violations.iter().filter(|v| v.is_blocking()).collect()
+    }
+
+    pub fn assumption(&self, id: EntityId) -> Option<&Assumption> {
+        self.assumptions.iter().find(|a| a.id == id)
+    }
+
+    /// Undischarged CRITICAL assumptions — the honesty gate (Band A, exit criterion 1). A
+    /// release is refused while this is non-empty (mirror of [`Self::open_blocking_violations`]).
+    pub fn undischarged_critical_assumptions(&self) -> Vec<&Assumption> {
+        self.assumptions
+            .iter()
+            .filter(|a| a.is_blocking())
+            .collect()
     }
 
     /// Deterministic serialization used to assert byte-identity between a run and its

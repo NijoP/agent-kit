@@ -5,9 +5,9 @@
 //! via a [`CapabilityRequest`] (P2). Agents never touch state or a model directly.
 
 use eak_domain::{
-    Board, BomLineItem, Component, Constraint, Decision, DesignIntent, EntityId, Evidence,
-    FunctionalBlock, Net, Part, Pin, Placement, ProvenanceLink, Requirement, Track, Violation,
-    Waiver,
+    Assumption, Board, BomLineItem, Component, Constraint, Decision, DesignIntent, Discharge,
+    EntityId, Evidence, FunctionalBlock, Net, Part, Pin, Placement, ProvenanceLink, Requirement,
+    Track, Violation, Waiver,
 };
 use eak_ports::{Event, ReasoningError, ReasoningRequest, ReasoningResponse, Seq, StoreError};
 
@@ -122,6 +122,22 @@ pub enum CapabilityRequest {
         track: Track,
         links: Vec<ProvenanceLink>,
     },
+    /// Raise a first-class [`Assumption`] the reasoning declared, with its provenance links
+    /// (Band A). The runtime re-validates it, checks its `rests_on` resolves to a committed
+    /// entity (P3), and requires it to be born `Open`. Follows the `{payload, links}` shape of
+    /// [`CapabilityRequest::CreateConstraint`].
+    RaiseAssumption {
+        assumption: Assumption,
+        links: Vec<ProvenanceLink>,
+    },
+    /// Discharge an existing open [`Assumption`] (Band A). The runtime checks the target
+    /// assumption exists and is `Open`, and that the [`Discharge`]'s `target` resolves to a
+    /// committed entity; folding the event flips its status to `Discharged`. Id-targeting,
+    /// no links (mirrors [`CapabilityRequest::GrantWaiver`]).
+    DischargeAssumption {
+        assumption: EntityId,
+        discharge: Discharge,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -175,6 +191,11 @@ pub trait AgentContext {
     fn placements(&self) -> Vec<Placement>;
     /// Phase 3 (routing): read the committed tracks (DRC + PCB IR input).
     fn tracks(&self) -> Vec<Track>;
+    /// Band A: read the committed assumptions.
+    fn assumptions(&self) -> Vec<Assumption>;
+    /// Band A: undischarged CRITICAL assumptions — the honesty-gate reader (mirrors how the
+    /// manufacturing gate reads blocking violations). Owned clones, like every other reader.
+    fn undischarged_critical_assumptions(&self) -> Vec<Assumption>;
     /// Call the reasoning engine, record the call (returning its event [`Seq`]), and
     /// return the judgement. Recording here is what makes replay deterministic (P4).
     fn reason(&mut self, req: ReasoningRequest)

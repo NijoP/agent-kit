@@ -131,8 +131,8 @@ mod tests {
     use crate::fsm::{MachineError, StepResult};
     use crate::protocol::{Autonomy, CapabilityAck, CapabilityError, CapabilityRequest};
     use eak_domain::{
-        Board, BomLineItem, Component, Constraint, DesignIntent, EntityId, FunctionalBlock, Net,
-        Part, Pin, Placement, ProvenanceLink, Requirement, Track, Violation,
+        Assumption, Board, BomLineItem, Component, Constraint, DesignIntent, EntityId,
+        FunctionalBlock, Net, Part, Pin, Placement, ProvenanceLink, Requirement, Track, Violation,
     };
     use eak_ports::{Event, ReasoningError, ReasoningRequest, ReasoningResponse, Seq, StoreError};
 
@@ -192,6 +192,12 @@ mod tests {
             vec![]
         }
         fn tracks(&self) -> Vec<Track> {
+            vec![]
+        }
+        fn assumptions(&self) -> Vec<Assumption> {
+            vec![]
+        }
+        fn undischarged_critical_assumptions(&self) -> Vec<Assumption> {
             vec![]
         }
         fn reason(

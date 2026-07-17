@@ -10,9 +10,9 @@
 //! the "a contract lives with the ring that needs it" rule they belong to the kernel.
 
 use eak_domain::{
-    Board, BomLineItem, Component, Constraint, Decision, DesignIntent, Evidence, FunctionalBlock,
-    Net, Part, Pin, Placement, Priority, ProvenanceLink, Requirement, RequirementCategory, Track,
-    Violation, Waiver,
+    Assumption, Board, BomLineItem, Component, Constraint, Decision, DesignIntent, Discharge,
+    Evidence, FunctionalBlock, Net, Part, Pin, Placement, Priority, ProvenanceLink, Requirement,
+    RequirementCategory, Track, Violation, Waiver,
 };
 use eak_units::PhysicalQuantity;
 use serde::{Deserialize, Serialize};
@@ -195,6 +195,20 @@ pub enum Event {
         suggested_fix: String,
         reasoning_call_seq: Seq,
     },
+
+    // ---- Phase 3 (Band A): epistemic state deltas ----
+    /// A first-class presumption the reasoning declared, made auditable (Map 10). A state
+    /// delta: the fold pushes the [`Assumption`] into `EngineeringState::assumptions`. A
+    /// Critical + Open one blocks release at the honesty gate (P4-folded, gate-read).
+    AssumptionRaised {
+        assumption: Assumption,
+    },
+    /// An [`Assumption`] was discharged. A state delta: the fold finds it by id, flips its
+    /// `status` to `Discharged`, and records the [`Discharge`] on it.
+    AssumptionDischarged {
+        assumption: eak_domain::EntityId,
+        discharge: Discharge,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -369,6 +383,45 @@ mod tests {
                 status: RequirementStatus::Accepted,
                 source: EntityId(1),
                 targets: vec![PhysicalQuantity::new(5.0, eak_units::Unit::Watt)],
+            },
+        };
+        let s = serde_json::to_string(&ev).unwrap();
+        let back: Event = serde_json::from_str(&s).unwrap();
+        assert_eq!(ev, back);
+    }
+
+    // ===================== Band A (increment 1): Assumption events =====================
+    //
+    // TDD: every new state-delta Event variant carries a serde round-trip test so its
+    // on-disk form is pinned and replay-from-log is byte-stable (P4).
+
+    #[test]
+    fn assumption_raised_event_roundtrips_through_json() {
+        use eak_domain::{Assumption, AssumptionCriticality, AssumptionStatus, EntityId};
+        let ev = Event::AssumptionRaised {
+            assumption: Assumption {
+                id: EntityId(9),
+                statement: "the USB-C source can deliver 5 V @ 3 A".into(),
+                rests_on: EntityId(3),
+                criticality: AssumptionCriticality::Critical,
+                status: AssumptionStatus::Open,
+                discharge: None,
+            },
+        };
+        let s = serde_json::to_string(&ev).unwrap();
+        let back: Event = serde_json::from_str(&s).unwrap();
+        assert_eq!(ev, back);
+    }
+
+    #[test]
+    fn assumption_discharged_event_roundtrips_through_json() {
+        use eak_domain::{Discharge, DischargeResolution, EntityId};
+        let ev = Event::AssumptionDischarged {
+            assumption: EntityId(9),
+            discharge: Discharge {
+                resolution: DischargeResolution::EnforcedConstraint,
+                target: EntityId(4),
+                decided_by: "engineer".into(),
             },
         };
         let s = serde_json::to_string(&ev).unwrap();
