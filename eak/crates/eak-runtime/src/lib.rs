@@ -22,7 +22,7 @@ pub use protocol::{
 };
 pub use replay::replay;
 pub use runtime_core::RuntimeCore;
-pub use state::{EngineeringState, ViolationExplanation};
+pub use state::{EngineeringState, FidelityTag, ViolationExplanation};
 
 #[cfg(test)]
 mod dependency_rule {
@@ -53,9 +53,9 @@ mod kernel_tests {
     use eak_domain::{
         Assumption, AssumptionCriticality, AssumptionStatus, Board, BoardSide, BomLineItem,
         Component, ComponentClass, ComponentOrigin, Decision, Discharge, DischargeResolution,
-        EntityId, FunctionalBlock, LayerStack, Net, NetClass, NetOrigin, Part, PartLifecycle, Pin,
-        PinElectricalType, Placement, Priority, Requirement, RequirementCategory,
-        RequirementStatus, Track,
+        EntityId, FidelityMethod, FunctionalBlock, LayerStack, ModelFidelity, Net, NetClass,
+        NetOrigin, Part, PartLifecycle, Pin, PinElectricalType, Placement, Priority, Requirement,
+        RequirementCategory, RequirementStatus, Track,
     };
     use eak_ports::{
         Event, EventLog, EventRecord, ReasoningEngine, ReasoningError, ReasoningRequest,
@@ -1429,6 +1429,110 @@ mod kernel_tests {
             core.state.assumption(aid).unwrap().status,
             AssumptionStatus::Discharged
         );
+        let replayed = replay(core.log()).unwrap();
+        assert_eq!(core.state, replayed);
+        assert_eq!(core.state.canonical_json(), replayed.canonical_json());
+    }
+
+    // ===================== Band A (increment 2): ModelFidelity =====================
+    //
+    // TDD (written before the fold arm / accessor exist): a `ModelFidelity` is a trust-tag
+    // on a derived fact (Map 6), committed as ADVISORY metadata via the audit `emit` seam —
+    // NOT a `CapabilityRequest` — exactly like `Event::ViolationExplained` (E6 C1). Folding
+    // `Event::FidelityTagged` pushes into the SEPARATE `fidelity_tags` store keyed by target
+    // and NEVER mutates the tagged entity, so the tag can never usurp an object's authority.
+    // The accessor `fidelity_for(target)` reads it back and the whole log replays
+    // byte-identically (P4). Delivers exit criterion 2.
+
+    #[test]
+    fn fidelity_tag_emitted_folds_into_its_own_store_and_replays_byte_identically() {
+        let mut core = new_core();
+        // A committed requirement is the derived fact we tag (any committed target works —
+        // the tag references a target, it does not own one).
+        let target = seed_requirement(&mut core);
+        let requirements_before = core.state.requirements.clone();
+
+        // Committed as advisory metadata through the audit seam, exactly like ViolationExplained.
+        core.emit(vec![Event::FidelityTagged {
+            target,
+            fidelity: ModelFidelity {
+                concern: "worst-case rail droop".into(),
+                method: FidelityMethod::FirstOrderFloor,
+                confidence: 0.6,
+                scope: "the 3.3 V rail".into(),
+            },
+            reasoning_call_seq: None,
+        }])
+        .expect("advisory fidelity tag commits through the audit seam");
+
+        // The fold landed in the SEPARATE fidelity store, keyed by target.
+        assert_eq!(core.state.fidelity_tags.len(), 1);
+        let tags = core.state.fidelity_for(target);
+        assert_eq!(tags.len(), 1, "fidelity_for reads the tag back by target");
+        assert_eq!(tags[0].method, FidelityMethod::FirstOrderFloor);
+        assert_eq!(tags[0].confidence, 0.6);
+        assert_eq!(tags[0].concern, "worst-case rail droop");
+
+        // ADVISORY-ONLY (structural, P3): tagging the requirement did NOT mutate it.
+        assert_eq!(
+            core.state.requirements, requirements_before,
+            "a fidelity tag never mutates the entity it describes"
+        );
+
+        // Byte-identical replay with the fidelity tag in the log (P4).
+        let replayed = replay(core.log()).unwrap();
+        assert_eq!(core.state, replayed);
+        assert_eq!(core.state.canonical_json(), replayed.canonical_json());
+    }
+
+    #[test]
+    fn fidelity_for_returns_all_tags_for_a_target_in_insertion_order() {
+        // Several concerns may tag the same derived fact; fidelity_for returns all of them,
+        // and only them (a tag on a different target is not returned), in insertion order.
+        let mut core = new_core();
+        let target = seed_requirement(&mut core);
+        let other = core.fresh_id();
+
+        core.emit(vec![
+            Event::FidelityTagged {
+                target,
+                fidelity: ModelFidelity {
+                    concern: "thermal".into(),
+                    method: FidelityMethod::Assumed,
+                    confidence: 0.2,
+                    scope: "junction".into(),
+                },
+                reasoning_call_seq: None,
+            },
+            Event::FidelityTagged {
+                target: other,
+                fidelity: ModelFidelity {
+                    concern: "unrelated".into(),
+                    method: FidelityMethod::Measured,
+                    confidence: 1.0,
+                    scope: "elsewhere".into(),
+                },
+                reasoning_call_seq: None,
+            },
+            Event::FidelityTagged {
+                target,
+                fidelity: ModelFidelity {
+                    concern: "electrical".into(),
+                    method: FidelityMethod::Calculated,
+                    confidence: 0.9,
+                    scope: "rail".into(),
+                },
+                reasoning_call_seq: None,
+            },
+        ])
+        .expect("advisory fidelity tags commit through the audit seam");
+
+        let tags = core.state.fidelity_for(target);
+        assert_eq!(tags.len(), 2, "only this target's tags, not the other's");
+        // Insertion order preserved: `thermal` before `electrical`.
+        assert_eq!(tags[0].concern, "thermal");
+        assert_eq!(tags[1].concern, "electrical");
+
         let replayed = replay(core.log()).unwrap();
         assert_eq!(core.state, replayed);
         assert_eq!(core.state.canonical_json(), replayed.canonical_json());

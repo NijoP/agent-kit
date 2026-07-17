@@ -6,8 +6,8 @@
 
 use eak_domain::{
     Assumption, AssumptionStatus, Board, BomLineItem, Component, Constraint, Decision,
-    DesignIntent, EntityId, Evidence, FunctionalBlock, Net, Part, Pin, Placement, ProvenanceLink,
-    Requirement, Track, Violation, ViolationStatus, Waiver,
+    DesignIntent, EntityId, Evidence, FunctionalBlock, ModelFidelity, Net, Part, Pin, Placement,
+    ProvenanceLink, Requirement, Track, Violation, ViolationStatus, Waiver,
 };
 use eak_ports::{Event, Seq};
 use serde::{Deserialize, Serialize};
@@ -26,6 +26,19 @@ pub struct ViolationExplanation {
     pub explanation: String,
     pub suggested_fix: String,
     pub reasoning_call_seq: Seq,
+}
+
+/// A fidelity trust-tag attached to a derived fact (Band A, increment 2). Like
+/// [`ViolationExplanation`] it is advisory-only: it carries no id of its own, is folded into its
+/// OWN store ([`EngineeringState::fidelity_tags`]), references a `target` it never mutates, and
+/// never gates a phase. It only *describes how well a fact is known* (Map 6). `reasoning_call_seq`
+/// points back at the [`Event::ReasoningCall`] that produced it (`None` when the runtime itself
+/// tagged the fact, e.g. a first-order floor). Folded so replay reconstructs it byte-identically.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct FidelityTag {
+    pub target: EntityId,
+    pub fidelity: ModelFidelity,
+    pub reasoning_call_seq: Option<Seq>,
 }
 
 /// The single canonical instance of everything the runtime knows about a design. Entities
@@ -60,6 +73,10 @@ pub struct EngineeringState {
     // Band A (Phase 3): first-class, auditable presumptions. An Open + Critical one blocks
     // release at the honesty gate ([`Self::undischarged_critical_assumptions`]).
     pub assumptions: Vec<Assumption>,
+    // Band A (increment 2): advisory trust-tags on derived facts (Map 6). A SEPARATE store from
+    // any entity — folding here never mutates a tagged entity, so the tag stays advisory-only.
+    // Kept in insertion (event) order so a run and its replay serialize byte-identically.
+    pub fidelity_tags: Vec<FidelityTag>,
 }
 
 impl EngineeringState {
@@ -128,6 +145,19 @@ impl EngineeringState {
                     a.discharge = Some(discharge.clone());
                 }
             }
+            // Band A (increment 2): advisory fidelity metadata. State-bearing (so the UI/replay
+            // can read it), but it folds into its OWN store and NEVER mutates the tagged entity —
+            // the advisory-only invariant is structural, not merely a convention (mirrors
+            // `ViolationExplained`).
+            Event::FidelityTagged {
+                target,
+                fidelity,
+                reasoning_call_seq,
+            } => self.fidelity_tags.push(FidelityTag {
+                target: *target,
+                fidelity: fidelity.clone(),
+                reasoning_call_seq: *reasoning_call_seq,
+            }),
             // Audit-only events (phase lifecycle, reasoning calls, IR-boundary milestones)
             // carry no state and are intentionally not folded. AUDIT: any NEW state-bearing
             // event variant MUST get an explicit arm above, or replay will silently diverge.
@@ -207,6 +237,17 @@ impl EngineeringState {
 
     pub fn assumption(&self, id: EntityId) -> Option<&Assumption> {
         self.assumptions.iter().find(|a| a.id == id)
+    }
+
+    /// Advisory fidelity tags recorded for a given target, in insertion order (Band A, increment
+    /// 2). Read-only metadata — it never participates in any gate; it only makes visible how well
+    /// a derived fact is known (Map 6).
+    pub fn fidelity_for(&self, target: EntityId) -> Vec<&ModelFidelity> {
+        self.fidelity_tags
+            .iter()
+            .filter(|t| t.target == target)
+            .map(|t| &t.fidelity)
+            .collect()
     }
 
     /// Undischarged CRITICAL assumptions — the honesty gate (Band A, exit criterion 1). A

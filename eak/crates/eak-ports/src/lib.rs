@@ -11,8 +11,8 @@
 
 use eak_domain::{
     Assumption, Board, BomLineItem, Component, Constraint, Decision, DesignIntent, Discharge,
-    Evidence, FunctionalBlock, Net, Part, Pin, Placement, Priority, ProvenanceLink, Requirement,
-    RequirementCategory, Track, Violation, Waiver,
+    Evidence, FunctionalBlock, ModelFidelity, Net, Part, Pin, Placement, Priority, ProvenanceLink,
+    Requirement, RequirementCategory, Track, Violation, Waiver,
 };
 use eak_units::PhysicalQuantity;
 use serde::{Deserialize, Serialize};
@@ -208,6 +208,22 @@ pub enum Event {
     AssumptionDischarged {
         assumption: eak_domain::EntityId,
         discharge: Discharge,
+    },
+
+    // ---- Band A (increment 2): fidelity tag — advisory-only metadata ----
+    /// A trust-tag ([`ModelFidelity`]) attached to a derived/predicted fact (Map 6), committed
+    /// as ADVISORY metadata through the audit seam — exactly like [`Event::ViolationExplained`].
+    ///
+    /// INVARIANT (advisory-only, structural): the fold pushes into a SEPARATE store
+    /// (`EngineeringState::fidelity_tags`), keyed by `target`; it NEVER mutates the tagged entity,
+    /// NEVER gates a phase, and NEVER drives a kernel mutation (P3). `target` is the entity the tag
+    /// describes; `reasoning_call_seq`, when present, points back at the [`Event::ReasoningCall`]
+    /// that produced the tag (provenance-by-construction), and is `None` when the runtime tags a
+    /// fact itself (e.g. a first-order floor).
+    FidelityTagged {
+        target: eak_domain::EntityId,
+        fidelity: ModelFidelity,
+        reasoning_call_seq: Option<Seq>,
     },
 }
 

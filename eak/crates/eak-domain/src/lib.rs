@@ -874,6 +874,55 @@ impl Assumption {
     }
 }
 
+// ================= Band A (increment 2): ModelFidelity =================
+//
+// A trust-tag on a derived/predicted fact (Map 6). It is ADVISORY attached metadata, modeled
+// EXACTLY like `ViolationExplanation`: it carries NO `EntityId` of its own, references a target,
+// folds into its own store, and never mutates the target — so it can never usurp an object's
+// authority (P3). Its one domain invariant is a numeric boundary: `confidence ∈ [0,1]`.
+// `ModelFidelity` carries an `f64`, so — like `Component`/`Net` — it derives `PartialEq` but NOT
+// `Eq`. `validate()` reuses `Inconsistent` (no new `DomainError` variant).
+
+/// How a fact was established, from weakest to strongest. A tag declares which method backs the
+/// number so the honesty is visible (`00` Principle 7 — honest about certainty).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum FidelityMethod {
+    /// A bare presumption, no calculation behind it.
+    Assumed,
+    /// A conservative first-order floor (e.g. an IPC default), not a real calculation.
+    FirstOrderFloor,
+    /// Hand/closed-form calculation.
+    Calculated,
+    /// Established by simulation.
+    Simulated,
+    /// Established by physical measurement — the strongest.
+    Measured,
+}
+
+/// An advisory trust-tag on a derived fact: which `concern` it speaks to, by what `method`, with
+/// what `confidence ∈ [0,1]`, over what `scope`. It has no id and no lifecycle; it only describes.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ModelFidelity {
+    pub concern: String,
+    pub method: FidelityMethod,
+    pub confidence: f64,
+    pub scope: String,
+}
+
+impl ModelFidelity {
+    /// The single domain invariant: `confidence` is a real number in the CLOSED interval
+    /// `[0, 1]`. Written as `!(0.0..=1.0).contains(&c)` so that NaN — which is neither `>= 0`
+    /// nor `<= 1` — is rejected rather than silently admitted. Reuses `Inconsistent`.
+    pub fn validate(&self) -> Result<(), DomainError> {
+        if !(0.0..=1.0).contains(&self.confidence) {
+            return Err(DomainError::Inconsistent(
+                "fidelity confidence must be within [0, 1]",
+            ));
+        }
+        Ok(())
+    }
+}
+
 /// A violated domain invariant.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DomainError {
@@ -1595,5 +1644,68 @@ mod tests {
         let normal = open_assumption("normal presumption", AssumptionCriticality::Normal);
         assert!(normal.is_open());
         assert!(!normal.is_blocking());
+    }
+
+    // ================= Band A (increment 2): ModelFidelity =================
+    //
+    // TDD (written before the object): the trust-tag on a derived fact (Map 6). A
+    // `ModelFidelity{concern, method, confidence, scope}` is ADVISORY attached metadata,
+    // modeled EXACTLY like `ViolationExplanation` (no `EntityId` of its own, folds into its
+    // own store, references a target, never mutates it). Its one domain invariant is a
+    // numeric boundary: `confidence ∈ [0,1]`. `validate()` reuses `Inconsistent` (no new
+    // `DomainError` variant). `ModelFidelity` carries an `f64`, so — like `Component`/`Net` —
+    // it derives `PartialEq` but NOT `Eq`.
+    //
+    // Delivers exit criterion 2 (every predicted/derived fact carries a fidelity tag).
+
+    fn fidelity(concern: &str, method: FidelityMethod, confidence: f64) -> ModelFidelity {
+        ModelFidelity {
+            concern: concern.into(),
+            method,
+            confidence,
+            scope: "the 3.3 V rail".into(),
+        }
+    }
+
+    #[test]
+    fn well_formed_fidelity_tag_validates() {
+        let f = fidelity(
+            "worst-case junction temperature",
+            FidelityMethod::FirstOrderFloor,
+            0.6,
+        );
+        assert!(f.validate().is_ok());
+    }
+
+    #[test]
+    fn fidelity_confidence_zero_and_one_are_valid_boundaries() {
+        // The interval is CLOSED: both endpoints are legal (a measured fact may be 1.0; a
+        // pure guess may be 0.0). This is the epsilon/boundary case for the numeric invariant.
+        let floor = fidelity("assumed", FidelityMethod::Assumed, 0.0);
+        assert!(floor.validate().is_ok(), "confidence == 0.0 is valid");
+        let ceil = fidelity("measured", FidelityMethod::Measured, 1.0);
+        assert!(ceil.validate().is_ok(), "confidence == 1.0 is valid");
+    }
+
+    #[test]
+    fn fidelity_confidence_above_one_is_inconsistent() {
+        // Just past the boundary: 1.0 + epsilon must reject.
+        let f = fidelity("over-confident", FidelityMethod::Calculated, 1.000_000_1);
+        assert!(matches!(f.validate(), Err(DomainError::Inconsistent(_))));
+    }
+
+    #[test]
+    fn fidelity_confidence_below_zero_is_inconsistent() {
+        let f = fidelity("negative", FidelityMethod::Simulated, -0.000_000_1);
+        assert!(matches!(f.validate(), Err(DomainError::Inconsistent(_))));
+    }
+
+    #[test]
+    fn fidelity_confidence_nan_is_inconsistent() {
+        // NaN is neither ≥0 nor ≤1, so it must be rejected (a fidelity tag with an undefined
+        // confidence is not honest metadata). Guards the naive `0.0..=1.0` range check that
+        // would silently admit NaN.
+        let f = fidelity("undefined", FidelityMethod::Calculated, f64::NAN);
+        assert!(matches!(f.validate(), Err(DomainError::Inconsistent(_))));
     }
 }
