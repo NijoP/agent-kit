@@ -1,0 +1,148 @@
+/* ============================================================================================
+ * Full-ECAD PCB canvas — a projection of the owned model rendered in the EasyEDA idiom.
+ * ==========================================================================================*/
+
+.pcb {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: 22px 1fr;
+  grid-template-rows: 22px 1fr;
+  background: var(--ecad-board);
+  cursor: crosshair;
+}
+.pcb.pan {
+  cursor: grab;
+}
+.pcb.panning {
+  cursor: grabbing;
+}
+.ruler-corner {
+  background: var(--ecad-ruler-bg);
+  border-right: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.ruler {
+  background: var(--ecad-ruler-bg);
+  overflow: hidden;
+  position: relative;
+}
+.ruler.top {
+  border-bottom: 1px solid var(--border-subtle);
+}
+.ruler.left {
+  border-right: 1px solid var(--border-subtle);
+}
+.ruler-tick {
+  stroke: var(--text-muted);
+  stroke-width: 1;
+}
+.ruler-label {
+  fill: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 9px;
+}
+.pcb-viewport {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(120% 120% at 50% 45%, #0f1418 0%, var(--ecad-board) 85%);
+}
+.pcb-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* board */
+.brd-outline {
+  fill: #0b1418;
+  stroke: var(--ecad-outline);
+  stroke-width: 0.2;
+}
+.brd-grid {
+  stroke: var(--ecad-grid);
+  stroke-width: 0.06;
+}
+.brd-grid.major {
+  stroke: var(--ecad-grid-major);
+  stroke-width: 0.08;
+}
+
+/* copper pads (footprint courtyards, v1) */
+.pad {
+  stroke-width: 0.12;
+  transition: filter var(--dur-micro) var(--ease);
+  cursor: pointer;
+}
+.pad.top {
+  fill: color-mix(in srgb, var(--ecad-copper-top) 30%, transparent);
+  stroke: var(--ecad-copper-top);
+}
+.pad.bottom {
+  fill: color-mix(in srgb, var(--ecad-copper-bottom) 30%, transparent);
+  stroke: var(--ecad-copper-bottom);
+}
+.pad.sel {
+  fill: var(--accent-wash);
+  stroke: var(--accent);
+  stroke-width: 0.25;
+}
+.pad.hot {
+  filter: drop-shadow(0 0 1.2px var(--accent));
+}
+.pad-hole {
+  fill: var(--ecad-board);
+  stroke: var(--ecad-drill);
+  stroke-width: 0.08;
+}
+.silk {
+  fill: var(--ecad-silk);
+  font-family: var(--font-mono);
+  font-weight: 500;
+  text-anchor: middle;
+  pointer-events: none;
+}
+.ratline {
+  stroke: var(--ecad-ratline);
+  stroke-width: 0.08;
+  stroke-dasharray: 0.5 0.4;
+  opacity: 0.65;
+}
+.track {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.track.top {
+  stroke: var(--ecad-copper-top);
+}
+.track.bottom {
+  stroke: var(--ecad-copper-bottom);
+}
+.track.sel {
+  stroke: var(--accent);
+}
+.drc-marker {
+  fill: none;
+  stroke: var(--error);
+  stroke-width: 0.2;
+  stroke-dasharray: 0.6 0.4;
+  animation: eak-pulse 1.6s var(--ease) infinite;
+}
+
+/* pcb empty state */
+.pcb-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 13px;
+  text-align: center;
+}

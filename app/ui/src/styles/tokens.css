@@ -1,0 +1,86 @@
+/*
+ * Graphite + Signal — the EAK design language.
+ * These tokens are the canonical implementation of USER-MANUAL.md §11 (CMF spec).
+ * Do not improvise a second system; extend here.
+ */
+:root {
+  /* ---- C · Color — surfaces (near-black, never pure black; lighter as they rise) ---- */
+  --bg-app: #0a0b0d;
+  --surface-base: #101317;
+  --surface-raised: #161a1f;
+  --surface-overlay: #1c2127;
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border-strong: rgba(255, 255, 255, 0.12);
+
+  /* ---- C · Color — text (primary is ~90%, never pure #fff) ---- */
+  --text-primary: #e7eaee;
+  --text-secondary: #9ba3ad;
+  --text-muted: #646c77;
+
+  /* ---- C · Color — the one signal accent, used scarcely ---- */
+  --accent: #4cc2ff;
+  --accent-pressed: #37a7e4;
+  --accent-wash: rgba(76, 194, 255, 0.1);
+  --accent-ring: rgba(76, 194, 255, 0.4);
+
+  /* ---- C · Color — semantic status (desaturated for dark) ---- */
+  --pass: #48b98a;
+  --warn: #e0a93b;
+  --error: #ff5c5c;
+  --cassette: #8b7cf6;
+  --scaffold: #5b6672;
+  --pass-wash: rgba(72, 185, 138, 0.12);
+  --warn-wash: rgba(224, 169, 59, 0.12);
+  --error-wash: rgba(255, 92, 92, 0.12);
+  --cassette-wash: rgba(139, 124, 246, 0.14);
+
+  /* ---- M · Material — elevation via borders + one-step lift, not shadows ---- */
+  --shadow-float: 0 8px 24px rgba(0, 0, 0, 0.45);
+  --shadow-inset-top: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+
+  /* ---- F · Finish — motion ---- */
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --dur-micro: 140ms;
+  --dur-panel: 200ms;
+  --dur-page: 240ms;
+
+  /* ---- Typography ---- */
+  --font-ui: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+
+  /* ---- Spacing (4px grid) & radius (restrained) ---- */
+  --r-control: 6px;
+  --r-card: 8px;
+  --r-pill: 9999px;
+
+  /* ---- Layout metrics ---- */
+  --rail-w: 48px;
+  --menubar-h: 36px;
+  --toolbar-h: 34px;
+  --statusbar-h: 26px;
+  --tabbar-h: 34px;
+  --sidebar-w: 248px;
+  --rightdock-w: 264px;
+  --bottomdock-h: 200px;
+
+  /* ---- ECAD layer colors (dark-theme-tuned, desaturated, on-brand — a projection palette) ---- */
+  --ecad-board: #0c1013;          /* board substrate */
+  --ecad-outline: #d081d8;        /* board outline (magenta family, muted) */
+  --ecad-copper-top: #d8635a;     /* top copper (warm red) */
+  --ecad-copper-bottom: #5b8bd0;  /* bottom copper (blue) */
+  --ecad-silk: #cfd6dd;           /* silkscreen refdes */
+  --ecad-ratline: #6fb2c9;        /* unrouted ratlines (cyan) */
+  --ecad-drill: #8b949e;          /* drill / pad hole */
+  --ecad-grid: rgba(255, 255, 255, 0.05);
+  --ecad-grid-major: rgba(255, 255, 255, 0.09);
+  --ecad-ruler-bg: #0d1115;
+  --ecad-select: var(--accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-micro: 0ms;
+    --dur-panel: 0ms;
+    --dur-page: 0ms;
+  }
+}

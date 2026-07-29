@@ -1,0 +1,298 @@
+/* ============================================================================================
+ * Docs-first surfaces: editor tab strip, the doc editor, and the Markdown renderer.
+ * ==========================================================================================*/
+
+/* ---- Editor tab strip (VS Code-like) ---------------------------------------------------- */
+.etab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 100%;
+  padding: 0 10px 0 12px;
+  border-right: 1px solid var(--border-subtle);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  cursor: pointer;
+  position: relative;
+  max-width: 220px;
+}
+.etab:hover {
+  color: var(--text-secondary);
+}
+.etab.active {
+  color: var(--text-primary);
+  background: var(--surface-base);
+}
+.etab.active::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -1px;
+  height: 2px;
+  background: var(--accent);
+}
+.etab-icon {
+  display: inline-flex;
+  color: var(--text-muted);
+}
+.etab.active .etab-icon {
+  color: var(--accent);
+}
+.etab-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.etab-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  opacity: 0;
+}
+.etab:hover .etab-close,
+.etab.active .etab-close {
+  opacity: 1;
+}
+.etab-close:hover {
+  background: var(--surface-overlay);
+  color: var(--text-primary);
+}
+.etab-empty {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 14px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+/* ---- Doc editor ------------------------------------------------------------------------- */
+.doc {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-base);
+}
+.doc-bar {
+  height: var(--toolbar-h);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+.doc-viewtoggle {
+  display: flex;
+  gap: 2px;
+}
+.doc-bar .grow {
+  flex: 1;
+}
+.sync-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 20px;
+  padding: 0 9px;
+  border-radius: var(--r-pill);
+  border: 1px solid rgba(72, 185, 138, 0.4);
+  background: var(--pass-wash);
+  color: var(--pass);
+  font-size: 11px;
+  font-weight: 600;
+}
+.doc-links {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.doc-body {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+.doc-page {
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 28px 40px 80px;
+}
+.doc-source {
+  margin: 0;
+  padding: 20px 28px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 20px;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+}
+
+/* ---- Markdown renderer ------------------------------------------------------------------ */
+.markdown {
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 22px;
+}
+.md-h {
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+  margin: 22px 0 10px;
+}
+.md-h1 {
+  font-size: 26px;
+  line-height: 32px;
+  margin-top: 0;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.md-h2 {
+  font-size: 18px;
+  line-height: 24px;
+}
+.md-h3 {
+  font-size: 15px;
+  line-height: 22px;
+  color: var(--text-secondary);
+}
+.md-p {
+  margin: 10px 0;
+}
+.md-quote {
+  margin: 12px 0;
+  padding: 8px 14px;
+  border-left: 2px solid var(--accent);
+  background: var(--accent-wash);
+  color: var(--text-secondary);
+  border-radius: 0 var(--r-control) var(--r-control) 0;
+}
+.md-list {
+  margin: 10px 0;
+  padding-left: 20px;
+}
+.md-list li {
+  margin: 4px 0;
+}
+.md-check {
+  list-style: none;
+  margin-left: -20px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.md-box {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  font-size: 10px;
+  color: var(--pass);
+  flex-shrink: 0;
+}
+.md-box.done {
+  background: var(--pass-wash);
+  border-color: var(--pass);
+}
+.md-code {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--surface-overlay);
+  color: var(--text-primary);
+}
+.md-link {
+  color: var(--accent);
+  text-decoration: none;
+}
+.md-link:hover {
+  text-decoration: underline;
+}
+.md-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 0 6px;
+  height: 18px;
+  border-radius: var(--r-pill);
+  border: 1px solid rgba(76, 194, 255, 0.35);
+  background: var(--accent-wash);
+  color: var(--accent);
+  cursor: pointer;
+  vertical-align: baseline;
+}
+.md-chip:hover {
+  border-color: var(--accent);
+  background: rgba(76, 194, 255, 0.16);
+}
+.md-table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 12px 0;
+  font-size: 13px;
+}
+.md-table th,
+.md-table td {
+  border: 1px solid var(--border-subtle);
+  padding: 6px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+.md-table th {
+  background: var(--surface-raised);
+  color: var(--text-secondary);
+  font-weight: 500;
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+.md-table td {
+  color: var(--text-secondary);
+}
+
+/* ---- Agent change-set card (bottom dock) ------------------------------------------------ */
+.changeset {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-card);
+  background: var(--surface-raised);
+  overflow: hidden;
+}
+.changeset-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+}
+.changeset-body {
+  padding: 10px 12px;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  line-height: 18px;
+}
+.changeset-example {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 8px 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.cs-line.add {
+  color: var(--pass);
+}

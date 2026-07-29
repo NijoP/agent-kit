@@ -1,0 +1,652 @@
+/* ============================================================================================
+ * IDE shell — Cursor/VSCode frame with EasyEDA-native organization inside.
+ * Reuses the atoms in components.css (.btn, .badge, .pill, .kbd, .tree-*, .prop-*, .palette-*,
+ * .msg/.feed, .empty). This file owns the shell layout + chrome.
+ * ==========================================================================================*/
+
+.ide {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--bg-app);
+}
+
+/* ---- Menu bar --------------------------------------------------------------------------- */
+.ide-menubar {
+  height: var(--menubar-h);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface-base);
+  user-select: none;
+  flex-shrink: 0;
+}
+.ide-menubar .brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 10px 0 4px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+.ide-menubar .brand .mark {
+  color: var(--accent);
+  display: inline-flex;
+}
+.menu {
+  position: relative;
+}
+.menu > .menu-label {
+  height: 24px;
+  padding: 0 9px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 5px;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
+.menu > .menu-label:hover,
+.menu.open > .menu-label {
+  background: var(--surface-overlay);
+  color: var(--text-primary);
+}
+.menu-pop {
+  position: absolute;
+  top: 28px;
+  left: 0;
+  min-width: 210px;
+  padding: 5px;
+  background: var(--surface-overlay);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  box-shadow: var(--shadow-float), var(--shadow-inset-top);
+  z-index: 60;
+}
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 5px;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  background: none;
+  border: none;
+  width: 100%;
+  text-align: left;
+}
+.menu-item:hover {
+  background: var(--accent-wash);
+  color: var(--text-primary);
+}
+.menu-item .kbd {
+  margin-left: auto;
+}
+.menu-item.disabled {
+  color: var(--text-muted);
+  opacity: 0.6;
+  pointer-events: none;
+}
+.menu-sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--border-subtle);
+}
+
+.cmdbar {
+  flex: 1;
+  max-width: 520px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 26px;
+  padding: 0 10px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-control);
+  color: var(--text-muted);
+  font-size: 12.5px;
+}
+.cmdbar:hover {
+  border-color: var(--border-strong);
+}
+.cmdbar .kbd {
+  margin-left: auto;
+}
+.winctl {
+  display: flex;
+  gap: 6px;
+  padding-left: 8px;
+}
+.winctl .wc {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--surface-overlay);
+}
+
+/* ---- Body: activitybar | workarea ------------------------------------------------------- */
+.ide-body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+.ide-activitybar {
+  width: var(--rail-w);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 8px 0;
+  background: var(--bg-app);
+  border-right: 1px solid var(--border-subtle);
+}
+.abtn {
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-control);
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  position: relative;
+  transition: color var(--dur-micro) var(--ease), background var(--dur-micro) var(--ease);
+}
+.abtn:hover {
+  color: var(--text-secondary);
+  background: var(--surface-overlay);
+}
+.abtn.active {
+  color: var(--accent);
+}
+.abtn.active::before {
+  content: "";
+  position: absolute;
+  left: -0px;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+.ide-activitybar .spacer {
+  flex: 1;
+}
+
+.ide-workarea {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.ide-panels {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+/* ---- Sidebar (left primary panel) ------------------------------------------------------- */
+.ide-sidebar {
+  width: var(--sidebar-w);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--surface-base);
+  border-right: 1px solid var(--border-subtle);
+}
+.sidebar-head {
+  display: flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 12px;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+.sidebar-head .head-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 2px;
+}
+.sidebar-body {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+/* ---- Editor area ------------------------------------------------------------------------ */
+.ide-editor {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--surface-base);
+}
+.tabbar {
+  height: var(--tabbar-h);
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-app);
+  flex-shrink: 0;
+}
+.doctab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 14px;
+  border: none;
+  border-right: 1px solid var(--border-subtle);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  position: relative;
+}
+.doctab:hover {
+  color: var(--text-secondary);
+}
+.doctab.active {
+  color: var(--text-primary);
+  background: var(--surface-base);
+}
+.doctab.active::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -1px;
+  height: 2px;
+  background: var(--accent);
+}
+.doctab .plan {
+  font-size: 9px;
+  color: var(--scaffold);
+}
+.editor-stage {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+/* context toolbar under the tabs (canvas tools) */
+.ctxbar {
+  height: var(--toolbar-h);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface-base);
+  flex-shrink: 0;
+}
+.ctxbar .sep {
+  width: 1px;
+  height: 18px;
+  background: var(--border-subtle);
+  margin: 0 4px;
+}
+.ctxbar .grow {
+  flex: 1;
+}
+.ctxbar .proj-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--scaffold);
+  border: 1px dashed var(--scaffold);
+  border-radius: var(--r-pill);
+  padding: 1px 8px;
+}
+.iconbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid transparent;
+  border-radius: var(--r-control);
+  background: transparent;
+  color: var(--text-secondary);
+  transition: color var(--dur-micro) var(--ease), background var(--dur-micro) var(--ease);
+}
+.iconbtn:hover {
+  color: var(--text-primary);
+  background: var(--surface-overlay);
+}
+.iconbtn.on {
+  color: var(--accent);
+}
+.iconbtn:active {
+  transform: translateY(1px);
+}
+
+/* ---- Right dock (Layers + Inspector) ---------------------------------------------------- */
+.ide-rightdock {
+  width: var(--rightdock-w);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--surface-base);
+  border-left: 1px solid var(--border-subtle);
+}
+.dock-section {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.dock-section.layers {
+  flex-shrink: 0;
+  max-height: 46%;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.dock-section.inspector {
+  flex: 1;
+  min-height: 0;
+}
+.dock-head {
+  display: flex;
+  align-items: center;
+  height: 30px;
+  padding: 0 12px;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+.dock-body {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+/* Layers panel rows */
+.layer-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: 30px;
+  padding: 0 12px;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-subtle);
+  cursor: pointer;
+}
+.layer-row:hover {
+  background: var(--surface-overlay);
+}
+.layer-row.off {
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+.layer-swatch {
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+.layer-row .lname {
+  flex: 1;
+}
+.layer-row .lcount {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.layer-row .eye {
+  display: inline-flex;
+  color: var(--text-muted);
+}
+.layer-row:hover .eye {
+  color: var(--text-secondary);
+}
+
+/* ---- Bottom dock (DRC / Log / Find / Agent) --------------------------------------------- */
+.ide-bottomdock {
+  height: var(--bottomdock-h);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--surface-base);
+}
+.dock-tabs {
+  height: 30px;
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+.dock-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  border-bottom: 2px solid transparent;
+}
+.dock-tab:hover {
+  color: var(--text-secondary);
+}
+.dock-tab.active {
+  color: var(--text-primary);
+  border-bottom-color: var(--accent);
+}
+.dock-tab .badge-num {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 0 5px;
+  border-radius: var(--r-pill);
+  background: var(--error-wash);
+  color: var(--error);
+}
+.dock-tab .badge-num.ok {
+  background: var(--pass-wash);
+  color: var(--pass);
+}
+.dock-tabs .grow {
+  flex: 1;
+}
+.dock-content {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.drc-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 14px;
+  font-size: 12.5px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.drc-row .glyph {
+  display: inline-flex;
+}
+.drc-row .rule {
+  font-weight: 600;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+.drc-row .msg {
+  color: var(--text-primary);
+  flex: 1;
+  background: none;
+  border: none;
+  text-align: left;
+  padding: 0;
+}
+.drc-row .subj {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.drc-row .actions {
+  display: flex;
+  gap: 6px;
+}
+.drc-clean {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px;
+  color: var(--pass);
+  font-size: 13px;
+}
+.log-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 2px 14px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+}
+.log-row .lseq {
+  color: var(--text-muted);
+  width: 40px;
+  text-align: right;
+}
+.log-row .lkind {
+  color: var(--accent);
+  min-width: 190px;
+}
+.log-row .lbody {
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- Status bar ------------------------------------------------------------------------- */
+.ide-statusbar {
+  height: var(--statusbar-h);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 12px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--surface-base);
+  font-size: 11.5px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.ide-statusbar .seg {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.ide-statusbar .seg .mono {
+  color: var(--text-secondary);
+}
+.ide-statusbar .spacer {
+  flex: 1;
+}
+.gate-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 18px;
+  padding: 0 8px;
+  border-radius: var(--r-pill);
+  border: 1px solid;
+  font-weight: 600;
+  font-size: 10.5px;
+  letter-spacing: 0.03em;
+}
+.gate-chip.released {
+  color: var(--pass);
+  border-color: var(--pass);
+  background: var(--pass-wash);
+}
+.gate-chip.blocked {
+  color: var(--error);
+  border-color: var(--error);
+  background: var(--error-wash);
+}
+.gate-chip.progress {
+  color: var(--text-secondary);
+  border-color: var(--border-strong);
+}
+
+/* ---- Design tree ------------------------------------------------------------------------ */
+.tree {
+  padding: 4px 0;
+}
+.trow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 12px;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  background: none;
+  border: none;
+  width: 100%;
+  text-align: left;
+}
+.trow:hover {
+  background: var(--surface-overlay);
+}
+.trow.sel {
+  background: var(--accent-wash);
+  color: var(--text-primary);
+}
+.trow .chev {
+  display: inline-flex;
+  color: var(--text-muted);
+  width: 14px;
+}
+.trow .ticon {
+  display: inline-flex;
+  color: var(--text-muted);
+}
+.trow.depth1 {
+  padding-left: 24px;
+}
+.trow.depth2 {
+  padding-left: 38px;
+}
+.trow.depth3 {
+  padding-left: 52px;
+}
+.trow .tcount {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.trow .refdes {
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+}

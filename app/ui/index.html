@@ -1,68 +1,19 @@
 <!doctype html>
 <html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Electronics Agent Kit</title>
-  <style>
-    :root { color-scheme: dark; }
-    body { font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; margin: 0;
-           background: #0b0d10; color: #d6dbe1; }
-    header { padding: 12px 16px; border-bottom: 1px solid #1c2128; display: flex; gap: 12px;
-             align-items: center; position: sticky; top: 0; background: #0b0d10; }
-    header strong { color: #f0f3f6; white-space: nowrap; }
-    #intent { flex: 1; padding: 7px 10px; background: #12161b; color: #d6dbe1;
-              border: 1px solid #1c2128; border-radius: 6px; }
-    button { background: #2563eb; color: #fff; border: 0; padding: 8px 16px; border-radius: 6px;
-             cursor: pointer; font-weight: 600; }
-    #feed { padding: 4px 16px 40px; }
-    .ev { padding: 5px 8px; border-bottom: 1px solid #12161b; display: flex; gap: 14px; }
-    .seq { color: #5b6672; width: 40px; text-align: right; }
-    .kind { color: #7dd3fc; min-width: 210px; }
-    .body { color: #8b95a3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .empty { color: #5b6672; padding: 24px 8px; }
-  </style>
-</head>
-<body>
-  <header>
-    <strong>⚡ Electronics Agent Kit</strong>
-    <input id="intent" value="USB-C powered I2C temperature sensor, &lt; 1 W" />
-    <button id="run">Run ▶</button>
-  </header>
-  <div id="feed"><div class="empty">Enter a design intent and press Run — the kernel's live engineering-state stream appears here.</div></div>
-
-  <script type="module">
-    // Live view of the kernel's committed-event stream. Each row is one EventRecord
-    // {seq, timestamp, event}, forwarded by the Rust `TauriEventSink` as an `eak://event` event.
-    import { invoke } from '@tauri-apps/api/core';
-    import { listen } from '@tauri-apps/api/event';
-
-    const feed = document.getElementById('feed');
-
-    listen('eak://event', (e) => {
-      const rec = e.payload;                       // { seq, timestamp, event }
-      // serde serializes a unit variant as a string and a data variant as { VariantName: {..} }.
-      const kind = typeof rec.event === 'string' ? rec.event : Object.keys(rec.event)[0];
-      const data = typeof rec.event === 'string' ? {} : (rec.event[kind] ?? {});
-      if (feed.querySelector('.empty')) feed.innerHTML = '';
-      const row = document.createElement('div');
-      row.className = 'ev';
-      row.innerHTML =
-        `<span class="seq">#${rec.seq}</span>` +
-        `<span class="kind">${kind}</span>` +
-        `<span class="body">${escapeHtml(JSON.stringify(data))}</span>`;
-      feed.appendChild(row);
-      window.scrollTo(0, document.body.scrollHeight);
-    });
-
-    document.getElementById('run').onclick = () => {
-      feed.innerHTML = '';
-      invoke('start_run', { intent: document.getElementById('intent').value });
-    };
-
-    function escapeHtml(s) {
-      return s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
-    }
-  </script>
-</body>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <title>Electronics Agent Kit</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
 </html>
