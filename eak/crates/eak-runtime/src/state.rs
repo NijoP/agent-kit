@@ -7,8 +7,8 @@
 use eak_domain::{
     Assumption, AssumptionStatus, Board, BomLineItem, Component, Constraint, Decision,
     DesignIntent, EntityId, Evidence, FunctionalBlock, ModelFidelity, Net, Objective, Part, Pin,
-    Placement, ProvenanceLink, Requirement, Risk, RiskSeverity, RiskStatus, Track, Tradeoff,
-    Violation, ViolationStatus, Waiver,
+    Placement, PowerDomain, ProvenanceLink, Requirement, Risk, RiskSeverity, RiskStatus, Track,
+    Tradeoff, Violation, ViolationStatus, Waiver,
 };
 use eak_ports::{Event, Seq};
 use serde::{Deserialize, Serialize};
@@ -88,6 +88,13 @@ pub struct EngineeringState {
     // byte-identically.
     pub objectives: Vec<Objective>,
     pub tradeoffs: Vec<Tradeoff>,
+    // Band B (Phase 5, increment 1): the power architecture (Map 38). A power domain is a named
+    // rail holding its nets at `voltage`, supplied by one source component with a finite
+    // `max_current`. Kept in insertion (event) order so a run and its replay serialize
+    // byte-identically. Whether a domain's net loads exceed its source budget is the
+    // PowerBalanceRule's judgement at ERC time — a well-formed but overloaded rail still belongs
+    // in state so the rule can report it.
+    pub power_domains: Vec<PowerDomain>,
 }
 
 impl EngineeringState {
@@ -184,6 +191,9 @@ impl EngineeringState {
             // (P4, exit criterion 3).
             Event::ObjectiveRecorded { objective } => self.objectives.push(objective.clone()),
             Event::TradeoffRecorded { tradeoff } => self.tradeoffs.push(tradeoff.clone()),
+            // Band B (Phase 5, increment 1): the power architecture. Committing a power domain
+            // pushes it into its own store (insertion order, so replay is byte-identical, P4).
+            Event::PowerDomainCommitted { domain } => self.power_domains.push(domain.clone()),
             // Audit-only events (phase lifecycle, reasoning calls, IR-boundary milestones)
             // carry no state and are intentionally not folded. AUDIT: any NEW state-bearing
             // event variant MUST get an explicit arm above, or replay will silently diverge.
@@ -306,6 +316,10 @@ impl EngineeringState {
 
     pub fn tradeoff(&self, id: EntityId) -> Option<&Tradeoff> {
         self.tradeoffs.iter().find(|t| t.id == id)
+    }
+
+    pub fn power_domain(&self, id: EntityId) -> Option<&PowerDomain> {
+        self.power_domains.iter().find(|d| d.id == id)
     }
 
     /// Deterministic serialization used to assert byte-identity between a run and its

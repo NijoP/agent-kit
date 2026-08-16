@@ -11,7 +11,7 @@ use crate::state::EngineeringState;
 use eak_domain::{
     Assumption, Board, BomLineItem, Component, ComponentOrigin, Constraint, Decision, DesignIntent,
     Discharge, EntityId, Evidence, FunctionalBlock, Net, NetOrigin, Objective, Part, Pin,
-    Placement, ProvenanceLink, Requirement, Risk, Track, Tradeoff, Violation, Waiver,
+    Placement, PowerDomain, ProvenanceLink, Requirement, Risk, Track, Tradeoff, Violation, Waiver,
 };
 use eak_ports::{
     Event, EventLog, EventRecord, EventSink, ReasoningEngine, ReasoningError, ReasoningRequest,
@@ -754,6 +754,51 @@ impl RuntimeCore {
             .map_err(|e| CapabilityError::Rejected(e.to_string()))?;
         Ok(CapabilityAck { committed: seqs })
     }
+
+    fn handle_create_power_domain(
+        &mut self,
+        domain: PowerDomain,
+        links: Vec<ProvenanceLink>,
+    ) -> Result<CapabilityAck, CapabilityError> {
+        // The seam (P3): re-validate the power domain (non-empty name, positive voltage, positive
+        // max current, >=1 net) before committing — the model is never trusted to have formed a
+        // well-shaped rail.
+        domain
+            .validate()
+            .map_err(|e| CapabilityError::Rejected(e.to_string()))?;
+        // A rail with no supplying component is untraceable to intent (P3) — reject it.
+        if domain.source_component.is_null() {
+            return Err(CapabilityError::Rejected(
+                "power domain has no source component".into(),
+            ));
+        }
+        // Referential integrity at the seam: the source component must be committed (P3, P5).
+        if self.state.component(domain.source_component).is_none() {
+            return Err(CapabilityError::Rejected(format!(
+                "power domain source component {} does not exist",
+                domain.source_component.short()
+            )));
+        }
+        // Referential integrity at the seam: every rail net must be a committed net, so the domain
+        // can never reference a phantom rail (P3, P5).
+        for nid in &domain.nets {
+            if self.state.net(*nid).is_none() {
+                return Err(CapabilityError::Rejected(format!(
+                    "power domain references unknown net {}",
+                    nid.short()
+                )));
+            }
+        }
+
+        let mut events = vec![Event::PowerDomainCommitted { domain }];
+        for link in links {
+            events.push(Event::ProvenanceLinked { link });
+        }
+        let seqs = self
+            .commit(events)
+            .map_err(|e| CapabilityError::Rejected(e.to_string()))?;
+        Ok(CapabilityAck { committed: seqs })
+    }
 }
 
 impl AgentContext for RuntimeCore {
@@ -853,6 +898,10 @@ impl AgentContext for RuntimeCore {
         self.state.tradeoffs.clone()
     }
 
+    fn power_domains(&self) -> Vec<PowerDomain> {
+        self.state.power_domains.clone()
+    }
+
     fn reason(
         &mut self,
         mut req: ReasoningRequest,
@@ -921,6 +970,9 @@ impl AgentContext for RuntimeCore {
             }
             CapabilityRequest::RecordTradeoff { tradeoff, links } => {
                 self.handle_record_tradeoff(tradeoff, links)
+            }
+            CapabilityRequest::CreatePowerDomain { domain, links } => {
+                self.handle_create_power_domain(domain, links)
             }
         }
     }

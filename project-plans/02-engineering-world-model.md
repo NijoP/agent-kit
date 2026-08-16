@@ -411,6 +411,9 @@ Signal Flow, Interface/Contract, Bus/Protocol, Subsystem.**
   rules (power balance, mux conflict, CDC, protocol) added to the verification engine.
 - *New objects:* `PowerDomain`, `ReturnPath`, `ClockDomain`, `PinAssignment`/`PinCapability`,
   `Signal`, `Interface`, `Bus`, `Subsystem`.
+- *Status:* increment 1 — `PowerDomain` implemented (domain `validate()`, seam `CreatePowerDomain`,
+  `erc-power-balance` rule; [ADR-0022](../docs/decisions/0022-band-b-power-domain.md)). Remaining
+  objects follow one per increment through the same seam.
 - *Unlocks:* AI that plans power/pin-out/interfaces (huge real value); ERC-by-contract; correct
   return paths (prevents most SI/EMC failure by construction).
 

@@ -1085,6 +1085,67 @@ impl Tradeoff {
     }
 }
 
+// ===================== Band B (Phase 5, increment 1): Power Domain =====================
+//
+// The first logical-electrical Map (Map 38; `02 §Band B`). A [`PowerDomain`] is a named power
+// rail: the set of [`Net`]s that must all be held at a nominal `voltage`, supplied by a single
+// [`Component`] (a regulator/connector) with a finite `max_current` the source can deliver.
+// Real power engineering (KCL / PI, `engineering-science/electrical/*`) reduces to a *budget*:
+// the sum of the currents the domain's nets must carry must not exceed what its source can
+// supply. That check is [`PowerBalanceRule`] (in `eak-engines`), not `validate()` — a domain is
+// self-consistent even when overloaded; it is the *design* that is wrong, and the rule says so.
+//
+// `PowerDomain` carries `PhysicalQuantity` fields, so — like [`Component`]/[`Net`] — it derives
+// `PartialEq` but NOT `Eq`. `validate()` reuses existing [`DomainError`] variants only.
+
+/// A named power rail: one [`Net`] group held at `voltage`, supplied by one source component.
+/// See the module comment above.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PowerDomain {
+    pub id: EntityId,
+    /// The rail name (e.g. `"3V3"`, `"VBUS"`, `"VDD_CORE"`). The canonical handle engineers use.
+    pub name: String,
+    /// The nominal voltage the rail must hold (P9, e.g. 3.3 V).
+    pub voltage: PhysicalQuantity,
+    /// The [`Component`] (regulator / connector) that supplies this rail. The traceability anchor
+    /// back to intent (P3). Referential integrity re-checked at the capability seam.
+    pub source_component: EntityId,
+    /// The maximum current the source can deliver (P9, e.g. 3 A) — the supply side of the budget.
+    pub max_current: PhysicalQuantity,
+    /// The [`Net`]s that belong to this rail. At least one (a rail powering nothing is inert,
+    /// mirroring `component has no pins`). Each must be a committed net (re-checked at the seam).
+    pub nets: Vec<EntityId>,
+}
+
+impl PowerDomain {
+    /// Domain invariants (reuses existing [`DomainError`] variants only): a non-empty `name`;
+    /// a finite, positive `voltage`; a finite, positive `max_current`; and at least one net —
+    /// a rail that powers nothing is a silent defect (P13), exactly like a component with no pins.
+    /// Values are compared via `si_magnitude()` so the checks are unit-independent (P9). Net-link
+    /// integrity is re-checked at the capability seam (P3).
+    pub fn validate(&self) -> Result<(), DomainError> {
+        if self.name.trim().is_empty() {
+            return Err(DomainError::EmptyField("power domain name"));
+        }
+        if !self.voltage.si_magnitude().is_finite() || self.voltage.si_magnitude() <= 0.0 {
+            return Err(DomainError::Inconsistent(
+                "power domain voltage must be positive and finite",
+            ));
+        }
+        if !self.max_current.si_magnitude().is_finite() || self.max_current.si_magnitude() <= 0.0 {
+            return Err(DomainError::Inconsistent(
+                "power domain max current must be positive and finite",
+            ));
+        }
+        if self.nets.is_empty() {
+            return Err(DomainError::Inconsistent(
+                "power domain must power at least one net",
+            ));
+        }
+        Ok(())
+    }
+}
+
 /// A violated domain invariant.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DomainError {
@@ -2041,5 +2102,63 @@ mod tests {
         }
         t.chosen = 0;
         assert!(matches!(t.validate(), Err(DomainError::Inconsistent(_))));
+    }
+
+    // ===================== Band B (increment 1): PowerDomain =====================
+    //
+    // TDD: a power rail is self-consistent even when overloaded — `validate()` guards the
+    // rail's own invariants (name/voltage/current/nets), and the power-balance RULE (in
+    // eak-engines) judges whether the design is right. So validate() rejects a blank name,
+    // a non-positive voltage, a non-positive max current, and a rail powering nothing —
+    // but accepts a well-formed rail whose load may still exceed its source (that is a
+    // design error the rule reports, not a malformed object).
+
+    fn well_formed_power_domain() -> PowerDomain {
+        PowerDomain {
+            id: EntityId(30),
+            name: "3V3".into(),
+            voltage: PhysicalQuantity::new(3.3, Unit::Volt),
+            source_component: EntityId(4),
+            max_current: PhysicalQuantity::new(1.0, Unit::Ampere),
+            nets: vec![EntityId(31), EntityId(32)],
+        }
+    }
+
+    #[test]
+    fn power_domain_rejects_blank_name() {
+        let mut d = well_formed_power_domain();
+        d.name = "  ".into();
+        assert_eq!(
+            d.validate(),
+            Err(DomainError::EmptyField("power domain name"))
+        );
+    }
+
+    #[test]
+    fn power_domain_rejects_non_positive_voltage() {
+        let mut d = well_formed_power_domain();
+        d.voltage = PhysicalQuantity::new(0.0, Unit::Volt);
+        assert!(matches!(d.validate(), Err(DomainError::Inconsistent(_))));
+    }
+
+    #[test]
+    fn power_domain_rejects_non_positive_max_current() {
+        let mut d = well_formed_power_domain();
+        d.max_current = PhysicalQuantity::new(-0.5, Unit::Ampere);
+        assert!(matches!(d.validate(), Err(DomainError::Inconsistent(_))));
+    }
+
+    #[test]
+    fn power_domain_rejects_empty_nets() {
+        let mut d = well_formed_power_domain();
+        d.nets = vec![];
+        assert!(matches!(d.validate(), Err(DomainError::Inconsistent(_))));
+    }
+
+    #[test]
+    fn well_formed_power_domain_validates_even_if_overloaded() {
+        // The rail is well-formed; whether it is overloaded is the rule's judgement, not
+        // validate()'s (a power-balance violation is a design finding, not a malformed object).
+        assert!(well_formed_power_domain().validate().is_ok());
     }
 }

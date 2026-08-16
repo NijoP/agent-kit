@@ -38,6 +38,7 @@ Phase 1 (implementation start) records the technology and scoping decisions Phas
 | [0019](0019-band-a-fidelity.md) | `ModelFidelity`: an advisory trust-tag on derived facts | Accepted |
 | [0020](0020-band-a-risk.md) | `Risk`: an auditable risk posture the human owns (tracked truth) | Accepted |
 | [0021](0021-band-a-tradeoff.md) | `Objective`/`Tradeoff`: the weighed-and-rejected space, preserved | Accepted |
+| [0022](0022-band-b-power-domain.md) | `PowerDomain`: the power architecture as a verifiable, traceable rail | Accepted |
 
 ## The ADR lifecycle
 

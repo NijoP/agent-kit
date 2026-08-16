@@ -11,8 +11,9 @@
 
 use eak_domain::{
     Assumption, Board, BomLineItem, Component, Constraint, Decision, DesignIntent, Discharge,
-    Evidence, FunctionalBlock, ModelFidelity, Net, Objective, Part, Pin, Placement, Priority,
-    ProvenanceLink, Requirement, RequirementCategory, Risk, Track, Tradeoff, Violation, Waiver,
+    Evidence, FunctionalBlock, ModelFidelity, Net, Objective, Part, Pin, Placement, PowerDomain,
+    Priority, ProvenanceLink, Requirement, RequirementCategory, Risk, Track, Tradeoff, Violation,
+    Waiver,
 };
 use eak_units::PhysicalQuantity;
 use serde::{Deserialize, Serialize};
@@ -252,6 +253,17 @@ pub enum Event {
     /// [`Decision`] may later cite the tradeoff it resolved via a [`ProvenanceLink`].
     TradeoffRecorded {
         tradeoff: Tradeoff,
+    },
+
+    // ---- Band B (Phase 5, increment 1): power architecture — state delta (Map 38) ----
+    /// A first-class [`PowerDomain`] (a named power rail) was committed (Band B). A state delta:
+    /// the fold pushes the domain into `EngineeringState::power_domains`. The domain names the
+    /// [`Net`]s it must hold at `voltage` and the `max_current` its source component can deliver;
+    /// whether the load the nets carry exceeds that budget is the [`PowerBalanceRule`]'s judgement
+    /// at ERC time, not this commit's (a well-formed but overloaded rail must enter state so the
+    /// rule can say so).
+    PowerDomainCommitted {
+        domain: PowerDomain,
     },
 }
 
@@ -558,6 +570,30 @@ mod tests {
                 chosen: 0,
                 rationale: "efficiency dominates at this load".into(),
                 decided_by: "hardware lead".into(),
+            },
+        };
+        let s = serde_json::to_string(&ev).unwrap();
+        let back: Event = serde_json::from_str(&s).unwrap();
+        assert_eq!(ev, back);
+    }
+
+    // ===================== Band B (increment 1): PowerDomain event =====================
+    //
+    // TDD: every new state-delta Event variant carries a serde round-trip test so its on-disk
+    // form is pinned and replay-from-log is byte-stable (P4).
+
+    #[test]
+    fn power_domain_committed_event_roundtrips_through_json() {
+        use eak_domain::{EntityId, PowerDomain};
+        use eak_units::{PhysicalQuantity, Unit};
+        let ev = Event::PowerDomainCommitted {
+            domain: PowerDomain {
+                id: EntityId(30),
+                name: "3V3".into(),
+                voltage: PhysicalQuantity::new(3.3, Unit::Volt),
+                source_component: EntityId(4),
+                max_current: PhysicalQuantity::new(1.0, Unit::Ampere),
+                nets: vec![EntityId(31), EntityId(32)],
             },
         };
         let s = serde_json::to_string(&ev).unwrap();
