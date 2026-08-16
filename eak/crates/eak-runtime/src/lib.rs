@@ -55,8 +55,8 @@ mod kernel_tests {
         BomLineItem, Component, ComponentClass, ComponentOrigin, Decision, Discharge,
         DischargeResolution, EntityId, FidelityMethod, FunctionalBlock, LayerStack, ModelFidelity,
         Net, NetClass, NetOrigin, Objective, Part, PartLifecycle, Pin, PinElectricalType,
-        Placement, Priority, Requirement, RequirementCategory, RequirementStatus, Risk,
-        RiskLikelihood, RiskSeverity, RiskStatus, Track, Tradeoff,
+        Placement, PowerDomain, Priority, Requirement, RequirementCategory, RequirementStatus,
+        Risk, RiskLikelihood, RiskSeverity, RiskStatus, Track, Tradeoff,
     };
     use eak_ports::{
         Event, EventLog, EventRecord, ReasoningEngine, ReasoningError, ReasoningRequest,
@@ -2008,5 +2008,179 @@ mod kernel_tests {
         let replayed = replay(core.log()).unwrap();
         assert_eq!(core.state, replayed);
         assert_eq!(core.state.canonical_json(), replayed.canonical_json());
+    }
+
+    // ===================== Band B (increment 1): PowerDomain seam =====================
+    //
+    // TDD (written before the seam handler exists): the power rail object flows through the same
+    // seam as every Phase-2/3/Band-A object. CreatePowerDomain re-validates (non-empty name,
+    // positive voltage, positive max current, >=1 net), rejects a null/unknown source component,
+    // and rejects any net that was never committed (P3 referential integrity — a domain can never
+    // reference a phantom rail). The fold pushes the committed domain into state; the log replays
+    // byte-identically (P4). This is the entry point for Band B's power-balance ERC rule.
+
+    /// Seed a real component (a regulator) and a committed power net, so a power domain has real
+    /// referential anchors. Returns (component id, net id) — the resolvable seam targets.
+    fn seed_component_and_net(core: &mut RuntimeCore) -> (EntityId, EntityId) {
+        let rid = seed_requirement(core);
+        let block_id = core.fresh_id();
+        core.invoke(CapabilityRequest::CreateFunctionalBlock {
+            block: FunctionalBlock {
+                id: block_id,
+                name: "3V3 regulation".into(),
+                function: "step VBUS down to 3.3 V".into(),
+                requirements: vec![rid],
+            },
+            links: vec![],
+        })
+        .unwrap();
+        let comp_id = core.fresh_id();
+        let pin_id = core.fresh_id();
+        core.invoke(CapabilityRequest::RealizeComponent {
+            component: Component {
+                id: comp_id,
+                refdes: "U1".into(),
+                class: ComponentClass::Regulator,
+                value: None,
+                from_block: block_id,
+                origin: ComponentOrigin::Synthesized,
+            },
+            pins: vec![Pin {
+                id: pin_id,
+                component: comp_id,
+                designation: "VOUT".into(),
+                electrical_type: PinElectricalType::PowerOut,
+            }],
+            links: vec![],
+        })
+        .unwrap();
+        let net_id = core.fresh_id();
+        core.invoke(CapabilityRequest::CreateNet {
+            net: Net {
+                id: net_id,
+                name: "+3V3".into(),
+                class: NetClass::Power,
+                members: vec![pin_id],
+                current: Some(PhysicalQuantity::new(0.5, Unit::Ampere)),
+                impedance_target: None,
+                origin: NetOrigin::Logical,
+            },
+            links: vec![],
+        })
+        .unwrap();
+        (comp_id, net_id)
+    }
+
+    #[test]
+    fn create_power_domain_seam_accepts_valid_then_folds_and_replays_byte_identically() {
+        let mut core = new_core();
+        let (source, net_id) = seed_component_and_net(&mut core);
+        let dom_id = core.fresh_id();
+
+        core.invoke(CapabilityRequest::CreatePowerDomain {
+            domain: PowerDomain {
+                id: dom_id,
+                name: "VDD_CORE".into(),
+                voltage: PhysicalQuantity::new(3.3, Unit::Volt),
+                source_component: source,
+                max_current: PhysicalQuantity::new(2.0, Unit::Ampere),
+                nets: vec![net_id],
+            },
+            links: vec![],
+        })
+        .expect("a well-formed power domain on committed component + net is accepted at the seam");
+
+        // The fold pushed exactly one domain and the accessor reads it back by id.
+        assert_eq!(core.state.power_domains.len(), 1);
+        let d = core
+            .state
+            .power_domain(dom_id)
+            .expect("power domain folded by id");
+        assert_eq!(d.name, "VDD_CORE");
+        assert_eq!(d.source_component, source);
+
+        // Byte-identical replay with the power domain in the log (P4).
+        let replayed = replay(core.log()).unwrap();
+        assert_eq!(core.state, replayed);
+        assert_eq!(core.state.canonical_json(), replayed.canonical_json());
+    }
+
+    #[test]
+    fn create_power_domain_seam_rejects_malformed_and_dangling_proposals() {
+        let mut core = new_core();
+        let (source, net_id) = seed_component_and_net(&mut core);
+        let (d_blank, d_null_src, d_phantom_src, d_phantom_net) = (
+            core.fresh_id(),
+            core.fresh_id(),
+            core.fresh_id(),
+            core.fresh_id(),
+        );
+
+        // (1) Blank rail name — domain validate() rejects.
+        let err = core
+            .invoke(CapabilityRequest::CreatePowerDomain {
+                domain: PowerDomain {
+                    id: d_blank,
+                    name: "   ".into(),
+                    voltage: PhysicalQuantity::new(3.3, Unit::Volt),
+                    source_component: source,
+                    max_current: PhysicalQuantity::new(2.0, Unit::Ampere),
+                    nets: vec![net_id],
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // (2) Null source — a rail with no supplying component is untraceable (P3).
+        let err = core
+            .invoke(CapabilityRequest::CreatePowerDomain {
+                domain: PowerDomain {
+                    id: d_null_src,
+                    name: "VDD_GHOST".into(),
+                    voltage: PhysicalQuantity::new(3.3, Unit::Volt),
+                    source_component: EntityId::NULL,
+                    max_current: PhysicalQuantity::new(2.0, Unit::Ampere),
+                    nets: vec![net_id],
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // (3) Dangling source — resolves to no committed component (P3).
+        let err = core
+            .invoke(CapabilityRequest::CreatePowerDomain {
+                domain: PowerDomain {
+                    id: d_phantom_src,
+                    name: "VDD_PHANTOM".into(),
+                    voltage: PhysicalQuantity::new(3.3, Unit::Volt),
+                    source_component: EntityId(0xDEAD_BEEF),
+                    max_current: PhysicalQuantity::new(2.0, Unit::Ampere),
+                    nets: vec![net_id],
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // (4) Dangling rail net — references a net never committed (P3): no phantom rail.
+        let err = core
+            .invoke(CapabilityRequest::CreatePowerDomain {
+                domain: PowerDomain {
+                    id: d_phantom_net,
+                    name: "VDD_OK".into(),
+                    voltage: PhysicalQuantity::new(3.3, Unit::Volt),
+                    source_component: source,
+                    max_current: PhysicalQuantity::new(2.0, Unit::Ampere),
+                    nets: vec![EntityId(0xDEAD_BEEF)],
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // Nothing entered the log: every malformed/dangling proposal was rejected pre-commit.
+        assert!(core.state.power_domains.is_empty());
     }
 }

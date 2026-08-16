@@ -8,7 +8,7 @@
 use eak_domain::{
     Board, BoardSide, BomLineItem, Component, ComponentClass, Constraint, ConstraintKind, EntityId,
     Layer, LayerStack, Net, NetClass, Part, PartLifecycle, Pin, PinElectricalType, Placement,
-    Requirement, RequirementCategory, Track, Violation, ViolationSeverity,
+    PowerDomain, Requirement, RequirementCategory, Track, Violation, ViolationSeverity,
 };
 use eak_units::{Dimension, PhysicalQuantity, Unit, UnitError};
 use std::cmp::Ordering;
@@ -115,6 +115,9 @@ pub struct VerificationContext<'a> {
     pub board: Option<&'a Board>,
     pub placements: &'a [Placement],
     pub tracks: &'a [Track],
+    /// Band B (Phase 5): the committed power domains (the power architecture, Map 38). Lets
+    /// power/electrical rules reason over rail capacity vs. the load the rails' nets carry.
+    pub power_domains: &'a [PowerDomain],
 }
 
 /// A problem a rule detected. Not yet a domain `Violation` — the runtime mints that at the
@@ -345,6 +348,80 @@ impl Rule for ErcMultipleDriversRule {
                         net.name,
                         net.id.short(),
                         driver_count
+                    ),
+                });
+            }
+        }
+        findings
+    }
+}
+
+// ================================== Power Rules =================================
+
+/// Band B (Phase 5, increment 1) ERC power rule: a [`PowerDomain`]'s load must not exceed what its
+/// source component can deliver (KCL as a *budget*, `engineering-science/electrical/kirchhoff-laws.md`
+/// and `power-integrity.md`). The load of a domain is the sum of the declared currents of the nets
+/// it must hold at `voltage`; the budget is the domain's `max_current`. When the sum exceeds the
+/// budget, the rail cannot meet its loads and the finding is a blocking Error. A net that states no
+/// current contributes nothing (the per-net "no input → silent" discipline, exactly like the
+/// ampacity rule): the rule does not invent a load it was never given, so an under-declared rail may
+/// pass — surfacing under-specification is the Fidelity tag's concern, not this rule's. Domains are
+/// scanned in slice order, their nets in domain-declared order, so findings are deterministic (P4).
+/// The flagged domain implicates itself (→ source component → block → requirement → intent, P3).
+pub struct PowerBalanceRule;
+
+impl PowerBalanceRule {
+    pub const ID: &'static str = "erc-power-balance";
+
+    pub fn new() -> Self {
+        Self
+    }
+}
+impl Default for PowerBalanceRule {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Rule for PowerBalanceRule {
+    fn id(&self) -> &str {
+        Self::ID
+    }
+
+    fn evaluate(&self, ctx: &VerificationContext) -> Vec<ViolationFinding> {
+        let mut findings = Vec::new();
+        for domain in ctx.power_domains.iter() {
+            // Sum the DECLARED currents of the domain's nets. Nets that state no current
+            // contribute nothing (no invented load); nets that are not in the context are skipped
+            // defensively — membership integrity is enforced at the commit seam (P3).
+            let mut load_a = 0.0;
+            for nid in &domain.nets {
+                let Some(net) = ctx.nets.iter().find(|n| n.id == *nid) else {
+                    continue;
+                };
+                let Some(current) = net.current.as_ref() else {
+                    continue;
+                };
+                let cur = current.si_magnitude();
+                if cur.is_finite() && cur > 0.0 {
+                    load_a += cur;
+                }
+            }
+            let capacity_a = domain.max_current.si_magnitude();
+            // Relative-epsilon comparison (same idiom as the geometry rules): overload only when
+            // the load exceeds the budget by more than floating-point noise on the scale of either.
+            let scale = load_a.abs().max(capacity_a.abs()).max(1.0);
+            if load_a - capacity_a > 1e-9 * scale {
+                findings.push(ViolationFinding {
+                    rule: Self::ID.to_string(),
+                    severity: ViolationSeverity::Error,
+                    subjects: vec![domain.id],
+                    message: format!(
+                        "power domain \"{}\" ({}) load {} exceeds its source capacity {}",
+                        domain.name,
+                        domain.id.short(),
+                        PhysicalQuantity::new(load_a, Unit::Ampere),
+                        domain.max_current,
                     ),
                 });
             }
@@ -1892,6 +1969,7 @@ mod tests {
             board: None,
             placements: &[],
             tracks: &[],
+            power_domains: &[],
         };
         let findings = rule.evaluate(&ctx);
         assert_eq!(findings.len(), 1);
@@ -1920,6 +1998,7 @@ mod tests {
             board: None,
             placements: &[],
             tracks: &[],
+            power_domains: &[],
         });
         assert_eq!(findings.len(), 1);
     }
@@ -1941,6 +2020,7 @@ mod tests {
             board: None,
             placements: &[],
             tracks: &[],
+            power_domains: &[],
         });
         assert!(findings.is_empty());
     }
@@ -2004,6 +2084,7 @@ mod tests {
             board: None,
             placements: &[],
             tracks: &[],
+            power_domains: &[],
         }
     }
 
@@ -2062,6 +2143,104 @@ mod tests {
             .is_empty());
     }
 
+    // ------------------------------ power balance (Band B) tests ------------------------------
+
+    fn power_domain(
+        id: u128,
+        name: &str,
+        source: u128,
+        voltage_v: f64,
+        max_current_a: f64,
+        nets: Vec<u128>,
+    ) -> PowerDomain {
+        PowerDomain {
+            id: EntityId(id),
+            name: name.to_string(),
+            voltage: PhysicalQuantity::new(voltage_v, Unit::Volt),
+            source_component: EntityId(source),
+            max_current: PhysicalQuantity::new(max_current_a, Unit::Ampere),
+            nets: nets.into_iter().map(EntityId).collect(),
+        }
+    }
+
+    fn power_ctx<'a>(nets: &'a [Net], domains: &'a [PowerDomain]) -> VerificationContext<'a> {
+        VerificationContext {
+            requirements: &[],
+            constraints: &[],
+            components: &[],
+            pins: &[],
+            nets,
+            parts: &[],
+            bom_line_items: &[],
+            board: None,
+            placements: &[],
+            tracks: &[],
+            power_domains: domains,
+        }
+    }
+
+    #[test]
+    fn rail_within_capacity_passes_balance() {
+        // Two loads on a 2 A rail sum to 1.5 A < 2 A budget: balanced.
+        let nets = vec![
+            net_with_current(10, NetClass::Power, 1.0),
+            net_with_current(11, NetClass::Power, 0.5),
+        ];
+        let domains = vec![power_domain(100, "VDD_CORE", 900, 3.3, 2.0, vec![10, 11])];
+        let findings = PowerBalanceRule::new().evaluate(&power_ctx(&nets, &domains));
+        assert!(findings.is_empty());
+    }
+
+    #[test]
+    fn rail_overloaded_is_flagged() {
+        // Loads sum to 3.5 A > 2 A budget: the rail cannot deliver.
+        let nets = vec![
+            net_with_current(10, NetClass::Power, 2.0),
+            net_with_current(11, NetClass::Power, 1.5),
+        ];
+        let domains = vec![power_domain(100, "VDD_CORE", 900, 3.3, 2.0, vec![10, 11])];
+        let findings = PowerBalanceRule::new().evaluate(&power_ctx(&nets, &domains));
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].rule, PowerBalanceRule::ID);
+        assert_eq!(findings[0].severity, ViolationSeverity::Error);
+        assert_eq!(findings[0].subjects, vec![EntityId(100)]);
+        assert!(findings[0].message.contains("VDD_CORE"));
+        assert!(findings[0].message.contains("exceeds"));
+    }
+
+    #[test]
+    fn rail_at_exact_capacity_passes_balance() {
+        // Load equals budget exactly (2.0 A == 2.0 A): within floating-point tolerance, balanced.
+        let nets = vec![net_with_current(10, NetClass::Power, 2.0)];
+        let domains = vec![power_domain(100, "VDD_CORE", 900, 3.3, 2.0, vec![10])];
+        assert!(PowerBalanceRule::new()
+            .evaluate(&power_ctx(&nets, &domains))
+            .is_empty());
+    }
+
+    #[test]
+    fn undeclared_loads_are_silent() {
+        // A rail whose nets state no current has no declared load: no invented load (the per-net
+        // "no input -> silent" discipline, same as the ampacity rule), so the balance stays quiet.
+        let nets = vec![
+            net(10, NetClass::Power, vec![1, 2]),
+            net(11, NetClass::Power, vec![3]),
+        ];
+        let domains = vec![power_domain(100, "VDD_CORE", 900, 3.3, 0.5, vec![10, 11])];
+        assert!(PowerBalanceRule::new()
+            .evaluate(&power_ctx(&nets, &domains))
+            .is_empty());
+    }
+
+    #[test]
+    fn no_domains_produce_no_findings() {
+        // Empty architecture: nothing to balance.
+        let nets = vec![net_with_current(10, NetClass::Power, 5.0)];
+        assert!(PowerBalanceRule::new()
+            .evaluate(&power_ctx(&nets, &[]))
+            .is_empty());
+    }
+
     // ------------------------------ catalog + BOM tests ------------------------------
 
     fn component(id: u128, class: ComponentClass) -> Component {
@@ -2110,6 +2289,7 @@ mod tests {
             board: None,
             placements: &[],
             tracks: &[],
+            power_domains: &[],
         }
     }
 
@@ -2268,6 +2448,7 @@ mod tests {
             board,
             placements,
             tracks: &[],
+            power_domains: &[],
         }
     }
 
@@ -2287,6 +2468,7 @@ mod tests {
             board,
             placements: &[],
             tracks,
+            power_domains: &[],
         }
     }
 
@@ -2558,6 +2740,7 @@ mod tests {
             board: None,
             placements: &[],
             tracks,
+            power_domains: &[],
         }
     }
 
@@ -2621,6 +2804,7 @@ mod tests {
             board: None,
             placements: &[],
             tracks,
+            power_domains: &[],
         }
     }
 
@@ -2694,6 +2878,7 @@ mod tests {
             board: None,
             placements,
             tracks,
+            power_domains: &[],
         }
     }
 
@@ -2896,6 +3081,7 @@ mod tests {
             board,
             placements: &[],
             tracks,
+            power_domains: &[],
         }
     }
 
@@ -3087,6 +3273,7 @@ mod tests {
             board,
             placements,
             tracks: &[],
+            power_domains: &[],
         }
     }
 
@@ -3106,6 +3293,7 @@ mod tests {
             board,
             placements: &[],
             tracks,
+            power_domains: &[],
         }
     }
 
@@ -3215,6 +3403,7 @@ mod tests {
             board: None,
             placements: &[],
             tracks,
+            power_domains: &[],
         }
     }
 

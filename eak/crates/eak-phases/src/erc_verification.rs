@@ -13,7 +13,8 @@
 
 use eak_domain::{ProvenanceLink, RelationType, Violation, ViolationStatus};
 use eak_engines::{
-    ErcMultipleDriversRule, ErcPowerNetUndrivenRule, VerificationContext, VerificationEngine,
+    ErcMultipleDriversRule, ErcPowerNetUndrivenRule, PowerBalanceRule, VerificationContext,
+    VerificationEngine,
 };
 use eak_ports::Event;
 use eak_runtime::{AgentContext, CapabilityRequest, Machine, MachineError, StepResult};
@@ -25,13 +26,14 @@ impl ErcVerificationMachine {
         Self
     }
 
-    /// The verification engine for this phase: the two Phase-3 ERC rules registered against
-    /// the same generic framework that Constraint Verification uses (reuse: one framework,
-    /// many checks).
+    /// The verification engine for this phase: the Phase-3 ERC rules (undriven power net, multiple
+    /// drivers) plus the Band B power-balance rule, registered against the same generic framework
+    /// that Constraint Verification uses (reuse: one framework, many checks).
     fn engine() -> VerificationEngine {
         VerificationEngine::new()
             .with_rule(Box::new(ErcPowerNetUndrivenRule::new()))
             .with_rule(Box::new(ErcMultipleDriversRule::new()))
+            .with_rule(Box::new(PowerBalanceRule::new()))
     }
 }
 impl Default for ErcVerificationMachine {
@@ -72,6 +74,7 @@ impl Machine for ErcVerificationMachine {
                 let board = ctx.board();
                 let placements = ctx.placements();
                 let tracks = ctx.tracks();
+                let power_domains = ctx.power_domains();
                 let findings = engine.run(&VerificationContext {
                     requirements: &requirements,
                     constraints: &constraints,
@@ -83,6 +86,7 @@ impl Machine for ErcVerificationMachine {
                     board: board.as_ref(),
                     placements: &placements,
                     tracks: &tracks,
+                    power_domains: &power_domains,
                 });
 
                 let existing = ctx.violations();

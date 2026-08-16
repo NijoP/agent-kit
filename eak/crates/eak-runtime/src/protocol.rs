@@ -6,8 +6,8 @@
 
 use eak_domain::{
     Assumption, Board, BomLineItem, Component, Constraint, Decision, DesignIntent, Discharge,
-    EntityId, Evidence, FunctionalBlock, Net, Objective, Part, Pin, Placement, ProvenanceLink,
-    Requirement, Risk, Track, Tradeoff, Violation, Waiver,
+    EntityId, Evidence, FunctionalBlock, Net, Objective, Part, Pin, Placement, PowerDomain,
+    ProvenanceLink, Requirement, Risk, Track, Tradeoff, Violation, Waiver,
 };
 use eak_ports::{Event, ReasoningError, ReasoningRequest, ReasoningResponse, Seq, StoreError};
 
@@ -167,6 +167,16 @@ pub enum CapabilityRequest {
         tradeoff: Tradeoff,
         links: Vec<ProvenanceLink>,
     },
+    /// Commit a first-class [`PowerDomain`] (a named power rail) with its provenance links (Band B,
+    /// increment 1; Map 38). The runtime re-validates the domain (non-empty name, positive voltage,
+    /// positive max current, >=1 net), checks its `source_component` resolves to a committed
+    /// component, and checks every rail net resolves to a committed net before committing (P3). A
+    /// well-formed but overloaded domain IS accepted — the PowerBalanceRule at ERC time reports the
+    /// overload as a design finding, so the rail must be able to enter state.
+    CreatePowerDomain {
+        domain: PowerDomain,
+        links: Vec<ProvenanceLink>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -233,6 +243,10 @@ pub trait AgentContext {
     /// Band A (increment 4): read the committed tradeoffs, each with its PRESERVED rejected space
     /// (Map 11, exit criterion 3). Owned clones, like every other reader.
     fn tradeoffs(&self) -> Vec<Tradeoff>;
+    /// Band B (increment 1): read the committed power domains (the power architecture; Map 38).
+    /// Owned clones, like every other reader. The ERC phase reads these to run the
+    /// [`PowerBalanceRule`](eak_engines::PowerBalanceRule).
+    fn power_domains(&self) -> Vec<PowerDomain>;
     /// Call the reasoning engine, record the call (returning its event [`Seq`]), and
     /// return the judgement. Recording here is what makes replay deterministic (P4).
     fn reason(&mut self, req: ReasoningRequest)

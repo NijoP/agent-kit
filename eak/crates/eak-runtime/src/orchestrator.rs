@@ -132,8 +132,8 @@ mod tests {
     use crate::protocol::{Autonomy, CapabilityAck, CapabilityError, CapabilityRequest};
     use eak_domain::{
         Assumption, Board, BomLineItem, Component, Constraint, DesignIntent, EntityId,
-        FunctionalBlock, Net, Objective, Part, Pin, Placement, ProvenanceLink, Requirement, Risk,
-        Track, Tradeoff, Violation,
+        FunctionalBlock, Net, Objective, Part, Pin, Placement, PowerDomain, ProvenanceLink,
+        Requirement, Risk, Track, Tradeoff, Violation,
     };
     use eak_ports::{Event, ReasoningError, ReasoningRequest, ReasoningResponse, Seq, StoreError};
 
@@ -193,6 +193,9 @@ mod tests {
             vec![]
         }
         fn tracks(&self) -> Vec<Track> {
+            vec![]
+        }
+        fn power_domains(&self) -> Vec<PowerDomain> {
             vec![]
         }
         fn assumptions(&self) -> Vec<Assumption> {

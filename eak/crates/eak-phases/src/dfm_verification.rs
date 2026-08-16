@@ -74,6 +74,7 @@ impl Machine for DfmVerificationMachine {
                 let board = ctx.board();
                 let placements = ctx.placements();
                 let tracks = ctx.tracks();
+                let power_domains = ctx.power_domains();
                 let findings = engine.run(&VerificationContext {
                     requirements: &requirements,
                     constraints: &constraints,
@@ -85,6 +86,7 @@ impl Machine for DfmVerificationMachine {
                     board: board.as_ref(),
                     placements: &placements,
                     tracks: &tracks,
+                    power_domains: &power_domains,
                 });
 
                 let existing = ctx.violations();
