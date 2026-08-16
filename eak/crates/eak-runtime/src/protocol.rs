@@ -7,7 +7,7 @@
 use eak_domain::{
     Assumption, Board, BomLineItem, ClockDomain, Component, Constraint, Decision, DesignIntent,
     Discharge, EntityId, Evidence, FunctionalBlock, Net, Objective, Part, Pin, Placement,
-    PowerDomain, ProvenanceLink, Requirement, Risk, Track, Tradeoff, Violation, Waiver,
+    PowerDomain, ProvenanceLink, Requirement, ReturnPath, Risk, Track, Tradeoff, Violation, Waiver,
 };
 use eak_ports::{Event, ReasoningError, ReasoningRequest, ReasoningResponse, Seq, StoreError};
 
@@ -187,6 +187,17 @@ pub enum CapabilityRequest {
         domain: ClockDomain,
         links: Vec<ProvenanceLink>,
     },
+    /// Commit a first-class [`ReturnPath`] (the declared return conductor for a controlled net) with
+    /// its provenance links (Band B, increment 3; Map 20). The runtime re-validates the path
+    /// (non-empty name, non-null net, non-null reference plane, net != reference plane), checks
+    /// `net` and `reference_plane` both resolve to committed nets before committing (P3). A
+    /// well-formed path whose controlled net also declares an impedance target IS accepted — the
+    /// ReturnPathRule at ERC time reports an under-specified return architecture as a design finding,
+    /// so the path must be able to enter state.
+    CreateReturnPath {
+        path: ReturnPath,
+        links: Vec<ProvenanceLink>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -261,6 +272,10 @@ pub trait AgentContext {
     /// Owned clones, like every other reader. The ERC phase reads these to run the
     /// [`ClockDomainMembershipRule`](eak_engines::ClockDomainMembershipRule).
     fn clock_domains(&self) -> Vec<ClockDomain>;
+    /// Band B (increment 3): read the committed return paths (the return architecture; Map 20).
+    /// Owned clones, like every other reader. The ERC phase reads these to run the
+    /// [`ReturnPathRule`](eak_engines::ReturnPathRule).
+    fn return_paths(&self) -> Vec<ReturnPath>;
     /// Call the reasoning engine, record the call (returning its event [`Seq`]), and
     /// return the judgement. Recording here is what makes replay deterministic (P4).
     fn reason(&mut self, req: ReasoningRequest)

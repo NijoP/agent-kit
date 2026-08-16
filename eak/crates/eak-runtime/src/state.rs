@@ -7,8 +7,8 @@
 use eak_domain::{
     Assumption, AssumptionStatus, Board, BomLineItem, ClockDomain, Component, Constraint, Decision,
     DesignIntent, EntityId, Evidence, FunctionalBlock, ModelFidelity, Net, Objective, Part, Pin,
-    Placement, PowerDomain, ProvenanceLink, Requirement, Risk, RiskSeverity, RiskStatus, Track,
-    Tradeoff, Violation, ViolationStatus, Waiver,
+    Placement, PowerDomain, ProvenanceLink, Requirement, ReturnPath, Risk, RiskSeverity,
+    RiskStatus, Track, Tradeoff, Violation, ViolationStatus, Waiver,
 };
 use eak_ports::{Event, Seq};
 use serde::{Deserialize, Serialize};
@@ -101,6 +101,13 @@ pub struct EngineeringState {
     // a net belongs to two domains is the ClockDomainMembershipRule's judgement at ERC time — a
     // well-formed domain still belongs in state so the rule can reason over the crossing.
     pub clock_domains: Vec<ClockDomain>,
+    // Band B (Phase 5, increment 3): the return-path architecture (Map 20). A return path names the
+    // reference net a controlled net's return current flows on — the return half of the signal loop
+    // (`engineering-science/pcb/return-path.md`). Kept in insertion (event) order so a run and its
+    // replay serialize byte-identically. Whether a controlled net declares an impedance but no
+    // return path is the ReturnPathRule's judgement at ERC time — a well-formed path still belongs
+    // in state so the rule can reason over the return architecture.
+    pub return_paths: Vec<ReturnPath>,
 }
 
 impl EngineeringState {
@@ -203,6 +210,9 @@ impl EngineeringState {
             // Band B (Phase 5, increment 2): the clock architecture. Committing a clock domain
             // pushes it into its own store (insertion order, so replay is byte-identical, P4).
             Event::ClockDomainCommitted { domain } => self.clock_domains.push(domain.clone()),
+            // Band B (Phase 5, increment 3): the return-path architecture. Committing a return path
+            // pushes it into its own store (insertion order, so replay is byte-identical, P4).
+            Event::ReturnPathCommitted { path } => self.return_paths.push(path.clone()),
             // Audit-only events (phase lifecycle, reasoning calls, IR-boundary milestones)
             // carry no state and are intentionally not folded. AUDIT: any NEW state-bearing
             // event variant MUST get an explicit arm above, or replay will silently diverge.
@@ -333,6 +343,10 @@ impl EngineeringState {
 
     pub fn clock_domain(&self, id: EntityId) -> Option<&ClockDomain> {
         self.clock_domains.iter().find(|d| d.id == id)
+    }
+
+    pub fn return_path(&self, id: EntityId) -> Option<&ReturnPath> {
+        self.return_paths.iter().find(|p| p.id == id)
     }
 
     /// Deterministic serialization used to assert byte-identity between a run and its

@@ -238,11 +238,11 @@ the product roadmap.
 - *Relationships · runtime rep:* domains span nets/pins/components; drive PI and thermal.
 - *AI · verify · evolves:* AI proposes domain structure; runtime computes budgets deterministically. Verified by power-balance + sequencing rules. Scales to full PDN + sequencing simulation (Map 32).
 
-**20. Ground / Return Map** ○ *(new)*
+**20. Ground / Return Map** ◐
 - *Purpose & why:* the reference/return structure — the single most under-modeled cause of SI/EMC failure ("current returns; where?").
-- *Objects · owner · in→out:* (missing) `ReturnPath`, `ReferencePlane`. Owner: runtime. In: stackup + nets. Out: return-path constraints for SI/EMC.
-- *Relationships · runtime rep:* couples nets to reference planes across the stackup.
-- *AI · verify · evolves:* AI flags reference discontinuities; runtime computes return geometry. Verified by return-path continuity rules. Scales to field-solved return analysis.
+- *Objects · owner · in→out:* `ReturnPath` (implemented Band B inc 3; `ReferencePlane` still missing). Owner: runtime. In: stackup + nets. Out: return-path constraints for SI/EMC.
+- *Relationships · runtime rep:* `ReturnPath` couples a controlled net to the reference net its return current flows on; full cross-stackup adjacency still needs the PCB-IR reference-adjacency model.
+- *AI · verify · evolves:* AI flags reference discontinuities; runtime computes return geometry. Verified by return-path continuity rules (`erc-return-path-required` now; reference-continuity geometry when the adjacency model lands). Scales to field-solved return analysis.
 
 **21. Clock Domain Map** ◐
 - *Purpose & why:* clocks, their domains, crossings, and timing budgets.
@@ -414,12 +414,16 @@ Signal Flow, Interface/Contract, Bus/Protocol, Subsystem.**
 - *Status:* increment 1 — `PowerDomain` implemented (domain `validate()`, seam `CreatePowerDomain`,
   `erc-power-balance` rule; [ADR-0022](../docs/decisions/0022-band-b-power-domain.md)); increment 2 —
   `ClockDomain` implemented (domain `validate()`, seam `CreateClockDomain`, `erc-clock-domain-conflict`
-  rule — the seed of CDC reasoning and the frequency foundation the `ReturnPath` continuity rule
-  (`engineering-science/pcb/return-path.md` L138) depends on; [ADR-0023](../docs/decisions/0023-band-b-clock-domain.md)).
-  Remaining objects follow one per increment through the same seam. ClockDomain precedes ReturnPath in
-  the increment order because return-path continuity targets controlled/electrically-long nets, which
-  the runtime can only identify once it owns clock frequencies (a documented adaptation of the Map
-  order above).
+  rule — the seed of CDC reasoning; [ADR-0023](../docs/decisions/0023-band-b-clock-domain.md)); increment 3 —
+  `ReturnPath` implemented (domain `validate()`, seam `CreateReturnPath`, `erc-return-path-required`
+  rule — the return half of the signal loop, gated on the design's own `impedance_target`
+  declaration rather than a fabricated clock threshold per `transmission-lines.md` L145/L170;
+  [ADR-0024](../docs/decisions/0024-band-b-return-path.md)).
+  Remaining objects follow one per increment through the same seam. NOTE: ClockDomain precedes ReturnPath
+  because return-path continuity targets controlled/electrically-long nets; the truthful v0 gate is the
+  net's own controlled-impedance declaration (`Net::impedance_target`), NOT clock frequency — the
+  electrically-long boundary is applied against the edge rate, which the model does not yet own
+  (a documented correction to the increment-order rationale; `transmission-lines.md` L145/L170).
 - *Unlocks:* AI that plans power/pin-out/interfaces (huge real value); ERC-by-contract; correct
   return paths (prevents most SI/EMC failure by construction).
 

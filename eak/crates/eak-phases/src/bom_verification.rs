@@ -73,6 +73,7 @@ impl Machine for BomVerificationMachine {
                 let tracks = ctx.tracks();
                 let power_domains = ctx.power_domains();
                 let clock_domains = ctx.clock_domains();
+                let return_paths = ctx.return_paths();
                 let findings = engine.run(&VerificationContext {
                     requirements: &requirements,
                     constraints: &constraints,
@@ -86,6 +87,7 @@ impl Machine for BomVerificationMachine {
                     tracks: &tracks,
                     power_domains: &power_domains,
                     clock_domains: &clock_domains,
+                    return_paths: &return_paths,
                 });
 
                 let existing = ctx.violations();

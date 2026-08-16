@@ -11,8 +11,8 @@ use crate::state::EngineeringState;
 use eak_domain::{
     Assumption, Board, BomLineItem, ClockDomain, Component, ComponentOrigin, Constraint, Decision,
     DesignIntent, Discharge, EntityId, Evidence, FunctionalBlock, Net, NetOrigin, Objective, Part,
-    Pin, Placement, PowerDomain, ProvenanceLink, Requirement, Risk, Track, Tradeoff, Violation,
-    Waiver,
+    Pin, Placement, PowerDomain, ProvenanceLink, Requirement, ReturnPath, Risk, Track, Tradeoff,
+    Violation, Waiver,
 };
 use eak_ports::{
     Event, EventLog, EventRecord, EventSink, ReasoningEngine, ReasoningError, ReasoningRequest,
@@ -845,6 +845,42 @@ impl RuntimeCore {
             .map_err(|e| CapabilityError::Rejected(e.to_string()))?;
         Ok(CapabilityAck { committed: seqs })
     }
+
+    fn handle_create_return_path(
+        &mut self,
+        path: ReturnPath,
+        links: Vec<ProvenanceLink>,
+    ) -> Result<CapabilityAck, CapabilityError> {
+        // The seam (P3): re-validate the return path (non-empty name, non-null net, non-null
+        // reference plane, net != reference plane) before committing — the model is never trusted
+        // to have formed a well-shaped return relationship.
+        path.validate()
+            .map_err(|e| CapabilityError::Rejected(e.to_string()))?;
+        // Referential integrity at the seam: the controlled net must be a committed net (P3, P5).
+        if self.state.net(path.net).is_none() {
+            return Err(CapabilityError::Rejected(format!(
+                "return path references unknown net {}",
+                path.net.short()
+            )));
+        }
+        // Referential integrity at the seam: the reference plane must be a committed net — the
+        // return path can never reference a phantom return conductor (P3, P5).
+        if self.state.net(path.reference_plane).is_none() {
+            return Err(CapabilityError::Rejected(format!(
+                "return path references unknown reference plane {}",
+                path.reference_plane.short()
+            )));
+        }
+
+        let mut events = vec![Event::ReturnPathCommitted { path }];
+        for link in links {
+            events.push(Event::ProvenanceLinked { link });
+        }
+        let seqs = self
+            .commit(events)
+            .map_err(|e| CapabilityError::Rejected(e.to_string()))?;
+        Ok(CapabilityAck { committed: seqs })
+    }
 }
 
 impl AgentContext for RuntimeCore {
@@ -952,6 +988,10 @@ impl AgentContext for RuntimeCore {
         self.state.clock_domains.clone()
     }
 
+    fn return_paths(&self) -> Vec<ReturnPath> {
+        self.state.return_paths.clone()
+    }
+
     fn reason(
         &mut self,
         mut req: ReasoningRequest,
@@ -1026,6 +1066,9 @@ impl AgentContext for RuntimeCore {
             }
             CapabilityRequest::CreateClockDomain { domain, links } => {
                 self.handle_create_clock_domain(domain, links)
+            }
+            CapabilityRequest::CreateReturnPath { path, links } => {
+                self.handle_create_return_path(path, links)
             }
         }
     }

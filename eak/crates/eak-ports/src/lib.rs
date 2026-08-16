@@ -12,8 +12,8 @@
 use eak_domain::{
     Assumption, Board, BomLineItem, ClockDomain, Component, Constraint, Decision, DesignIntent,
     Discharge, Evidence, FunctionalBlock, ModelFidelity, Net, Objective, Part, Pin, Placement,
-    PowerDomain, Priority, ProvenanceLink, Requirement, RequirementCategory, Risk, Track, Tradeoff,
-    Violation, Waiver,
+    PowerDomain, Priority, ProvenanceLink, Requirement, RequirementCategory, ReturnPath, Risk,
+    Track, Tradeoff, Violation, Waiver,
 };
 use eak_units::PhysicalQuantity;
 use serde::{Deserialize, Serialize};
@@ -273,6 +273,16 @@ pub enum Event {
     /// well-formed domain must enter state so the rule can reason over the crossing).
     ClockDomainCommitted {
         domain: ClockDomain,
+    },
+    // ---- Band B (Phase 5, increment 3): return-path architecture — state delta (Map 20) ----
+    /// A first-class [`ReturnPath`] (the declared return conductor for a controlled net) was
+    /// committed (Band B). A state delta: the fold pushes the path into
+    /// `EngineeringState::return_paths`. The path names the reference net a controlled net's return
+    /// current flows on; whether the controlled net is under-specified (declares an impedance but no
+    /// return) is the [`ReturnPathRule`]'s judgement at ERC time, not this commit's — a well-formed
+    /// path must enter state so the rule can reason over the return architecture.
+    ReturnPathCommitted {
+        path: ReturnPath,
     },
 }
 
@@ -626,6 +636,27 @@ mod tests {
                 frequency: PhysicalQuantity::new(48.0, Unit::Megahertz),
                 source_component: EntityId(4),
                 members: vec![EntityId(41), EntityId(42)],
+            },
+        };
+        let s = serde_json::to_string(&ev).unwrap();
+        let back: Event = serde_json::from_str(&s).unwrap();
+        assert_eq!(ev, back);
+    }
+
+    // ===================== Band B (increment 3): ReturnPath event =====================
+    //
+    // TDD: every new state-delta Event variant carries a serde round-trip test so its on-disk
+    // form is pinned and replay-from-log is byte-stable (P4).
+
+    #[test]
+    fn return_path_committed_event_roundtrips_through_json() {
+        use eak_domain::{EntityId, ReturnPath};
+        let ev = Event::ReturnPathCommitted {
+            path: ReturnPath {
+                id: EntityId(50),
+                name: "SYS_CLK ret on GND".into(),
+                net: EntityId(41),
+                reference_plane: EntityId(60),
             },
         };
         let s = serde_json::to_string(&ev).unwrap();

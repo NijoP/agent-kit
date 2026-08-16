@@ -2,7 +2,7 @@
 //!
 //! Structurally a sibling of `ConstraintVerificationMachine`, but its [`VerificationEngine`]
 //! is loaded with the ERC rules ([`ErcPowerNetUndrivenRule`], [`ErcMultipleDriversRule`],
-//! [`PowerBalanceRule`], [`ClockDomainMembershipRule`]) and
+//! [`PowerBalanceRule`], [`ClockDomainMembershipRule`], [`ReturnPathRule`]) and
 //! it runs them over the realized schematic (components, pins, nets). Each *new* finding
 //! becomes a first-class [`Violation`] linked back to the net(s) it implicates so it is fully
 //! traceable to its cause (P3), and the [`Event::VerificationCompleted`] milestone is
@@ -15,7 +15,7 @@
 use eak_domain::{ProvenanceLink, RelationType, Violation, ViolationStatus};
 use eak_engines::{
     ClockDomainMembershipRule, ErcMultipleDriversRule, ErcPowerNetUndrivenRule, PowerBalanceRule,
-    VerificationContext, VerificationEngine,
+    ReturnPathRule, VerificationContext, VerificationEngine,
 };
 use eak_ports::Event;
 use eak_runtime::{AgentContext, CapabilityRequest, Machine, MachineError, StepResult};
@@ -36,6 +36,7 @@ impl ErcVerificationMachine {
             .with_rule(Box::new(ErcMultipleDriversRule::new()))
             .with_rule(Box::new(PowerBalanceRule::new()))
             .with_rule(Box::new(ClockDomainMembershipRule::new()))
+            .with_rule(Box::new(ReturnPathRule::new()))
     }
 }
 impl Default for ErcVerificationMachine {
@@ -78,6 +79,7 @@ impl Machine for ErcVerificationMachine {
                 let tracks = ctx.tracks();
                 let power_domains = ctx.power_domains();
                 let clock_domains = ctx.clock_domains();
+                let return_paths = ctx.return_paths();
                 let findings = engine.run(&VerificationContext {
                     requirements: &requirements,
                     constraints: &constraints,
@@ -91,6 +93,7 @@ impl Machine for ErcVerificationMachine {
                     tracks: &tracks,
                     power_domains: &power_domains,
                     clock_domains: &clock_domains,
+                    return_paths: &return_paths,
                 });
 
                 let existing = ctx.violations();

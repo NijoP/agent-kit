@@ -56,7 +56,7 @@ mod kernel_tests {
         DischargeResolution, EntityId, FidelityMethod, FunctionalBlock, LayerStack, ModelFidelity,
         Net, NetClass, NetOrigin, Objective, Part, PartLifecycle, Pin, PinElectricalType,
         Placement, PowerDomain, Priority, Requirement, RequirementCategory, RequirementStatus,
-        Risk, RiskLikelihood, RiskSeverity, RiskStatus, Track, Tradeoff,
+        ReturnPath, Risk, RiskLikelihood, RiskSeverity, RiskStatus, Track, Tradeoff,
     };
     use eak_ports::{
         Event, EventLog, EventRecord, ReasoningEngine, ReasoningError, ReasoningRequest,
@@ -2384,5 +2384,226 @@ mod kernel_tests {
 
         // Nothing entered the log: every malformed/dangling proposal was rejected pre-commit.
         assert!(core.state.clock_domains.is_empty());
+    }
+
+    // ===================== Band B (increment 3): ReturnPath seam =====================
+    //
+    // TDD (written before the seam handler exists): the return-path object flows through the same
+    // seam as every other object. CreateReturnPath re-validates (non-empty name, non-null net,
+    // non-null reference plane, net != reference plane), rejects a net or reference plane that was
+    // never committed (P3 referential integrity — a path can never reference a phantom conductor).
+    // The fold pushes the committed path into state; the log replays byte-identically (P4). This is
+    // the entry point for Band B's return-path requirement rule.
+
+    /// Seed a controlled signal net (declares a 50 Ω impedance target) and a ground reference net,
+    /// so a return path has real referential anchors. Each net joins a pin so it carries real
+    /// connectivity (the seam rejects member-less nets). Returns (controlled net id, reference net id).
+    fn seed_controlled_and_reference_nets(core: &mut RuntimeCore) -> (EntityId, EntityId) {
+        // A controlled signal pin (a driver output) on one component.
+        let sig_comp = core.fresh_id();
+        let sig_pin = core.fresh_id();
+        core.invoke(CapabilityRequest::RealizeComponent {
+            component: Component {
+                id: sig_comp,
+                refdes: "U1".into(),
+                class: ComponentClass::Ic,
+                value: None,
+                from_block: EntityId::NULL,
+                origin: ComponentOrigin::Imported,
+            },
+            pins: vec![Pin {
+                id: sig_pin,
+                component: sig_comp,
+                designation: "OUT".into(),
+                electrical_type: PinElectricalType::Output,
+            }],
+            links: vec![],
+        })
+        .unwrap();
+        // A reference pin (a ground lug) on another component.
+        let ref_comp = core.fresh_id();
+        let ref_pin = core.fresh_id();
+        core.invoke(CapabilityRequest::RealizeComponent {
+            component: Component {
+                id: ref_comp,
+                refdes: "U2".into(),
+                class: ComponentClass::Connector,
+                value: None,
+                from_block: EntityId::NULL,
+                origin: ComponentOrigin::Imported,
+            },
+            pins: vec![Pin {
+                id: ref_pin,
+                component: ref_comp,
+                designation: "GND".into(),
+                electrical_type: PinElectricalType::PowerIn,
+            }],
+            links: vec![],
+        })
+        .unwrap();
+
+        let sig_net = core.fresh_id();
+        let ref_net = core.fresh_id();
+        core.invoke(CapabilityRequest::CreateNet {
+            net: Net {
+                id: sig_net,
+                name: "SYS_CLK".into(),
+                class: NetClass::Signal,
+                members: vec![sig_pin],
+                current: None,
+                impedance_target: Some(PhysicalQuantity::new(50.0, Unit::Ohm)),
+                origin: NetOrigin::Logical,
+            },
+            links: vec![],
+        })
+        .unwrap();
+        core.invoke(CapabilityRequest::CreateNet {
+            net: Net {
+                id: ref_net,
+                name: "GND".into(),
+                class: NetClass::Ground,
+                members: vec![ref_pin],
+                current: None,
+                impedance_target: None,
+                origin: NetOrigin::Logical,
+            },
+            links: vec![],
+        })
+        .unwrap();
+        (sig_net, ref_net)
+    }
+
+    #[test]
+    fn create_return_path_seam_accepts_valid_then_folds_and_replays_byte_identically() {
+        let mut core = new_core();
+        let (sig_net, ref_net) = seed_controlled_and_reference_nets(&mut core);
+        let path_id = core.fresh_id();
+
+        core.invoke(CapabilityRequest::CreateReturnPath {
+            path: ReturnPath {
+                id: path_id,
+                name: "SYS_CLK ret on GND".into(),
+                net: sig_net,
+                reference_plane: ref_net,
+            },
+            links: vec![],
+        })
+        .expect("a well-formed return path on committed nets is accepted at the seam");
+
+        // The fold pushed exactly one path and the accessor reads it back by id.
+        assert_eq!(core.state.return_paths.len(), 1);
+        let p = core
+            .state
+            .return_path(path_id)
+            .expect("return path folded by id");
+        assert_eq!(p.name, "SYS_CLK ret on GND");
+        assert_eq!(p.net, sig_net);
+        assert_eq!(p.reference_plane, ref_net);
+
+        // Byte-identical replay with the return path in the log (P4).
+        let replayed = replay(core.log()).unwrap();
+        assert_eq!(core.state, replayed);
+        assert_eq!(core.state.canonical_json(), replayed.canonical_json());
+    }
+
+    #[test]
+    fn create_return_path_seam_rejects_malformed_and_dangling_proposals() {
+        let mut core = new_core();
+        let (sig_net, ref_net) = seed_controlled_and_reference_nets(&mut core);
+        let (p_blank, p_null_net, p_null_plane, p_self, p_phantom_net, p_phantom_plane) = (
+            core.fresh_id(),
+            core.fresh_id(),
+            core.fresh_id(),
+            core.fresh_id(),
+            core.fresh_id(),
+            core.fresh_id(),
+        );
+
+        // (1) Blank path name — domain validate() rejects.
+        let err = core
+            .invoke(CapabilityRequest::CreateReturnPath {
+                path: ReturnPath {
+                    id: p_blank,
+                    name: "   ".into(),
+                    net: sig_net,
+                    reference_plane: ref_net,
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // (2) Null net — a return path for nothing is untraceable (P3).
+        let err = core
+            .invoke(CapabilityRequest::CreateReturnPath {
+                path: ReturnPath {
+                    id: p_null_net,
+                    name: "GHOST ret".into(),
+                    net: EntityId::NULL,
+                    reference_plane: ref_net,
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // (3) Null reference plane — a return path with no return conductor is meaningless.
+        let err = core
+            .invoke(CapabilityRequest::CreateReturnPath {
+                path: ReturnPath {
+                    id: p_null_plane,
+                    name: "SYS ret".into(),
+                    net: sig_net,
+                    reference_plane: EntityId::NULL,
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // (4) Self-return — a signal cannot be its own return conductor (KCL); validate() rejects.
+        let err = core
+            .invoke(CapabilityRequest::CreateReturnPath {
+                path: ReturnPath {
+                    id: p_self,
+                    name: "SELF ret".into(),
+                    net: sig_net,
+                    reference_plane: sig_net,
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // (5) Dangling net — references a net never committed (P3): no phantom signal conductor.
+        let err = core
+            .invoke(CapabilityRequest::CreateReturnPath {
+                path: ReturnPath {
+                    id: p_phantom_net,
+                    name: "SYS ret".into(),
+                    net: EntityId(0xDEAD_BEEF),
+                    reference_plane: ref_net,
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // (6) Dangling reference plane — references a net never committed (P3): no phantom plane.
+        let err = core
+            .invoke(CapabilityRequest::CreateReturnPath {
+                path: ReturnPath {
+                    id: p_phantom_plane,
+                    name: "SYS ret".into(),
+                    net: sig_net,
+                    reference_plane: EntityId(0xDEAD_BEEF),
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // Nothing entered the log: every malformed/dangling proposal was rejected pre-commit.
+        assert!(core.state.return_paths.is_empty());
     }
 }

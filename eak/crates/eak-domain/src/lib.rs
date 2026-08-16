@@ -1204,6 +1204,74 @@ impl ClockDomain {
     }
 }
 
+// ===================== Band B (Phase 5, increment 3): Return Path =====================
+//
+// The third logical-electrical Map (Map 20; `02 §Band B`). A [`ReturnPath`] is the return half of a
+// signal loop: every signal current must return to its driver, and at the speeds digital edges carry
+// it returns on the conductor directly beneath the trace — almost always a reference plane
+// (`engineering-science/pcb/return-path.md`). The runtime routes a [`Net`] as if it were a single
+// forward conductor; this object names the *return* conductor for a controlled net, closing the loop
+// the connectivity checks cannot see.
+//
+// The honest v0 scope is deliberately narrow. The full reference-continuity rule needs the PCB-IR
+// reference-adjacency model (which layer references which plane, plane voids/splits — return-path.md
+// L141), which the runtime does not yet own. What the runtime CAN own today is the
+// **logical-electrical contract**: a net that declares a controlled characteristic impedance — the
+// model's own transmission-line declaration (`Net::impedance_target`, transmission-lines.md L141) —
+// must name the net its return current flows on. This is the "width-correct, impedance-wrong" silent
+// failure (return-path.md L140): a controlled net with no declared return path is under-specified
+// before any copper exists. NOTE: electrically-long classification is gated on the design's own
+// impedance declaration, NOT on clock frequency — the science directs the boundary be applied against
+// the EDGE RATE, which the model does not own (transmission-lines.md L145/L170); fabricating a
+// threshold from clock frequency would be exactly the "clock instead of edge" under-classification
+// failure the science warns against.
+//
+// `ReturnPath` carries no `PhysicalQuantity` field (only ids and a name), so — like [`Pin`] /
+// [`FunctionalBlock`] — it derives `Eq`. `validate()` reuses existing [`DomainError`] variants only.
+
+/// The declared return conductor for a controlled [`Net`]: the reference net (a plane) the signal's
+/// return current flows on. See the module comment above.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReturnPath {
+    pub id: EntityId,
+    /// A human label (e.g. `"SPI_CLK ret on GND"`). The canonical handle engineers use.
+    pub name: String,
+    /// The controlled signal [`Net`] whose return current this path governs. Must resolve to a
+    /// committed net (re-checked at the seam, P3).
+    pub net: EntityId,
+    /// The reference [`Net`] the return current flows on — the plane conductor beneath the trace.
+    /// Must resolve to a committed net and MUST differ from `net` (a signal cannot return on
+    /// itself — KCL requires a distinct conductor). Re-checked at the seam (P3).
+    pub reference_plane: EntityId,
+}
+
+impl ReturnPath {
+    /// Domain invariants (reuses existing [`DomainError`] variants only): a non-empty `name`; a
+    /// non-null `net`; a non-null `reference_plane`; and `net` != `reference_plane` (a signal cannot
+    /// be its own return conductor). Link integrity is re-checked at the capability seam (P3).
+    pub fn validate(&self) -> Result<(), DomainError> {
+        if self.name.trim().is_empty() {
+            return Err(DomainError::EmptyField("return path name"));
+        }
+        if self.net.is_null() {
+            return Err(DomainError::Inconsistent(
+                "return path must name a signal net",
+            ));
+        }
+        if self.reference_plane.is_null() {
+            return Err(DomainError::Inconsistent(
+                "return path must name a reference plane net",
+            ));
+        }
+        if self.net == self.reference_plane {
+            return Err(DomainError::Inconsistent(
+                "return path net cannot be its own reference plane",
+            ));
+        }
+        Ok(())
+    }
+}
+
 /// A violated domain invariant.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DomainError {
@@ -2269,5 +2337,57 @@ mod tests {
     #[test]
     fn well_formed_clock_domain_validates() {
         assert!(well_formed_clock_domain().validate().is_ok());
+    }
+
+    // ----------------- Band B (increment 3): ReturnPath -----------------
+    // The return-path invariants: a non-empty name, a non-null net, a non-null reference plane,
+    // and net != reference_plane (a signal cannot be its own return conductor — KCL requires a
+    // distinct return). Whether the controlled net is otherwise well-specified is the rule's
+    // judgement at ERC time, not validate()'s.
+
+    fn well_formed_return_path() -> ReturnPath {
+        ReturnPath {
+            id: EntityId(50),
+            name: "SYS_CLK ret on GND".into(),
+            net: EntityId(41),
+            reference_plane: EntityId(60),
+        }
+    }
+
+    #[test]
+    fn return_path_rejects_blank_name() {
+        let mut p = well_formed_return_path();
+        p.name = "  ".into();
+        assert_eq!(
+            p.validate(),
+            Err(DomainError::EmptyField("return path name"))
+        );
+    }
+
+    #[test]
+    fn return_path_rejects_null_net() {
+        let mut p = well_formed_return_path();
+        p.net = EntityId::NULL;
+        assert!(matches!(p.validate(), Err(DomainError::Inconsistent(_))));
+    }
+
+    #[test]
+    fn return_path_rejects_null_reference_plane() {
+        let mut p = well_formed_return_path();
+        p.reference_plane = EntityId::NULL;
+        assert!(matches!(p.validate(), Err(DomainError::Inconsistent(_))));
+    }
+
+    #[test]
+    fn return_path_rejects_self_return() {
+        // A net returning on itself would violate KCL (the return must be a distinct conductor).
+        let mut p = well_formed_return_path();
+        p.reference_plane = p.net;
+        assert!(matches!(p.validate(), Err(DomainError::Inconsistent(_))));
+    }
+
+    #[test]
+    fn well_formed_return_path_validates() {
+        assert!(well_formed_return_path().validate().is_ok());
     }
 }

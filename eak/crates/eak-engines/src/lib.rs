@@ -8,8 +8,8 @@
 use eak_domain::{
     Board, BoardSide, BomLineItem, ClockDomain, Component, ComponentClass, Constraint,
     ConstraintKind, EntityId, Layer, LayerStack, Net, NetClass, Part, PartLifecycle, Pin,
-    PinElectricalType, Placement, PowerDomain, Requirement, RequirementCategory, Track, Violation,
-    ViolationSeverity,
+    PinElectricalType, Placement, PowerDomain, Requirement, RequirementCategory, ReturnPath, Track,
+    Violation, ViolationSeverity,
 };
 use eak_units::{Dimension, PhysicalQuantity, Unit, UnitError};
 use std::cmp::Ordering;
@@ -123,6 +123,10 @@ pub struct VerificationContext<'a> {
     /// clock rules reason over net membership — a net in two domains is a clock-domain
     /// crossing, the seed of CDC reasoning (`engineering-science/pcb/return-path.md`).
     pub clock_domains: &'a [ClockDomain],
+    /// Band B (Phase 5): the committed return paths (the return architecture, Map 20). Lets
+    /// return-path rules reason over the return half of the signal loop — the reference net a
+    /// controlled net's return current flows on (`engineering-science/pcb/return-path.md`).
+    pub return_paths: &'a [ReturnPath],
 }
 
 /// A problem a rule detected. Not yet a domain `Violation` — the runtime mints that at the
@@ -496,6 +500,77 @@ impl Rule for ClockDomainMembershipRule {
                         nid.short(),
                         names.len(),
                         names.join(", "),
+                    ),
+                });
+            }
+        }
+        findings
+    }
+}
+
+// ===================== Band B (increment 3): Return-Path Requirement =====================
+
+/// A return-path requirement rule (Map 20): every [`Net`] that DECLARES a controlled characteristic
+/// impedance — `Net::impedance_target` is the model's own transmission-line declaration
+/// (`engineering-science/electrical/transmission-lines.md` L141) — must have a committed
+/// [`ReturnPath`] naming the reference net its return current flows on. A controlled net with no
+/// declared return path is the "width-correct, impedance-wrong" silent failure
+/// (`engineering-science/pcb/return-path.md` L140): the forward conductor is specified, the return
+/// half of the loop is not. That is a design finding (Error), NOT a malformed-path error — the path
+/// is well-formed; the *architecture* is under-specified. So the runtime accepts each path at the
+/// seam and this rule reports the omission at ERC time. Deterministic (P4): nets are scanned in
+/// slice order, one finding per under-specified net. The flagged net implicates itself (→ its pins →
+/// components → blocks → intent, P3).
+///
+/// HONESTY BOUNDARY: this rule gates on the design's own `impedance_target` declaration, NOT on a
+/// fabricated clock-frequency threshold. The electrically-long boundary must be applied against the
+/// EDGE RATE, which the model does not own (`transmission-lines.md` L145/L170 — "using the clock
+/// instead of the edge to gauge 'fast'" is a listed failure mode). The full reference-continuity
+/// geometry check (plane voids/splits under the trace) additionally needs the PCB-IR
+/// reference-adjacency model the runtime does not yet own (`return-path.md` L141); this v0 owns the
+/// logical-electrical contract only.
+pub struct ReturnPathRule;
+
+impl ReturnPathRule {
+    pub const ID: &'static str = "erc-return-path-required";
+
+    pub fn new() -> Self {
+        Self
+    }
+}
+impl Default for ReturnPathRule {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Rule for ReturnPathRule {
+    fn id(&self) -> &str {
+        Self::ID
+    }
+
+    fn evaluate(&self, ctx: &VerificationContext) -> Vec<ViolationFinding> {
+        let mut findings = Vec::new();
+        for net in ctx.nets.iter() {
+            // Only nets that declare a controlled impedance are transmission-line declarations; a
+            // net with no impedance target is ordinary routing and stays silent (no invented
+            // requirement — surfacing under-specification is the Fidelity tag's concern here).
+            let Some(target) = net.impedance_target.as_ref() else {
+                continue;
+            };
+            let declared = ctx.return_paths.iter().any(|p| p.net == net.id);
+            if !declared {
+                findings.push(ViolationFinding {
+                    rule: Self::ID.to_string(),
+                    severity: ViolationSeverity::Error,
+                    subjects: vec![net.id],
+                    message: format!(
+                        "controlled net \"{}\" ({}) declares an impedance target {} but has no \
+                         declared return path — the return half of the signal loop is \
+                         under-specified (return-path requirement)",
+                        net.name,
+                        net.id.short(),
+                        target,
                     ),
                 });
             }
@@ -2045,6 +2120,7 @@ mod tests {
             tracks: &[],
             power_domains: &[],
             clock_domains: &[],
+            return_paths: &[],
         };
         let findings = rule.evaluate(&ctx);
         assert_eq!(findings.len(), 1);
@@ -2075,6 +2151,7 @@ mod tests {
             tracks: &[],
             power_domains: &[],
             clock_domains: &[],
+            return_paths: &[],
         });
         assert_eq!(findings.len(), 1);
     }
@@ -2098,6 +2175,7 @@ mod tests {
             tracks: &[],
             power_domains: &[],
             clock_domains: &[],
+            return_paths: &[],
         });
         assert!(findings.is_empty());
     }
@@ -2163,6 +2241,7 @@ mod tests {
             tracks: &[],
             power_domains: &[],
             clock_domains: &[],
+            return_paths: &[],
         }
     }
 
@@ -2255,6 +2334,7 @@ mod tests {
             tracks: &[],
             power_domains: domains,
             clock_domains: &[],
+            return_paths: &[],
         }
     }
 
@@ -2322,7 +2402,13 @@ mod tests {
 
     // --------------------------- clock-domain membership (Band B) tests ---------------------------
 
-    fn clock_domain(id: u128, name: &str, source: u128, mhz: f64, members: Vec<u128>) -> ClockDomain {
+    fn clock_domain(
+        id: u128,
+        name: &str,
+        source: u128,
+        mhz: f64,
+        members: Vec<u128>,
+    ) -> ClockDomain {
         ClockDomain {
             id: EntityId(id),
             name: name.to_string(),
@@ -2346,6 +2432,7 @@ mod tests {
             tracks: &[],
             power_domains: &[],
             clock_domains: domains,
+            return_paths: &[],
         }
     }
 
@@ -2423,6 +2510,86 @@ mod tests {
             .is_empty());
     }
 
+    // --------------------------- return-path requirement (Band B) tests ---------------------------
+
+    fn return_path(id: u128, name: &str, net: u128, plane: u128) -> ReturnPath {
+        ReturnPath {
+            id: EntityId(id),
+            name: name.to_string(),
+            net: EntityId(net),
+            reference_plane: EntityId(plane),
+        }
+    }
+
+    fn return_ctx<'a>(nets: &'a [Net], paths: &'a [ReturnPath]) -> VerificationContext<'a> {
+        VerificationContext {
+            requirements: &[],
+            constraints: &[],
+            components: &[],
+            pins: &[],
+            nets,
+            parts: &[],
+            bom_line_items: &[],
+            board: None,
+            placements: &[],
+            tracks: &[],
+            power_domains: &[],
+            clock_domains: &[],
+            return_paths: paths,
+        }
+    }
+
+    #[test]
+    fn controlled_net_without_return_path_is_flagged() {
+        // A net declaring a 50 Ω impedance target is a transmission-line declaration; with no
+        // declared return path its return half is under-specified — the silent SI failure.
+        let nets = vec![net_with_impedance(10, 50.0)];
+        let findings = ReturnPathRule::new().evaluate(&return_ctx(&nets, &[]));
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].rule, ReturnPathRule::ID);
+        assert_eq!(findings[0].severity, ViolationSeverity::Error);
+        assert_eq!(findings[0].subjects, vec![EntityId(10)]);
+        assert!(findings[0].message.contains("impedance"));
+        assert!(findings[0].message.contains("return path"));
+    }
+
+    #[test]
+    fn controlled_net_with_declared_return_path_passes() {
+        // The return half is named: the loop is closed on paper before any copper exists.
+        let nets = vec![net_with_impedance(10, 50.0)];
+        let paths = vec![return_path(100, "SPI ret on GND", 10, 20)];
+        assert!(ReturnPathRule::new()
+            .evaluate(&return_ctx(&nets, &paths))
+            .is_empty());
+    }
+
+    #[test]
+    fn uncontrolled_net_without_return_path_is_silent() {
+        // No impedance declaration, no requirement: ordinary routing stays quiet (no invented
+        // requirement — the rule never demands a return path it was never asked for).
+        let nets = vec![net(10, NetClass::Signal, vec![1, 2])];
+        assert!(ReturnPathRule::new()
+            .evaluate(&return_ctx(&nets, &[]))
+            .is_empty());
+    }
+
+    #[test]
+    fn empty_architecture_produces_no_findings() {
+        assert!(ReturnPathRule::new()
+            .evaluate(&return_ctx(&[], &[]))
+            .is_empty());
+    }
+
+    #[test]
+    fn uncontrolled_net_with_return_path_stays_silent() {
+        // Declaring a return path for an uncontrolled net is over-specification, not an error.
+        let nets = vec![net(10, NetClass::Signal, vec![1, 2])];
+        let paths = vec![return_path(100, "GND ret", 10, 20)];
+        assert!(ReturnPathRule::new()
+            .evaluate(&return_ctx(&nets, &paths))
+            .is_empty());
+    }
+
     // ------------------------------ catalog + BOM tests ------------------------------
 
     fn component(id: u128, class: ComponentClass) -> Component {
@@ -2473,6 +2640,7 @@ mod tests {
             tracks: &[],
             power_domains: &[],
             clock_domains: &[],
+            return_paths: &[],
         }
     }
 
@@ -2633,6 +2801,7 @@ mod tests {
             tracks: &[],
             power_domains: &[],
             clock_domains: &[],
+            return_paths: &[],
         }
     }
 
@@ -2654,6 +2823,7 @@ mod tests {
             tracks,
             power_domains: &[],
             clock_domains: &[],
+            return_paths: &[],
         }
     }
 
@@ -2927,6 +3097,7 @@ mod tests {
             tracks,
             power_domains: &[],
             clock_domains: &[],
+            return_paths: &[],
         }
     }
 
@@ -2992,6 +3163,7 @@ mod tests {
             tracks,
             power_domains: &[],
             clock_domains: &[],
+            return_paths: &[],
         }
     }
 
@@ -3067,6 +3239,7 @@ mod tests {
             tracks,
             power_domains: &[],
             clock_domains: &[],
+            return_paths: &[],
         }
     }
 
@@ -3271,6 +3444,7 @@ mod tests {
             tracks,
             power_domains: &[],
             clock_domains: &[],
+            return_paths: &[],
         }
     }
 
@@ -3464,6 +3638,7 @@ mod tests {
             tracks: &[],
             power_domains: &[],
             clock_domains: &[],
+            return_paths: &[],
         }
     }
 
@@ -3485,6 +3660,7 @@ mod tests {
             tracks,
             power_domains: &[],
             clock_domains: &[],
+            return_paths: &[],
         }
     }
 
@@ -3596,6 +3772,7 @@ mod tests {
             tracks,
             power_domains: &[],
             clock_domains: &[],
+            return_paths: &[],
         }
     }
 

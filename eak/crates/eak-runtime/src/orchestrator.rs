@@ -133,7 +133,7 @@ mod tests {
     use eak_domain::{
         Assumption, Board, BomLineItem, ClockDomain, Component, Constraint, DesignIntent, EntityId,
         FunctionalBlock, Net, Objective, Part, Pin, Placement, PowerDomain, ProvenanceLink,
-        Requirement, Risk, Track, Tradeoff, Violation,
+        Requirement, ReturnPath, Risk, Track, Tradeoff, Violation,
     };
     use eak_ports::{Event, ReasoningError, ReasoningRequest, ReasoningResponse, Seq, StoreError};
 
@@ -199,6 +199,9 @@ mod tests {
             vec![]
         }
         fn clock_domains(&self) -> Vec<ClockDomain> {
+            vec![]
+        }
+        fn return_paths(&self) -> Vec<ReturnPath> {
             vec![]
         }
         fn assumptions(&self) -> Vec<Assumption> {

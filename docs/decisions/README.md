@@ -40,6 +40,7 @@ Phase 1 (implementation start) records the technology and scoping decisions Phas
 | [0021](0021-band-a-tradeoff.md) | `Objective`/`Tradeoff`: the weighed-and-rejected space, preserved | Accepted |
 | [0022](0022-band-b-power-domain.md) | `PowerDomain`: the power architecture as a verifiable, traceable rail | Accepted |
 | [0023](0023-band-b-clock-domain.md) | `ClockDomain`: the clock architecture as a verifiable, traceable clock region | Accepted |
+| [0024](0024-band-b-return-path.md) | `ReturnPath`: the return half of the signal loop, named and verified | Accepted |
 
 ## The ADR lifecycle
 
