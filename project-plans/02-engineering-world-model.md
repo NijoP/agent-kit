@@ -244,10 +244,10 @@ the product roadmap.
 - *Relationships · runtime rep:* couples nets to reference planes across the stackup.
 - *AI · verify · evolves:* AI flags reference discontinuities; runtime computes return geometry. Verified by return-path continuity rules. Scales to field-solved return analysis.
 
-**21. Clock Domain Map** ○ *(new)*
+**21. Clock Domain Map** ◐
 - *Purpose & why:* clocks, their domains, crossings, and timing budgets.
-- *Objects · owner · in→out:* (missing) `ClockDomain{frequency, source, members, crossings}`. Owner: runtime. In: components/signals. Out: timing + SI constraints (length matching, skew).
-- *Relationships · runtime rep:* domains span signals/nets; crossings flag CDC concerns.
+- *Objects · owner · in→out:* `ClockDomain{frequency, source, members}` (implemented Band B inc 2; crossings flag CDC concerns). Owner: runtime. In: components/signals. Out: timing + SI constraints (length matching, skew).
+- *Relationships · runtime rep:* domains span signals/nets; `erc-clock-domain-conflict` flags a net in ≥2 domains as a crossing.
 - *AI · verify · evolves:* AI proposes domain assignment; runtime checks crossings/timing. Verified by skew/length-match rules. Scales to static timing over the board.
 
 **22. Pin-Function / GPIO / Mux Map** ○ *(new; only `PinElectricalType` today)*
@@ -412,8 +412,14 @@ Signal Flow, Interface/Contract, Bus/Protocol, Subsystem.**
 - *New objects:* `PowerDomain`, `ReturnPath`, `ClockDomain`, `PinAssignment`/`PinCapability`,
   `Signal`, `Interface`, `Bus`, `Subsystem`.
 - *Status:* increment 1 — `PowerDomain` implemented (domain `validate()`, seam `CreatePowerDomain`,
-  `erc-power-balance` rule; [ADR-0022](../docs/decisions/0022-band-b-power-domain.md)). Remaining
-  objects follow one per increment through the same seam.
+  `erc-power-balance` rule; [ADR-0022](../docs/decisions/0022-band-b-power-domain.md)); increment 2 —
+  `ClockDomain` implemented (domain `validate()`, seam `CreateClockDomain`, `erc-clock-domain-conflict`
+  rule — the seed of CDC reasoning and the frequency foundation the `ReturnPath` continuity rule
+  (`engineering-science/pcb/return-path.md` L138) depends on; [ADR-0023](../docs/decisions/0023-band-b-clock-domain.md)).
+  Remaining objects follow one per increment through the same seam. ClockDomain precedes ReturnPath in
+  the increment order because return-path continuity targets controlled/electrically-long nets, which
+  the runtime can only identify once it owns clock frequencies (a documented adaptation of the Map
+  order above).
 - *Unlocks:* AI that plans power/pin-out/interfaces (huge real value); ERC-by-contract; correct
   return paths (prevents most SI/EMC failure by construction).
 

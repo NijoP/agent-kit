@@ -39,6 +39,7 @@ Phase 1 (implementation start) records the technology and scoping decisions Phas
 | [0020](0020-band-a-risk.md) | `Risk`: an auditable risk posture the human owns (tracked truth) | Accepted |
 | [0021](0021-band-a-tradeoff.md) | `Objective`/`Tradeoff`: the weighed-and-rejected space, preserved | Accepted |
 | [0022](0022-band-b-power-domain.md) | `PowerDomain`: the power architecture as a verifiable, traceable rail | Accepted |
+| [0023](0023-band-b-clock-domain.md) | `ClockDomain`: the clock architecture as a verifiable, traceable clock region | Accepted |
 
 ## The ADR lifecycle
 
