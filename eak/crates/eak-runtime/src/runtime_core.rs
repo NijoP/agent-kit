@@ -9,9 +9,10 @@ use crate::clock::{Clock, IdSource};
 use crate::protocol::{AgentContext, Autonomy, CapabilityAck, CapabilityError, CapabilityRequest};
 use crate::state::EngineeringState;
 use eak_domain::{
-    Assumption, Board, BomLineItem, Component, ComponentOrigin, Constraint, Decision, DesignIntent,
-    Discharge, EntityId, Evidence, FunctionalBlock, Net, NetOrigin, Objective, Part, Pin,
-    Placement, PowerDomain, ProvenanceLink, Requirement, Risk, Track, Tradeoff, Violation, Waiver,
+    Assumption, Board, BomLineItem, ClockDomain, Component, ComponentOrigin, Constraint, Decision,
+    DesignIntent, Discharge, EntityId, Evidence, FunctionalBlock, Net, NetOrigin, Objective, Part,
+    Pin, Placement, PowerDomain, ProvenanceLink, Requirement, Risk, Track, Tradeoff, Violation,
+    Waiver,
 };
 use eak_ports::{
     Event, EventLog, EventRecord, EventSink, ReasoningEngine, ReasoningError, ReasoningRequest,
@@ -799,6 +800,51 @@ impl RuntimeCore {
             .map_err(|e| CapabilityError::Rejected(e.to_string()))?;
         Ok(CapabilityAck { committed: seqs })
     }
+
+    fn handle_create_clock_domain(
+        &mut self,
+        domain: ClockDomain,
+        links: Vec<ProvenanceLink>,
+    ) -> Result<CapabilityAck, CapabilityError> {
+        // The seam (P3): re-validate the clock domain (non-empty name, positive finite frequency,
+        // >=1 member net) before committing — the model is never trusted to have formed a
+        // well-shaped clock region.
+        domain
+            .validate()
+            .map_err(|e| CapabilityError::Rejected(e.to_string()))?;
+        // A clock with no sourcing component is untraceable to intent (P3) — reject it.
+        if domain.source_component.is_null() {
+            return Err(CapabilityError::Rejected(
+                "clock domain has no source component".into(),
+            ));
+        }
+        // Referential integrity at the seam: the source component must be committed (P3, P5).
+        if self.state.component(domain.source_component).is_none() {
+            return Err(CapabilityError::Rejected(format!(
+                "clock domain source component {} does not exist",
+                domain.source_component.short()
+            )));
+        }
+        // Referential integrity at the seam: every member net must be a committed net, so the
+        // domain can never reference a phantom clock net (P3, P5).
+        for nid in &domain.members {
+            if self.state.net(*nid).is_none() {
+                return Err(CapabilityError::Rejected(format!(
+                    "clock domain references unknown net {}",
+                    nid.short()
+                )));
+            }
+        }
+
+        let mut events = vec![Event::ClockDomainCommitted { domain }];
+        for link in links {
+            events.push(Event::ProvenanceLinked { link });
+        }
+        let seqs = self
+            .commit(events)
+            .map_err(|e| CapabilityError::Rejected(e.to_string()))?;
+        Ok(CapabilityAck { committed: seqs })
+    }
 }
 
 impl AgentContext for RuntimeCore {
@@ -902,6 +948,10 @@ impl AgentContext for RuntimeCore {
         self.state.power_domains.clone()
     }
 
+    fn clock_domains(&self) -> Vec<ClockDomain> {
+        self.state.clock_domains.clone()
+    }
+
     fn reason(
         &mut self,
         mut req: ReasoningRequest,
@@ -973,6 +1023,9 @@ impl AgentContext for RuntimeCore {
             }
             CapabilityRequest::CreatePowerDomain { domain, links } => {
                 self.handle_create_power_domain(domain, links)
+            }
+            CapabilityRequest::CreateClockDomain { domain, links } => {
+                self.handle_create_clock_domain(domain, links)
             }
         }
     }

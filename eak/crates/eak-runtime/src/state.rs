@@ -5,7 +5,7 @@
 //! run and during [`crate::replay`], guaranteeing identical reconstruction.
 
 use eak_domain::{
-    Assumption, AssumptionStatus, Board, BomLineItem, Component, Constraint, Decision,
+    Assumption, AssumptionStatus, Board, BomLineItem, ClockDomain, Component, Constraint, Decision,
     DesignIntent, EntityId, Evidence, FunctionalBlock, ModelFidelity, Net, Objective, Part, Pin,
     Placement, PowerDomain, ProvenanceLink, Requirement, Risk, RiskSeverity, RiskStatus, Track,
     Tradeoff, Violation, ViolationStatus, Waiver,
@@ -95,6 +95,12 @@ pub struct EngineeringState {
     // PowerBalanceRule's judgement at ERC time — a well-formed but overloaded rail still belongs
     // in state so the rule can report it.
     pub power_domains: Vec<PowerDomain>,
+    // Band B (Phase 5, increment 2): the clock architecture (Map 21). A clock domain is a named
+    // clock region sourced by one component at a `frequency`, driving a set of synchronous nets.
+    // Kept in insertion (event) order so a run and its replay serialize byte-identically. Whether
+    // a net belongs to two domains is the ClockDomainMembershipRule's judgement at ERC time — a
+    // well-formed domain still belongs in state so the rule can reason over the crossing.
+    pub clock_domains: Vec<ClockDomain>,
 }
 
 impl EngineeringState {
@@ -194,6 +200,9 @@ impl EngineeringState {
             // Band B (Phase 5, increment 1): the power architecture. Committing a power domain
             // pushes it into its own store (insertion order, so replay is byte-identical, P4).
             Event::PowerDomainCommitted { domain } => self.power_domains.push(domain.clone()),
+            // Band B (Phase 5, increment 2): the clock architecture. Committing a clock domain
+            // pushes it into its own store (insertion order, so replay is byte-identical, P4).
+            Event::ClockDomainCommitted { domain } => self.clock_domains.push(domain.clone()),
             // Audit-only events (phase lifecycle, reasoning calls, IR-boundary milestones)
             // carry no state and are intentionally not folded. AUDIT: any NEW state-bearing
             // event variant MUST get an explicit arm above, or replay will silently diverge.
@@ -320,6 +329,10 @@ impl EngineeringState {
 
     pub fn power_domain(&self, id: EntityId) -> Option<&PowerDomain> {
         self.power_domains.iter().find(|d| d.id == id)
+    }
+
+    pub fn clock_domain(&self, id: EntityId) -> Option<&ClockDomain> {
+        self.clock_domains.iter().find(|d| d.id == id)
     }
 
     /// Deterministic serialization used to assert byte-identity between a run and its

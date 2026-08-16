@@ -52,7 +52,7 @@ mod kernel_tests {
     use super::*;
     use eak_domain::{
         Alternative, Assumption, AssumptionCriticality, AssumptionStatus, Board, BoardSide,
-        BomLineItem, Component, ComponentClass, ComponentOrigin, Decision, Discharge,
+        BomLineItem, ClockDomain, Component, ComponentClass, ComponentOrigin, Decision, Discharge,
         DischargeResolution, EntityId, FidelityMethod, FunctionalBlock, LayerStack, ModelFidelity,
         Net, NetClass, NetOrigin, Objective, Part, PartLifecycle, Pin, PinElectricalType,
         Placement, PowerDomain, Priority, Requirement, RequirementCategory, RequirementStatus,
@@ -2182,5 +2182,207 @@ mod kernel_tests {
 
         // Nothing entered the log: every malformed/dangling proposal was rejected pre-commit.
         assert!(core.state.power_domains.is_empty());
+    }
+
+    // ===================== Band B (increment 2): ClockDomain seam =====================
+    //
+    // TDD (written before the seam handler exists): the clock-domain object flows through the same
+    // seam as every other object. CreateClockDomain re-validates (non-empty name, positive finite
+    // frequency, >=1 member net), rejects a null/unknown source component, and rejects any member
+    // net that was never committed (P3 referential integrity — a domain can never reference a
+    // phantom clock net). The fold pushes the committed domain into state; the log replays
+    // byte-identically (P4). This is the entry point for Band B's clock-domain membership rule.
+
+    /// Seed an oscillator Ic and a committed clock net, so a clock domain has real referential
+    /// anchors. Returns (component id, net id) — the resolvable seam targets.
+    fn seed_clock_source_and_net(core: &mut RuntimeCore) -> (EntityId, EntityId) {
+        let rid = seed_requirement(core);
+        let block_id = core.fresh_id();
+        core.invoke(CapabilityRequest::CreateFunctionalBlock {
+            block: FunctionalBlock {
+                id: block_id,
+                name: "48 MHz system clock".into(),
+                function: "source the SYS clock domain".into(),
+                requirements: vec![rid],
+            },
+            links: vec![],
+        })
+        .unwrap();
+        let comp_id = core.fresh_id();
+        let pin_id = core.fresh_id();
+        core.invoke(CapabilityRequest::RealizeComponent {
+            component: Component {
+                id: comp_id,
+                refdes: "Y1".into(),
+                class: ComponentClass::Ic,
+                value: None,
+                from_block: block_id,
+                origin: ComponentOrigin::Synthesized,
+            },
+            pins: vec![Pin {
+                id: pin_id,
+                component: comp_id,
+                designation: "OUT".into(),
+                electrical_type: PinElectricalType::Output,
+            }],
+            links: vec![],
+        })
+        .unwrap();
+        let net_id = core.fresh_id();
+        core.invoke(CapabilityRequest::CreateNet {
+            net: Net {
+                id: net_id,
+                name: "SYS_CLK".into(),
+                class: NetClass::Signal,
+                members: vec![pin_id],
+                current: None,
+                impedance_target: None,
+                origin: NetOrigin::Logical,
+            },
+            links: vec![],
+        })
+        .unwrap();
+        (comp_id, net_id)
+    }
+
+    #[test]
+    fn create_clock_domain_seam_accepts_valid_then_folds_and_replays_byte_identically() {
+        let mut core = new_core();
+        let (source, net_id) = seed_clock_source_and_net(&mut core);
+        let dom_id = core.fresh_id();
+
+        core.invoke(CapabilityRequest::CreateClockDomain {
+            domain: ClockDomain {
+                id: dom_id,
+                name: "SYS".into(),
+                frequency: PhysicalQuantity::new(48.0, Unit::Megahertz),
+                source_component: source,
+                members: vec![net_id],
+            },
+            links: vec![],
+        })
+        .expect("a well-formed clock domain on committed component + net is accepted at the seam");
+
+        // The fold pushed exactly one domain and the accessor reads it back by id.
+        assert_eq!(core.state.clock_domains.len(), 1);
+        let d = core
+            .state
+            .clock_domain(dom_id)
+            .expect("clock domain folded by id");
+        assert_eq!(d.name, "SYS");
+        assert_eq!(d.source_component, source);
+        assert_eq!(d.frequency, PhysicalQuantity::new(48.0, Unit::Megahertz));
+
+        // Byte-identical replay with the clock domain in the log (P4).
+        let replayed = replay(core.log()).unwrap();
+        assert_eq!(core.state, replayed);
+        assert_eq!(core.state.canonical_json(), replayed.canonical_json());
+    }
+
+    #[test]
+    fn create_clock_domain_seam_rejects_malformed_and_dangling_proposals() {
+        let mut core = new_core();
+        let (source, net_id) = seed_clock_source_and_net(&mut core);
+        let (d_blank, d_bad_freq, d_null_src, d_phantom_src, d_phantom_net, d_empty_members) = (
+            core.fresh_id(),
+            core.fresh_id(),
+            core.fresh_id(),
+            core.fresh_id(),
+            core.fresh_id(),
+            core.fresh_id(),
+        );
+
+        // (1) Blank domain name — domain validate() rejects.
+        let err = core
+            .invoke(CapabilityRequest::CreateClockDomain {
+                domain: ClockDomain {
+                    id: d_blank,
+                    name: "   ".into(),
+                    frequency: PhysicalQuantity::new(48.0, Unit::Megahertz),
+                    source_component: source,
+                    members: vec![net_id],
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // (2) Non-positive frequency — a clock must tick; domain validate() rejects.
+        let err = core
+            .invoke(CapabilityRequest::CreateClockDomain {
+                domain: ClockDomain {
+                    id: d_bad_freq,
+                    name: "DEAD".into(),
+                    frequency: PhysicalQuantity::new(0.0, Unit::Megahertz),
+                    source_component: source,
+                    members: vec![net_id],
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // (3) Null source — a clock with no sourcing component is untraceable (P3).
+        let err = core
+            .invoke(CapabilityRequest::CreateClockDomain {
+                domain: ClockDomain {
+                    id: d_null_src,
+                    name: "SYS_GHOST".into(),
+                    frequency: PhysicalQuantity::new(48.0, Unit::Megahertz),
+                    source_component: EntityId::NULL,
+                    members: vec![net_id],
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // (4) Dangling source — resolves to no committed component (P3).
+        let err = core
+            .invoke(CapabilityRequest::CreateClockDomain {
+                domain: ClockDomain {
+                    id: d_phantom_src,
+                    name: "SYS_PHANTOM".into(),
+                    frequency: PhysicalQuantity::new(48.0, Unit::Megahertz),
+                    source_component: EntityId(0xDEAD_BEEF),
+                    members: vec![net_id],
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // (5) Dangling member net — references a net never committed (P3): no phantom clock.
+        let err = core
+            .invoke(CapabilityRequest::CreateClockDomain {
+                domain: ClockDomain {
+                    id: d_phantom_net,
+                    name: "SYS_OK".into(),
+                    frequency: PhysicalQuantity::new(48.0, Unit::Megahertz),
+                    source_component: source,
+                    members: vec![EntityId(0xDEAD_BEEF)],
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // (6) Empty members — a clock that drives nothing is inert; domain validate() rejects.
+        let err = core
+            .invoke(CapabilityRequest::CreateClockDomain {
+                domain: ClockDomain {
+                    id: d_empty_members,
+                    name: "SYS_IDLE".into(),
+                    frequency: PhysicalQuantity::new(48.0, Unit::Megahertz),
+                    source_component: source,
+                    members: vec![],
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // Nothing entered the log: every malformed/dangling proposal was rejected pre-commit.
+        assert!(core.state.clock_domains.is_empty());
     }
 }

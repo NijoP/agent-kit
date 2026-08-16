@@ -10,10 +10,10 @@
 //! the "a contract lives with the ring that needs it" rule they belong to the kernel.
 
 use eak_domain::{
-    Assumption, Board, BomLineItem, Component, Constraint, Decision, DesignIntent, Discharge,
-    Evidence, FunctionalBlock, ModelFidelity, Net, Objective, Part, Pin, Placement, PowerDomain,
-    Priority, ProvenanceLink, Requirement, RequirementCategory, Risk, Track, Tradeoff, Violation,
-    Waiver,
+    Assumption, Board, BomLineItem, ClockDomain, Component, Constraint, Decision, DesignIntent,
+    Discharge, Evidence, FunctionalBlock, ModelFidelity, Net, Objective, Part, Pin, Placement,
+    PowerDomain, Priority, ProvenanceLink, Requirement, RequirementCategory, Risk, Track, Tradeoff,
+    Violation, Waiver,
 };
 use eak_units::PhysicalQuantity;
 use serde::{Deserialize, Serialize};
@@ -264,6 +264,15 @@ pub enum Event {
     /// rule can say so).
     PowerDomainCommitted {
         domain: PowerDomain,
+    },
+    // ---- Band B (Phase 5, increment 2): clock architecture — state delta (Map 21) ----
+    /// A first-class [`ClockDomain`] (a named clock region) was committed (Band B). A state delta:
+    /// the fold pushes the domain into `EngineeringState::clock_domains`. The domain names the
+    /// [`Net`]s synchronous to a `frequency` sourced by a component; whether a net belongs to two
+    /// domains is the [`ClockDomainMembershipRule`]'s judgement at ERC time, not this commit's (a
+    /// well-formed domain must enter state so the rule can reason over the crossing).
+    ClockDomainCommitted {
+        domain: ClockDomain,
     },
 }
 
@@ -594,6 +603,29 @@ mod tests {
                 source_component: EntityId(4),
                 max_current: PhysicalQuantity::new(1.0, Unit::Ampere),
                 nets: vec![EntityId(31), EntityId(32)],
+            },
+        };
+        let s = serde_json::to_string(&ev).unwrap();
+        let back: Event = serde_json::from_str(&s).unwrap();
+        assert_eq!(ev, back);
+    }
+
+    // ===================== Band B (increment 2): ClockDomain event =====================
+    //
+    // TDD: every new state-delta Event variant carries a serde round-trip test so its on-disk
+    // form is pinned and replay-from-log is byte-stable (P4).
+
+    #[test]
+    fn clock_domain_committed_event_roundtrips_through_json() {
+        use eak_domain::{ClockDomain, EntityId};
+        use eak_units::{PhysicalQuantity, Unit};
+        let ev = Event::ClockDomainCommitted {
+            domain: ClockDomain {
+                id: EntityId(40),
+                name: "SYS".into(),
+                frequency: PhysicalQuantity::new(48.0, Unit::Megahertz),
+                source_component: EntityId(4),
+                members: vec![EntityId(41), EntityId(42)],
             },
         };
         let s = serde_json::to_string(&ev).unwrap();

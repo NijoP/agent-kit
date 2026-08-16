@@ -6,9 +6,10 @@
 //! See `docs/engineering/constraint-engine.md` and `docs/engineering/verification-engine.md`.
 
 use eak_domain::{
-    Board, BoardSide, BomLineItem, Component, ComponentClass, Constraint, ConstraintKind, EntityId,
-    Layer, LayerStack, Net, NetClass, Part, PartLifecycle, Pin, PinElectricalType, Placement,
-    PowerDomain, Requirement, RequirementCategory, Track, Violation, ViolationSeverity,
+    Board, BoardSide, BomLineItem, ClockDomain, Component, ComponentClass, Constraint,
+    ConstraintKind, EntityId, Layer, LayerStack, Net, NetClass, Part, PartLifecycle, Pin,
+    PinElectricalType, Placement, PowerDomain, Requirement, RequirementCategory, Track, Violation,
+    ViolationSeverity,
 };
 use eak_units::{Dimension, PhysicalQuantity, Unit, UnitError};
 use std::cmp::Ordering;
@@ -118,6 +119,10 @@ pub struct VerificationContext<'a> {
     /// Band B (Phase 5): the committed power domains (the power architecture, Map 38). Lets
     /// power/electrical rules reason over rail capacity vs. the load the rails' nets carry.
     pub power_domains: &'a [PowerDomain],
+    /// Band B (Phase 5): the committed clock domains (the clock architecture, Map 21). Lets
+    /// clock rules reason over net membership — a net in two domains is a clock-domain
+    /// crossing, the seed of CDC reasoning (`engineering-science/pcb/return-path.md`).
+    pub clock_domains: &'a [ClockDomain],
 }
 
 /// A problem a rule detected. Not yet a domain `Violation` — the runtime mints that at the
@@ -422,6 +427,75 @@ impl Rule for PowerBalanceRule {
                         domain.id.short(),
                         PhysicalQuantity::new(load_a, Unit::Ampere),
                         domain.max_current,
+                    ),
+                });
+            }
+        }
+        findings
+    }
+}
+
+// ===================== Band B (increment 2): Clock-Domain Membership =====================
+
+/// A clock-domain membership rule (Map 21): a [`Net`] that is a member of two distinct
+/// [`ClockDomain`]s is a clock-domain crossing — an unsynchronized net claiming to be
+/// synchronous to two independent clocks. That is a design finding (a CDC hazard, the seed of
+/// `engineering-science/pcb/return-path.md` reasoning), NOT a malformed-domain error: the
+/// domain is well-formed; the *design* is what crosses. So the runtime accepts each domain at
+/// the seam and this rule reports the conflict at ERC time. Deterministic (P4): domains are
+/// scanned in slice order; a net is flagged once, with both domain names in a stable order.
+/// The flagged net implicates itself (→ its pins → components → blocks → intent, P3).
+pub struct ClockDomainMembershipRule;
+
+impl ClockDomainMembershipRule {
+    pub const ID: &'static str = "erc-clock-domain-conflict";
+
+    pub fn new() -> Self {
+        Self
+    }
+}
+impl Default for ClockDomainMembershipRule {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Rule for ClockDomainMembershipRule {
+    fn id(&self) -> &str {
+        Self::ID
+    }
+
+    fn evaluate(&self, ctx: &VerificationContext) -> Vec<ViolationFinding> {
+        let mut findings = Vec::new();
+        // Collect (net, [domains]) in deterministic order: iterate domains in slice order,
+        // append each domain name to its nets' lists. A net in >=2 domains is a conflict.
+        let mut membership: Vec<(EntityId, Vec<&ClockDomain>)> = Vec::new();
+        for domain in ctx.clock_domains.iter() {
+            for nid in &domain.members {
+                // Membership integrity is enforced at the commit seam (P3); a net missing from
+                // the context is skipped defensively so this rule never guesses.
+                if ctx.nets.iter().find(|n| n.id == *nid).is_none() {
+                    continue;
+                }
+                match membership.iter_mut().find(|(id, _)| id == nid) {
+                    Some((_, domains)) => domains.push(domain),
+                    None => membership.push((*nid, vec![domain])),
+                }
+            }
+        }
+        for (nid, domains) in membership {
+            if domains.len() >= 2 {
+                let names: Vec<&str> = domains.iter().map(|d| d.name.as_str()).collect();
+                findings.push(ViolationFinding {
+                    rule: Self::ID.to_string(),
+                    severity: ViolationSeverity::Error,
+                    subjects: vec![nid],
+                    message: format!(
+                        "net {} is a member of {} distinct clock domains [{}] — a clock-domain \
+                         crossing that needs a synchronizer or a membership correction",
+                        nid.short(),
+                        names.len(),
+                        names.join(", "),
                     ),
                 });
             }
@@ -1970,6 +2044,7 @@ mod tests {
             placements: &[],
             tracks: &[],
             power_domains: &[],
+            clock_domains: &[],
         };
         let findings = rule.evaluate(&ctx);
         assert_eq!(findings.len(), 1);
@@ -1999,6 +2074,7 @@ mod tests {
             placements: &[],
             tracks: &[],
             power_domains: &[],
+            clock_domains: &[],
         });
         assert_eq!(findings.len(), 1);
     }
@@ -2021,6 +2097,7 @@ mod tests {
             placements: &[],
             tracks: &[],
             power_domains: &[],
+            clock_domains: &[],
         });
         assert!(findings.is_empty());
     }
@@ -2085,6 +2162,7 @@ mod tests {
             placements: &[],
             tracks: &[],
             power_domains: &[],
+            clock_domains: &[],
         }
     }
 
@@ -2176,6 +2254,7 @@ mod tests {
             placements: &[],
             tracks: &[],
             power_domains: domains,
+            clock_domains: &[],
         }
     }
 
@@ -2241,6 +2320,109 @@ mod tests {
             .is_empty());
     }
 
+    // --------------------------- clock-domain membership (Band B) tests ---------------------------
+
+    fn clock_domain(id: u128, name: &str, source: u128, mhz: f64, members: Vec<u128>) -> ClockDomain {
+        ClockDomain {
+            id: EntityId(id),
+            name: name.to_string(),
+            frequency: PhysicalQuantity::new(mhz, Unit::Megahertz),
+            source_component: EntityId(source),
+            members: members.into_iter().map(EntityId).collect(),
+        }
+    }
+
+    fn clock_ctx<'a>(nets: &'a [Net], domains: &'a [ClockDomain]) -> VerificationContext<'a> {
+        VerificationContext {
+            requirements: &[],
+            constraints: &[],
+            components: &[],
+            pins: &[],
+            nets,
+            parts: &[],
+            bom_line_items: &[],
+            board: None,
+            placements: &[],
+            tracks: &[],
+            power_domains: &[],
+            clock_domains: domains,
+        }
+    }
+
+    #[test]
+    fn net_in_two_clock_domains_is_a_conflict() {
+        // A net clocked by "SYS" (48 MHz) AND "AUDIO" (12.288 MHz) cannot be synchronous to
+        // both: a clock-domain crossing. Deterministic: one finding, subject = the net, message
+        // names both domains.
+        let nets = vec![
+            net(10, NetClass::Signal, vec![1, 2]),
+            net(11, NetClass::Signal, vec![3]),
+        ];
+        let domains = vec![
+            clock_domain(100, "SYS", 900, 48.0, vec![10]),
+            clock_domain(101, "AUDIO", 901, 12.288, vec![10]),
+        ];
+        let findings = ClockDomainMembershipRule::new().evaluate(&clock_ctx(&nets, &domains));
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].rule, ClockDomainMembershipRule::ID);
+        assert_eq!(findings[0].severity, ViolationSeverity::Error);
+        assert_eq!(findings[0].subjects, vec![EntityId(10)]);
+        assert!(findings[0].message.contains("SYS"));
+        assert!(findings[0].message.contains("AUDIO"));
+        assert!(findings[0].message.contains("crossing"));
+    }
+
+    #[test]
+    fn net_in_one_clock_domain_passes() {
+        // A net synchronous to a single domain is the healthy case.
+        let nets = vec![net(10, NetClass::Signal, vec![1, 2])];
+        let domains = vec![
+            clock_domain(100, "SYS", 900, 48.0, vec![10]),
+            clock_domain(101, "AUDIO", 901, 12.288, vec![11]),
+        ];
+        assert!(ClockDomainMembershipRule::new()
+            .evaluate(&clock_ctx(&nets, &domains))
+            .is_empty());
+    }
+
+    #[test]
+    fn two_domains_sharing_a_member_fires_once_per_net() {
+        // Membership is keyed by net, so a net shared by three domains still yields exactly one
+        // finding (the crossing), not three.
+        let nets = vec![net(10, NetClass::Signal, vec![1, 2])];
+        let domains = vec![
+            clock_domain(100, "A", 900, 48.0, vec![10]),
+            clock_domain(101, "B", 901, 24.0, vec![10]),
+            clock_domain(102, "C", 902, 12.0, vec![10]),
+        ];
+        let findings = ClockDomainMembershipRule::new().evaluate(&clock_ctx(&nets, &domains));
+        assert_eq!(findings.len(), 1);
+        assert!(findings[0].message.contains("3 distinct"));
+    }
+
+    #[test]
+    fn no_clock_domains_produce_no_findings() {
+        // Empty clock architecture: nothing to cross.
+        let nets = vec![net(10, NetClass::Signal, vec![1, 2])];
+        assert!(ClockDomainMembershipRule::new()
+            .evaluate(&clock_ctx(&nets, &[]))
+            .is_empty());
+    }
+
+    #[test]
+    fn member_net_missing_from_context_is_silent() {
+        // A domain naming a net the context does not carry contributes nothing (defensive, no
+        // invented membership — integrity is the commit seam's job, P3).
+        let nets = vec![net(10, NetClass::Signal, vec![1, 2])];
+        let domains = vec![
+            clock_domain(100, "SYS", 900, 48.0, vec![10]),
+            clock_domain(101, "AUDIO", 901, 12.288, vec![99]),
+        ];
+        assert!(ClockDomainMembershipRule::new()
+            .evaluate(&clock_ctx(&nets, &domains))
+            .is_empty());
+    }
+
     // ------------------------------ catalog + BOM tests ------------------------------
 
     fn component(id: u128, class: ComponentClass) -> Component {
@@ -2290,6 +2472,7 @@ mod tests {
             placements: &[],
             tracks: &[],
             power_domains: &[],
+            clock_domains: &[],
         }
     }
 
@@ -2449,6 +2632,7 @@ mod tests {
             placements,
             tracks: &[],
             power_domains: &[],
+            clock_domains: &[],
         }
     }
 
@@ -2469,6 +2653,7 @@ mod tests {
             placements: &[],
             tracks,
             power_domains: &[],
+            clock_domains: &[],
         }
     }
 
@@ -2741,6 +2926,7 @@ mod tests {
             placements: &[],
             tracks,
             power_domains: &[],
+            clock_domains: &[],
         }
     }
 
@@ -2805,6 +2991,7 @@ mod tests {
             placements: &[],
             tracks,
             power_domains: &[],
+            clock_domains: &[],
         }
     }
 
@@ -2879,6 +3066,7 @@ mod tests {
             placements,
             tracks,
             power_domains: &[],
+            clock_domains: &[],
         }
     }
 
@@ -3082,6 +3270,7 @@ mod tests {
             placements: &[],
             tracks,
             power_domains: &[],
+            clock_domains: &[],
         }
     }
 
@@ -3274,6 +3463,7 @@ mod tests {
             placements,
             tracks: &[],
             power_domains: &[],
+            clock_domains: &[],
         }
     }
 
@@ -3294,6 +3484,7 @@ mod tests {
             placements: &[],
             tracks,
             power_domains: &[],
+            clock_domains: &[],
         }
     }
 
@@ -3404,6 +3595,7 @@ mod tests {
             placements: &[],
             tracks,
             power_domains: &[],
+            clock_domains: &[],
         }
     }
 

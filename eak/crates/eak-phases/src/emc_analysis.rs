@@ -82,6 +82,7 @@ impl Machine for EmcAnalysisMachine {
                 let placements = ctx.placements();
                 let tracks = ctx.tracks();
                 let power_domains = ctx.power_domains();
+                let clock_domains = ctx.clock_domains();
                 let findings = engine.run(&VerificationContext {
                     requirements: &requirements,
                     constraints: &constraints,
@@ -94,6 +95,7 @@ impl Machine for EmcAnalysisMachine {
                     placements: &placements,
                     tracks: &tracks,
                     power_domains: &power_domains,
+                    clock_domains: &clock_domains,
                 });
 
                 let existing = ctx.violations();

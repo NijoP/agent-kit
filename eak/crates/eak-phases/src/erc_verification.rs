@@ -1,7 +1,8 @@
 //! ERC Verification state machine (instance) — the gate of the schematic correctness loop.
 //!
 //! Structurally a sibling of `ConstraintVerificationMachine`, but its [`VerificationEngine`]
-//! is loaded with the ERC rules ([`ErcPowerNetUndrivenRule`], [`ErcMultipleDriversRule`]) and
+//! is loaded with the ERC rules ([`ErcPowerNetUndrivenRule`], [`ErcMultipleDriversRule`],
+//! [`PowerBalanceRule`], [`ClockDomainMembershipRule`]) and
 //! it runs them over the realized schematic (components, pins, nets). Each *new* finding
 //! becomes a first-class [`Violation`] linked back to the net(s) it implicates so it is fully
 //! traceable to its cause (P3), and the [`Event::VerificationCompleted`] milestone is
@@ -13,8 +14,8 @@
 
 use eak_domain::{ProvenanceLink, RelationType, Violation, ViolationStatus};
 use eak_engines::{
-    ErcMultipleDriversRule, ErcPowerNetUndrivenRule, PowerBalanceRule, VerificationContext,
-    VerificationEngine,
+    ClockDomainMembershipRule, ErcMultipleDriversRule, ErcPowerNetUndrivenRule, PowerBalanceRule,
+    VerificationContext, VerificationEngine,
 };
 use eak_ports::Event;
 use eak_runtime::{AgentContext, CapabilityRequest, Machine, MachineError, StepResult};
@@ -27,13 +28,14 @@ impl ErcVerificationMachine {
     }
 
     /// The verification engine for this phase: the Phase-3 ERC rules (undriven power net, multiple
-    /// drivers) plus the Band B power-balance rule, registered against the same generic framework
-    /// that Constraint Verification uses (reuse: one framework, many checks).
+    /// drivers) plus the Band B power-balance and clock-domain rules, registered against the same
+    /// generic framework that Constraint Verification uses (reuse: one framework, many checks).
     fn engine() -> VerificationEngine {
         VerificationEngine::new()
             .with_rule(Box::new(ErcPowerNetUndrivenRule::new()))
             .with_rule(Box::new(ErcMultipleDriversRule::new()))
             .with_rule(Box::new(PowerBalanceRule::new()))
+            .with_rule(Box::new(ClockDomainMembershipRule::new()))
     }
 }
 impl Default for ErcVerificationMachine {
@@ -75,6 +77,7 @@ impl Machine for ErcVerificationMachine {
                 let placements = ctx.placements();
                 let tracks = ctx.tracks();
                 let power_domains = ctx.power_domains();
+                let clock_domains = ctx.clock_domains();
                 let findings = engine.run(&VerificationContext {
                     requirements: &requirements,
                     constraints: &constraints,
@@ -87,6 +90,7 @@ impl Machine for ErcVerificationMachine {
                     placements: &placements,
                     tracks: &tracks,
                     power_domains: &power_domains,
+                    clock_domains: &clock_domains,
                 });
 
                 let existing = ctx.violations();

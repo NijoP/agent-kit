@@ -131,7 +131,7 @@ mod tests {
     use crate::fsm::{MachineError, StepResult};
     use crate::protocol::{Autonomy, CapabilityAck, CapabilityError, CapabilityRequest};
     use eak_domain::{
-        Assumption, Board, BomLineItem, Component, Constraint, DesignIntent, EntityId,
+        Assumption, Board, BomLineItem, ClockDomain, Component, Constraint, DesignIntent, EntityId,
         FunctionalBlock, Net, Objective, Part, Pin, Placement, PowerDomain, ProvenanceLink,
         Requirement, Risk, Track, Tradeoff, Violation,
     };
@@ -196,6 +196,9 @@ mod tests {
             vec![]
         }
         fn power_domains(&self) -> Vec<PowerDomain> {
+            vec![]
+        }
+        fn clock_domains(&self) -> Vec<ClockDomain> {
             vec![]
         }
         fn assumptions(&self) -> Vec<Assumption> {

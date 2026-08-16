@@ -1146,6 +1146,64 @@ impl PowerDomain {
     }
 }
 
+// ===================== Band B (Phase 5, increment 2): Clock Domain =====================
+//
+// The second logical-electrical Map (Map 21; `02 §Band B`). A [`ClockDomain`] is a named clock
+// region: a single [`Component`] (oscillator / crystal / PLL / clock generator) that sources a
+// `frequency` (P9, typed Hertz) to a set of [`Net`]s that are synchronous to that clock. This is
+// the abstraction the return-path continuity rule (`engineering-science/pcb/return-path.md` L138)
+// targets — that rule applies to *controlled / electrically-long* nets, a set the runtime can only
+// identify once it owns clock frequencies — and the seed of CDC (clock-domain-crossing) reasoning.
+// The seam keeps referential integrity (source component + member nets must be committed); a net
+// that belongs to more than one clock domain is a *design* finding (a clock-domain conflict,
+// [`ClockDomainMembershipRule`] in `eak-engines`), NOT a validation error — the domain itself is
+// well-formed the moment it names a real source, a positive frequency, and at least one net.
+//
+// `ClockDomain` carries a `PhysicalQuantity` field, so — like [`Component`]/[`Net`]/[`PowerDomain`]
+// — it derives `PartialEq` but NOT `Eq`. `validate()` reuses existing [`DomainError`] variants only.
+
+/// A named clock region: one source [`Component`] driving `frequency` onto a set of synchronous
+/// [`Net`]s. See the module comment above.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ClockDomain {
+    pub id: EntityId,
+    /// The domain name (e.g. `"SYS"`, `"48M"`, `"I2S_MCLK"`). The canonical handle engineers use.
+    pub name: String,
+    /// The domain's clock frequency (P9, e.g. 48 MHz). The net class that makes a net
+    /// "electrically-long" for return-path and SI purposes.
+    pub frequency: PhysicalQuantity,
+    /// The [`Component`] (oscillator / crystal / PLL / clock generator) that sources this clock.
+    /// The traceability anchor back to intent (P3). Referential integrity re-checked at the seam.
+    pub source_component: EntityId,
+    /// The [`Net`]s synchronous to this clock. At least one (a clock that drives nothing is inert,
+    /// mirroring `power domain must power at least one net`). Each must be a committed net
+    /// (re-checked at the seam).
+    pub members: Vec<EntityId>,
+}
+
+impl ClockDomain {
+    /// Domain invariants (reuses existing [`DomainError`] variants only): a non-empty `name`; a
+    /// finite, positive `frequency`; and at least one member net — a clock driving nothing is a
+    /// silent defect (P13). Values are compared via `si_magnitude()` so the checks are
+    /// unit-independent (P9). Member-link integrity is re-checked at the capability seam (P3).
+    pub fn validate(&self) -> Result<(), DomainError> {
+        if self.name.trim().is_empty() {
+            return Err(DomainError::EmptyField("clock domain name"));
+        }
+        if !self.frequency.si_magnitude().is_finite() || self.frequency.si_magnitude() <= 0.0 {
+            return Err(DomainError::Inconsistent(
+                "clock domain frequency must be positive and finite",
+            ));
+        }
+        if self.members.is_empty() {
+            return Err(DomainError::Inconsistent(
+                "clock domain must drive at least one net",
+            ));
+        }
+        Ok(())
+    }
+}
+
 /// A violated domain invariant.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DomainError {
@@ -2160,5 +2218,56 @@ mod tests {
         // The rail is well-formed; whether it is overloaded is the rule's judgement, not
         // validate()'s (a power-balance violation is a design finding, not a malformed object).
         assert!(well_formed_power_domain().validate().is_ok());
+    }
+
+    // ----------------- Band B (increment 2): ClockDomain -----------------
+    // The clock-domain invariants mirror the power domain's: a non-empty name, a finite positive
+    // frequency, at least one member net — and a well-formed domain whose members conflict with
+    // another domain's membership is the RULE's judgement (clock-domain conflict), not validate()'s.
+
+    fn well_formed_clock_domain() -> ClockDomain {
+        ClockDomain {
+            id: EntityId(40),
+            name: "SYS".into(),
+            frequency: PhysicalQuantity::new(48.0, Unit::Megahertz),
+            source_component: EntityId(4),
+            members: vec![EntityId(41), EntityId(42)],
+        }
+    }
+
+    #[test]
+    fn clock_domain_rejects_blank_name() {
+        let mut d = well_formed_clock_domain();
+        d.name = "  ".into();
+        assert_eq!(
+            d.validate(),
+            Err(DomainError::EmptyField("clock domain name"))
+        );
+    }
+
+    #[test]
+    fn clock_domain_rejects_non_positive_frequency() {
+        let mut d = well_formed_clock_domain();
+        d.frequency = PhysicalQuantity::new(0.0, Unit::Megahertz);
+        assert!(matches!(d.validate(), Err(DomainError::Inconsistent(_))));
+    }
+
+    #[test]
+    fn clock_domain_rejects_non_finite_frequency() {
+        let mut d = well_formed_clock_domain();
+        d.frequency = PhysicalQuantity::new(f64::NAN, Unit::Megahertz);
+        assert!(matches!(d.validate(), Err(DomainError::Inconsistent(_))));
+    }
+
+    #[test]
+    fn clock_domain_rejects_empty_members() {
+        let mut d = well_formed_clock_domain();
+        d.members = vec![];
+        assert!(matches!(d.validate(), Err(DomainError::Inconsistent(_))));
+    }
+
+    #[test]
+    fn well_formed_clock_domain_validates() {
+        assert!(well_formed_clock_domain().validate().is_ok());
     }
 }

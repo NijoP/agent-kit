@@ -5,9 +5,9 @@
 //! via a [`CapabilityRequest`] (P2). Agents never touch state or a model directly.
 
 use eak_domain::{
-    Assumption, Board, BomLineItem, Component, Constraint, Decision, DesignIntent, Discharge,
-    EntityId, Evidence, FunctionalBlock, Net, Objective, Part, Pin, Placement, PowerDomain,
-    ProvenanceLink, Requirement, Risk, Track, Tradeoff, Violation, Waiver,
+    Assumption, Board, BomLineItem, ClockDomain, Component, Constraint, Decision, DesignIntent,
+    Discharge, EntityId, Evidence, FunctionalBlock, Net, Objective, Part, Pin, Placement,
+    PowerDomain, ProvenanceLink, Requirement, Risk, Track, Tradeoff, Violation, Waiver,
 };
 use eak_ports::{Event, ReasoningError, ReasoningRequest, ReasoningResponse, Seq, StoreError};
 
@@ -177,6 +177,16 @@ pub enum CapabilityRequest {
         domain: PowerDomain,
         links: Vec<ProvenanceLink>,
     },
+    /// Commit a first-class [`ClockDomain`] (a named clock region) with its provenance links (Band B,
+    /// increment 2; Map 21). The runtime re-validates the domain (non-empty name, positive finite
+    /// frequency, >=1 member net), checks its `source_component` resolves to a committed component,
+    /// and checks every member net resolves to a committed net before committing (P3). A well-formed
+    /// domain whose membership crosses another domain IS accepted — the ClockDomainMembershipRule at
+    /// ERC time reports the conflict as a design finding, so the domain must be able to enter state.
+    CreateClockDomain {
+        domain: ClockDomain,
+        links: Vec<ProvenanceLink>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -247,6 +257,10 @@ pub trait AgentContext {
     /// Owned clones, like every other reader. The ERC phase reads these to run the
     /// [`PowerBalanceRule`](eak_engines::PowerBalanceRule).
     fn power_domains(&self) -> Vec<PowerDomain>;
+    /// Band B (increment 2): read the committed clock domains (the clock architecture; Map 21).
+    /// Owned clones, like every other reader. The ERC phase reads these to run the
+    /// [`ClockDomainMembershipRule`](eak_engines::ClockDomainMembershipRule).
+    fn clock_domains(&self) -> Vec<ClockDomain>;
     /// Call the reasoning engine, record the call (returning its event [`Seq`]), and
     /// return the judgement. Recording here is what makes replay deterministic (P4).
     fn reason(&mut self, req: ReasoningRequest)
