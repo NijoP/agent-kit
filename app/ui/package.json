@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Electronics Agent Kit — the Workspace screen. A projection of the kernel's committed-event stream.",
+  "description": "TUSK — an AI-native electronics engineering IDE. A projection of the kernel's committed-event stream.",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
@@ -23,6 +23,7 @@
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.3",
+    "playwright": "^1.62.1",
     "typescript": "^5.6.3",
     "vite": "^5.4.10",
     "vitest": "^2.1.4"

@@ -1,4 +1,4 @@
-import { Files, Search, Sparkles, CircuitBoard, ShieldCheck, GitBranch, Settings } from "lucide-react";
+import { Files, Search, Sparkles, CircuitBoard, ShieldCheck, GitBranch, Library, Settings } from "lucide-react";
 import { useStore, type PanelView } from "../../store/useWorkspaceStore";
 
 const TOP: { view: PanelView; icon: typeof Files; label: string }[] = [
@@ -6,6 +6,7 @@ const TOP: { view: PanelView; icon: typeof Files; label: string }[] = [
   { view: "search", icon: Search, label: "Search" },
   { view: "agent", icon: Sparkles, label: "Agent" },
   { view: "design", icon: CircuitBoard, label: "Design" },
+  { view: "library", icon: Library, label: "Library" },
   { view: "verify", icon: ShieldCheck, label: "Verify" },
   { view: "revisions", icon: GitBranch, label: "Revisions" },
 ];

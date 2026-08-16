@@ -1,4 +1,13 @@
-import type { EntityId } from "../contract/v1";
+import type {
+  BomLineItem,
+  Component,
+  EntityId,
+  Net,
+  NetClass,
+  Part,
+  Pin,
+  Violation,
+} from "../contract/v1";
 import type { ViewModel } from "./fold";
 
 /**
@@ -127,4 +136,215 @@ export interface BoardBounds {
 export function boardBounds(vm: ViewModel): BoardBounds | null {
   if (!vm.board) return null;
   return { w: vm.board.width.magnitude, h: vm.board.height.magnitude };
+}
+
+// ── Net classes ────────────────────────────────────────────────────────────────────────────────
+
+/** The CSS var a net's class projects to (used by PCB, schematic, nets panel, inspector). */
+export function netClassColor(cls: NetClass): string {
+  switch (cls) {
+    case "Power":
+      return "var(--ecad-net-power)";
+    case "Ground":
+      return "var(--ecad-net-ground)";
+    case "Signal":
+      return "var(--ecad-net-signal)";
+  }
+}
+
+/** Nets carrying an impedance target render as high-speed violet. */
+export function netColor(net: Net): string {
+  return net.impedance_target ? "var(--ecad-net-highspeed)" : netClassColor(net.class);
+}
+
+// ── Object maps (component ⇄ pin ⇄ net ⇄ part) ────────────────────────────────────────────────
+
+export function componentOfPin(vm: ViewModel, pinId: EntityId): Component | undefined {
+  const pin = vm.pins.find((p) => p.id === pinId);
+  return pin ? vm.components.find((c) => c.id === pin.component) : undefined;
+}
+
+export function pinsForComponent(vm: ViewModel, compId: EntityId): Pin[] {
+  return vm.pins.filter((p) => p.component === compId);
+}
+
+export function netsForComponent(vm: ViewModel, compId: EntityId): Net[] {
+  const pinIds = new Set(pinsForComponent(vm, compId).map((p) => p.id));
+  return vm.nets.filter((n) => n.members.some((m) => pinIds.has(m)));
+}
+
+export function pinOfNet(vm: ViewModel, pinId: EntityId): Net | undefined {
+  return vm.nets.find((n) => n.members.includes(pinId));
+}
+
+export function netOfTrack(vm: ViewModel, trackId: EntityId): Net | undefined {
+  const t = vm.tracks.find((x) => x.id === trackId);
+  return t ? vm.nets.find((n) => n.id === t.net) : undefined;
+}
+
+export function componentOfPlacement(vm: ViewModel, placementId: EntityId): Component | undefined {
+  const p = vm.placements.find((x) => x.id === placementId);
+  return p ? vm.components.find((c) => c.id === p.component) : undefined;
+}
+
+/** Pads (footprint courtyards) belonging to a component. */
+export function componentPads(vm: ViewModel, compId: EntityId): PadProjection[] {
+  return pads(vm).filter((p) => p.component === compId);
+}
+
+/** Pads on a net — every footprint whose component has a pin on that net. */
+export function padsForNet(vm: ViewModel, netId: EntityId): PadProjection[] {
+  const pinIds = new Set(vm.nets.find((n) => n.id === netId)?.members ?? []);
+  const compIds = new Set<EntityId>();
+  for (const pin of vm.pins) if (pinIds.has(pin.id)) compIds.add(pin.component);
+  return pads(vm).filter((p) => compIds.has(p.component));
+}
+
+export function trackIdsForNet(vm: ViewModel, netId: EntityId): EntityId[] {
+  return vm.tracks.filter((t) => t.net === netId).map((t) => t.id);
+}
+
+// ── Parts ⇄ components (via BOM lines) ────────────────────────────────────────────────────────
+
+export function bomLineForPart(vm: ViewModel, partId: EntityId): BomLineItem | undefined {
+  return vm.bomLines.find((l) => l.part === partId);
+}
+
+export function componentsForPart(vm: ViewModel, partId: EntityId): Component[] {
+  const line = bomLineForPart(vm, partId);
+  return vm.components.filter((c) => line?.components.includes(c.id));
+}
+
+export function partOfComponent(vm: ViewModel, compId: EntityId): Part | undefined {
+  return vm.parts.find((p) => componentsForPart(vm, p.id).some((c) => c.id === compId));
+}
+
+export function partOfPin(vm: ViewModel, pinId: EntityId): Part | undefined {
+  const comp = componentOfPin(vm, pinId);
+  return comp ? partOfComponent(vm, comp.id) : undefined;
+}
+
+// ── Net routing state ──────────────────────────────────────────────────────────────────────────
+
+/** Net routing state, derived from committed tracks (the router's progress — not the ratlines'). */
+export type NetState = "trivial" | "routed" | "unrouted";
+export function netState(vm: ViewModel, netId: EntityId): NetState {
+  const net = vm.nets.find((n) => n.id === netId);
+  if (!net || net.members.length < 2) return "trivial";
+  return vm.tracks.some((t) => t.net === netId) ? "routed" : "unrouted";
+}
+
+// ── Cross-probe resolution ─────────────────────────────────────────────────────────────────────
+
+/**
+ * Resolve any selectable entity to the net it belongs to, when one exists. This is the seam the
+ * canvas cross-probing uses: select a pad, a component, a pin, a track, or a violation subject and
+ * the board/schematic highlight the same net.
+ */
+export function highlightNetOf(vm: ViewModel, id: EntityId | undefined): EntityId | undefined {
+  if (!id) return undefined;
+  if (vm.nets.some((n) => n.id === id)) return id;
+  if (vm.tracks.some((t) => t.id === id)) return netOfTrack(vm, id)?.id;
+  if (vm.pins.some((p) => p.id === id)) return pinOfNet(vm, id)?.id;
+  const comp = vm.components.find((c) => c.id === id);
+  if (comp) return netsForComponent(vm, comp.id)[0]?.id;
+  const placement = vm.placements.find((p) => p.id === id);
+  if (placement) {
+    const c = componentOfPlacement(vm, placement.id);
+    if (c) return netsForComponent(vm, c.id)[0]?.id;
+  }
+  const viol = vm.violations.find((v) => v.id === id);
+  if (viol) return viol.subjects.find((s) => vm.nets.some((n) => n.id === s));
+  return undefined;
+}
+
+export function trackOf(vm: ViewModel, id: EntityId) {
+  return vm.tracks.find((t) => t.id === id);
+}
+export function violationOf(vm: ViewModel, id: EntityId): Violation | undefined {
+  return vm.violations.find((v) => v.id === id);
+}
+
+// ── Schematic graph ────────────────────────────────────────────────────────────────────────────
+
+export interface SchematicPin {
+  pin: Pin;
+  designation: string;
+  type: Pin["electrical_type"];
+  /** Y offset within the node box (0 = top). */
+  y: number;
+}
+export interface SchematicNode {
+  component: Component;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  pins: SchematicPin[];
+}
+export interface SchematicRail {
+  net: Net;
+  color: string;
+  y: number;
+}
+export interface SchematicGraph {
+  nodes: SchematicNode[];
+  rails: SchematicRail[];
+  /** Bounding box of the whole projection, in layout units. */
+  w: number;
+  h: number;
+}
+
+const BOX_W = 128;
+const BOX_H = 170;
+const BOX_GAP = 84;
+const ROW_GAP = 70;
+const TOP_M = 28;
+const RAIL_GAP = 92;
+const RAIL_TOP_M = 40;
+
+const PIN_ORDER: Record<Pin["electrical_type"], number> = {
+  PowerIn: 0,
+  PowerOut: 1,
+  Input: 2,
+  Bidirectional: 3,
+  Output: 4,
+  Passive: 5,
+  Ground: 6,
+  NoConnect: 7,
+};
+
+/**
+ * Schematic projection — the owned architecture drawn as a schematic sheet: one node box per
+ * component, pins on the left edge, and one horizontal rail per net labelled with its name and
+ * colored by class. This is PURE geometry derived from committed pins/nets (the schematic can never
+ * claim a connection the kernel did not commit).
+ */
+export function schematicGraph(vm: ViewModel): SchematicGraph {
+  const nodes: SchematicNode[] = [];
+  const perRow = Math.max(1, Math.ceil(Math.sqrt(vm.components.length * 3)) || 1);
+
+  vm.components.forEach((c, i) => {
+    const col = i % perRow;
+    const row = Math.floor(i / perRow);
+    const sorted = pinsForComponent(vm, c.id).slice().sort((a, b) => PIN_ORDER[a.electrical_type] - PIN_ORDER[b.electrical_type]);
+    const pinGap = Math.max(34, (BOX_H - 60) / Math.max(1, sorted.length));
+    const pins: SchematicPin[] = sorted.map((pin, pIdx) => ({
+      pin,
+      designation: pin.designation,
+      type: pin.electrical_type,
+      y: 34 + pIdx * pinGap,
+    }));
+    nodes.push({ component: c, x: TOP_M + col * (BOX_W + BOX_GAP), y: TOP_M + row * (BOX_H + ROW_GAP), w: BOX_W, h: BOX_H, pins });
+  });
+
+  // Rails below the node grid, ordered power → signal → ground (ground reads at the bottom).
+  const classOrder: Record<NetClass, number> = { Power: 0, Signal: 1, Ground: 2 };
+  const nets = vm.nets.slice().sort((a, b) => classOrder[a.class] - classOrder[b.class]);
+  const gridBottom = nodes.reduce((m, n) => Math.max(m, n.y + n.h), TOP_M);
+  const rails: SchematicRail[] = nets.map((net, i) => ({ net, color: netColor(net), y: gridBottom + RAIL_TOP_M + i * RAIL_GAP }));
+
+  const width = TOP_M + (Math.min(perRow, Math.max(vm.components.length, 1)) * (BOX_W + BOX_GAP) - BOX_GAP) + TOP_M;
+  const height = (rails.length ? rails[rails.length - 1].y : gridBottom) + 40;
+  return { nodes, rails, w: Math.max(width, 60), h: Math.max(height, 60) };
 }

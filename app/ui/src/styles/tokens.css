@@ -75,6 +75,20 @@
   --ecad-grid-major: rgba(255, 255, 255, 0.09);
   --ecad-ruler-bg: #0d1115;
   --ecad-select: var(--accent);
+
+  /* ---- ECAD net-class colors (the rail / net palette on PCB + schematic projections) ---- */
+  --ecad-net-power: #f2a45c;      /* power rails — warm amber */
+  --ecad-net-ground: #6fd3c0;     /* ground / earth — mint */
+  --ecad-net-signal: #c9d2dc;     /* plain signal — steel */
+  --ecad-net-highspeed: #c97ce0;  /* impedance-targeted nets — violet */
+
+  /* ---- Schematic projection ---- */
+  --ecad-schematic-bg: #0d1013;
+  --ecad-schematic-node: #151a20;
+  --ecad-schematic-pin: #cfd6dd;
+  --ecad-schematic-junction: #e7eaee;
+  --ecad-stack-dielectric: #181e26;  /* laminate in the layer stack-up */
+  --ecad-stack-substrate: #20262e;   /* core in the layer stack-up */
 }
 
 @media (prefers-reduced-motion: reduce) {

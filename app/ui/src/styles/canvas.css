@@ -133,6 +133,21 @@
   animation: eak-pulse 1.6s var(--ease) infinite;
 }
 
+/* cross-probe: when a net-level selection is active, everything off-net dims so the net reads */
+.pcb .dim {
+  opacity: 0.14;
+  transition: opacity var(--dur-micro) var(--ease);
+}
+.ratline.hot {
+  stroke: var(--accent);
+  stroke-width: 0.14;
+  stroke-dasharray: none;
+  opacity: 1;
+}
+.track.hot {
+  stroke: var(--accent);
+}
+
 /* pcb empty state */
 .pcb-empty {
   position: absolute;
@@ -145,4 +160,98 @@
   color: var(--text-muted);
   font-size: 13px;
   text-align: center;
+}
+
+/* ============================================================================================
+ * Schematic projection — a schematic-sheet rendering derived from committed pins/nets.
+ * ==========================================================================================*/
+.schematic {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  background: var(--ecad-schematic-bg);
+}
+.schematic-svg {
+  display: block;
+  min-width: 100%;
+  min-height: 100%;
+}
+.schematic-node {
+  fill: var(--ecad-schematic-node);
+  stroke: var(--border-strong);
+  stroke-width: 1;
+  rx: 6;
+  transition: stroke var(--dur-micro) var(--ease), fill var(--dur-micro) var(--ease);
+}
+.schematic-node:hover {
+  stroke: var(--border-strong);
+  filter: brightness(1.12);
+}
+.schematic-node.sel {
+  stroke: var(--accent);
+  fill: var(--accent-wash);
+}
+.schematic-refdes {
+  fill: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: 600;
+}
+.schematic-klass {
+  fill: var(--text-muted);
+  font-family: var(--font-ui);
+  font-size: 10.5px;
+}
+.schematic-pin {
+  fill: var(--ecad-schematic-pin);
+}
+.schematic-pin-label {
+  fill: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 9px;
+}
+.schematic-pin-type {
+  fill: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 7.5px;
+}
+.schematic-rail {
+  stroke-width: 2;
+  opacity: 0.85;
+}
+.schematic-rail.power {
+  stroke-width: 3;
+}
+.schematic-rail.hot {
+  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--ecad-net-highspeed) 45%, transparent));
+}
+.schematic-stub {
+  stroke: var(--ecad-schematic-pin);
+  stroke-width: 1.2;
+}
+.schematic-junction {
+  fill: var(--ecad-schematic-junction);
+}
+.schematic-netlabel {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+}
+.schematic-rail:hover {
+  opacity: 1;
+}
+.schematic-rail.sel {
+  opacity: 1;
+  stroke-width: 3;
+}
+.schematic-note {
+  position: absolute;
+  left: 12px;
+  bottom: 10px;
+  font-size: 11px;
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
 }

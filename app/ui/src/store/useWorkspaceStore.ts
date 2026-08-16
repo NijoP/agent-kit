@@ -5,7 +5,7 @@ import { emptyViewModel, fold, gateOf, type Gate, type ViewModel } from "./fold"
 import type { LayerKey } from "./selectors";
 
 export type DesignDoc = "schematic" | "pcb" | "3d" | "ir";
-export type PanelView = "explorer" | "search" | "agent" | "design" | "verify" | "revisions" | "settings";
+export type PanelView = "explorer" | "search" | "agent" | "design" | "verify" | "revisions" | "library" | "settings";
 export type BottomTab = "problems" | "tasks" | "agent" | "drc" | "log" | "find";
 export type Tool = "select" | "pan" | "measure";
 export type DocViewMode = "preview" | "source";

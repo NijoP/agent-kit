@@ -10,7 +10,7 @@ interface Command {
 
 export function CommandPalette() {
   const store = useStore();
-  const { paletteOpen, togglePalette } = store;
+  const { paletteOpen, togglePalette, vm } = store;
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -30,6 +30,7 @@ export function CommandPalette() {
       { label: "Design: Run design", run: () => store.restart() },
       { label: "Design: Run DRC", run: () => store.setBottom("drc") },
       { label: "Route: Toggle ratlines", run: () => store.toggleLayer("ratline") },
+      { label: "View: Library", run: () => store.setPanel("library") },
       { label: "Tools: Fit to board", hint: "⌘0", run: () => store.requestFit() },
       { label: "Tools: Select", run: () => store.setTool("select") },
       { label: "Tools: Pan", run: () => store.setTool("pan") },
@@ -37,10 +38,18 @@ export function CommandPalette() {
       { label: "View: Toggle Sidebar", hint: "⌘B", run: () => store.toggle("showSidebar") },
       { label: "View: Toggle Inspector", hint: "⌘2", run: () => store.toggle("showRightDock") },
       { label: "View: Toggle Bottom Dock", hint: "⌘J", run: () => store.toggle("showBottom") },
+      { label: "View: Toggle Top Copper", run: () => store.toggleLayer("topCopper") },
+      { label: "View: Toggle Bottom Copper", run: () => store.toggleLayer("bottomCopper") },
+      { label: "View: Toggle Silkscreen", run: () => store.toggleLayer("silk") },
+      { label: "View: Toggle Board Outline", run: () => store.toggleLayer("outline") },
       { label: "Go to Agent", run: () => store.setPanel("agent") },
       { label: "Go to Settings", run: () => store.setPanel("settings") },
+      ...vm.nets.map((n): Command => ({ label: `Go to net: ${n.name}`, run: () => { store.openDesign("pcb"); store.select(n.id); } })),
+      ...vm.components.map((c): Command => ({ label: `Go to component: ${c.refdes}`, run: () => { store.openDesign("pcb"); store.select(c.id); } })),
+      ...vm.parts.map((p): Command => ({ label: `Go to part: ${p.mpn}`, run: () => store.select(p.id) })),
+      ...vm.violations.filter((v) => v.status === "Open").map((v): Command => ({ label: `Go to finding: ${v.rule}`, run: () => { store.openDesign("pcb"); store.select(v.id); } })),
     ],
-    [store],
+    [store, vm],
   );
 
   const filtered = useMemo(() => {

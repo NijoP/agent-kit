@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { CircuitBoard } from "lucide-react";
 import { useStore } from "../../store/useWorkspaceStore";
-import { pads, ratlines, boardBounds } from "../../store/selectors";
+import { pads, ratlines, boardBounds, highlightNetOf, padsForNet } from "../../store/selectors";
 
 interface Size {
   w: number;
@@ -102,6 +102,19 @@ export function PcbCanvas() {
   const rats = layers.ratline ? ratlines(vm) : [];
   const drcTargets = new Set(vm.violations.filter((v) => v.status === "Open").flatMap((v) => v.subjects));
 
+  // Cross-probe: resolve the selection to a net when possible, then highlight that net's copper.
+  const hotNet = highlightNetOf(vm, selected);
+  const hotPadIds = hotNet ? new Set(padsForNet(vm, hotNet).map((p) => p.id)) : null;
+  const isHotting = hotNet !== undefined; // a net-level selection is active → dim the rest
+
+  const padClass = (p: (typeof padList)[number]) => {
+    const parts = ["pad", p.side === "Bottom" ? "bottom" : "top"];
+    if (selected === p.component) parts.push("sel");
+    if (isHotting && hotPadIds!.has(p.id)) parts.push("hot");
+    if (isHotting && !hotPadIds!.has(p.id)) parts.push("dim");
+    return parts.join(" ");
+  };
+
   return (
     <div className={`pcb ${tool === "pan" ? "pan" : ""} ${panning.current ? "panning" : ""}`}>
       <div className="ruler-corner" />
@@ -146,6 +159,7 @@ export function PcbCanvas() {
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
+        onClick={() => select(undefined)}
         onPointerLeave={() => setCursorMm(undefined)}
       >
         <svg className="pcb-svg">
@@ -162,7 +176,11 @@ export function PcbCanvas() {
 
             {/* ratlines (under copper) */}
             {rats.map((r, i) => (
-              <line key={`rt${i}`} className="ratline" x1={r.x1} y1={r.y1} x2={r.x2} y2={r.y2} />
+              <line
+                key={`rt${i}`}
+                className={`ratline ${hotNet && r.netId === hotNet ? "hot" : ""} ${isHotting && r.netId !== hotNet ? "dim" : ""}`}
+                x1={r.x1} y1={r.y1} x2={r.x2} y2={r.y2}
+              />
             ))}
 
             {/* routed tracks */}
@@ -170,12 +188,14 @@ export function PcbCanvas() {
               vm.tracks.map((t) => (
                 <line
                   key={t.id}
-                  className={`track ${t.layer === "Bottom" ? "bottom" : "top"} ${selected === t.net ? "sel" : ""}`}
+                  className={`track ${t.layer === "Bottom" ? "bottom" : "top"} ${selected === t.id || hotNet === t.net ? "sel" : ""} ${isHotting && hotNet !== t.net ? "dim" : ""}`}
                   x1={t.x1.magnitude}
                   y1={t.y1.magnitude}
                   x2={t.x2.magnitude}
                   y2={t.y2.magnitude}
                   strokeWidth={Math.max(0.12, t.width.magnitude)}
+                  onClick={(e) => { e.stopPropagation(); select(t.id); }}
+                  style={{ cursor: "pointer" }}
                 />
               ))}
 
@@ -183,11 +203,10 @@ export function PcbCanvas() {
             {padList
               .filter((p) => (p.side === "Top" ? layers.topCopper : layers.bottomCopper))
               .map((p) => {
-                const sel = selected === p.component;
                 return (
                   <g key={p.id} onClick={(e) => { e.stopPropagation(); select(p.component); }}>
                     <rect
-                      className={`pad ${p.side === "Bottom" ? "bottom" : "top"} ${sel ? "sel" : ""}`}
+                      className={padClass(p)}
                       x={p.x}
                       y={p.y}
                       width={p.w}
