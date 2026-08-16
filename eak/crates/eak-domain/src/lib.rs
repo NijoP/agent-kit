@@ -1272,6 +1272,84 @@ impl ReturnPath {
     }
 }
 
+// ===================== Band B (Phase 5, increment 4): Pin-Function / Mux Map =====================
+//
+// The fourth logical-electrical Map (Map 22; `02 §Band B`). The MCU/FPGA pin-planning problem, kept
+// honest by separating CAPABILITY from ASSIGNMENT (master-prompt §31): a [`PinCapability`] is the
+// datasheet truth — the set of mux functions a physical [`Pin`] *can* carry; a [`PinAssignment`] is
+// the design truth — the function the design *assigns* to that pin. These are deliberately two
+// objects: the mux-conflict and capability rules only make sense once both exist (an assignment is
+// verified against its pin's declared capability; two assignments on one pin conflict), so the
+// Pin-Function/Mux Map ships as one increment containing both objects.
+//
+// The seam keeps referential integrity (pin must be committed); whether an assignment violates a
+// capability or conflicts with another assignment is a *design* finding
+// ([`PinMuxConflictRule`] / [`PinCapabilityRule`] in `eak-engines`), NOT a validation error — the
+// assignment itself is well-formed the moment it names a real pin and a non-empty function, so it
+// must enter state for the rules to report the conflict. `PinAssignment.function` is a `String`
+// because mux function names are datasheet-specific and open-ended; forcing an enum would fabricate
+// a closed world (P7).
+//
+// Neither object carries a `PhysicalQuantity`, so — like [`Pin`] / [`FunctionalBlock`] — they derive
+// `Eq`. `validate()` reuses existing [`DomainError`] variants only.
+
+/// A pin's datasheet truth: the set of mux functions a physical [`Pin`] can carry. See the module
+/// comment above.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PinCapability {
+    pub id: EntityId,
+    /// The [`Pin`] whose capabilities these are. Must resolve to a committed pin (re-checked at the
+    /// seam, P3).
+    pub pin: EntityId,
+    /// The mux functions this pin can be assigned (e.g. `["UART1_TX", "SPI1_MOSI", "GPIO13"]`).
+    /// At least one — declaring a capability with nothing assignable is inert (mirrors "a power
+    /// domain must power at least one net").
+    pub functions: Vec<String>,
+}
+
+impl PinCapability {
+    /// Domain invariants (reuses existing [`DomainError`] variants only): a non-null `pin` and a
+    /// non-empty `functions` set. Link integrity is re-checked at the capability seam (P3).
+    pub fn validate(&self) -> Result<(), DomainError> {
+        if self.pin.is_null() {
+            return Err(DomainError::Inconsistent("pin capability must name a pin"));
+        }
+        if self.functions.is_empty() {
+            return Err(DomainError::Inconsistent(
+                "pin capability must declare at least one assignable function",
+            ));
+        }
+        Ok(())
+    }
+}
+
+/// A pin's design truth: the mux function the design assigns to a [`Pin`]. See the module comment
+/// above.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PinAssignment {
+    pub id: EntityId,
+    /// The [`Pin`] being assigned. Must resolve to a committed pin (re-checked at the seam, P3).
+    pub pin: EntityId,
+    /// The function the design assigns (e.g. `"SPI1_MOSI"`). Non-empty; whether the pin's
+    /// [`PinCapability`] declares it is the capability rule's judgement at ERC time, not this
+    /// object's — a well-formed assignment must enter state so the rules can report the conflict.
+    pub function: String,
+}
+
+impl PinAssignment {
+    /// Domain invariants (reuses existing [`DomainError`] variants only): a non-null `pin` and a
+    /// non-empty `function`. Link integrity is re-checked at the capability seam (P3).
+    pub fn validate(&self) -> Result<(), DomainError> {
+        if self.pin.is_null() {
+            return Err(DomainError::Inconsistent("pin assignment must name a pin"));
+        }
+        if self.function.trim().is_empty() {
+            return Err(DomainError::EmptyField("pin assignment function"));
+        }
+        Ok(())
+    }
+}
+
 /// A violated domain invariant.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DomainError {
@@ -2389,5 +2467,83 @@ mod tests {
     #[test]
     fn well_formed_return_path_validates() {
         assert!(well_formed_return_path().validate().is_ok());
+    }
+
+    // ========== Band B (inc 4): PinCapability / PinAssignment ==========
+
+    fn well_formed_capability() -> PinCapability {
+        PinCapability {
+            id: EntityId(10),
+            pin: EntityId(20),
+            functions: vec!["SPI1_MOSI".into(), "UART1_TX".into()],
+        }
+    }
+
+    #[test]
+    fn well_formed_capability_validates() {
+        assert!(well_formed_capability().validate().is_ok());
+    }
+
+    #[test]
+    fn capability_rejects_null_pin() {
+        let c = PinCapability {
+            pin: EntityId::NULL,
+            ..well_formed_capability()
+        };
+        assert_eq!(
+            c.validate(),
+            Err(DomainError::Inconsistent("pin capability must name a pin"))
+        );
+    }
+
+    #[test]
+    fn capability_rejects_no_functions() {
+        let c = PinCapability {
+            functions: vec![],
+            ..well_formed_capability()
+        };
+        assert_eq!(
+            c.validate(),
+            Err(DomainError::Inconsistent(
+                "pin capability must declare at least one assignable function"
+            ))
+        );
+    }
+
+    fn well_formed_assignment() -> PinAssignment {
+        PinAssignment {
+            id: EntityId(11),
+            pin: EntityId(20),
+            function: "SPI1_MOSI".into(),
+        }
+    }
+
+    #[test]
+    fn well_formed_assignment_validates() {
+        assert!(well_formed_assignment().validate().is_ok());
+    }
+
+    #[test]
+    fn assignment_rejects_null_pin() {
+        let a = PinAssignment {
+            pin: EntityId::NULL,
+            ..well_formed_assignment()
+        };
+        assert_eq!(
+            a.validate(),
+            Err(DomainError::Inconsistent("pin assignment must name a pin"))
+        );
+    }
+
+    #[test]
+    fn assignment_rejects_blank_function() {
+        let a = PinAssignment {
+            function: "   ".into(),
+            ..well_formed_assignment()
+        };
+        assert_eq!(
+            a.validate(),
+            Err(DomainError::EmptyField("pin assignment function"))
+        );
     }
 }

@@ -54,9 +54,10 @@ mod kernel_tests {
         Alternative, Assumption, AssumptionCriticality, AssumptionStatus, Board, BoardSide,
         BomLineItem, ClockDomain, Component, ComponentClass, ComponentOrigin, Decision, Discharge,
         DischargeResolution, EntityId, FidelityMethod, FunctionalBlock, LayerStack, ModelFidelity,
-        Net, NetClass, NetOrigin, Objective, Part, PartLifecycle, Pin, PinElectricalType,
-        Placement, PowerDomain, Priority, Requirement, RequirementCategory, RequirementStatus,
-        ReturnPath, Risk, RiskLikelihood, RiskSeverity, RiskStatus, Track, Tradeoff,
+        Net, NetClass, NetOrigin, Objective, Part, PartLifecycle, Pin, PinAssignment,
+        PinCapability, PinElectricalType, Placement, PowerDomain, Priority, Requirement,
+        RequirementCategory, RequirementStatus, ReturnPath, Risk, RiskLikelihood, RiskSeverity,
+        RiskStatus, Track, Tradeoff,
     };
     use eak_ports::{
         Event, EventLog, EventRecord, ReasoningEngine, ReasoningError, ReasoningRequest,
@@ -2605,5 +2606,190 @@ mod kernel_tests {
 
         // Nothing entered the log: every malformed/dangling proposal was rejected pre-commit.
         assert!(core.state.return_paths.is_empty());
+    }
+
+    // ===================== Band B (increment 4): Pin-Function / Mux seam =====================
+    //
+    // TDD (written before the seam handlers exist): PinCapability and PinAssignment flow through
+    // the same seam as every other object. CreatePinCapability / CreatePinAssignment re-validate
+    // (non-null pin; non-empty functions / non-empty function) and reject a pin that was never
+    // committed (P3 referential integrity — a capability or assignment can never attach to a
+    // phantom pin). The fold pushes the committed objects into state; the log replays
+    // byte-identically (P4). Whether an assignment conflicts or exceeds its pin's capability is the
+    // rules' judgement at ERC time, NOT the seam's — a well-formed assignment must enter state so
+    // the conflicts are reported (master-prompt §31).
+
+    /// Seed an MCU pin so a capability and an assignment have a real referential anchor. Returns the
+    /// pin id.
+    fn seed_mcu_pin(core: &mut RuntimeCore) -> EntityId {
+        let comp = core.fresh_id();
+        let pin = core.fresh_id();
+        core.invoke(CapabilityRequest::RealizeComponent {
+            component: Component {
+                id: comp,
+                refdes: "U1".into(),
+                class: ComponentClass::Ic,
+                value: None,
+                from_block: EntityId::NULL,
+                origin: ComponentOrigin::Imported,
+            },
+            pins: vec![Pin {
+                id: pin,
+                component: comp,
+                designation: "P1".into(),
+                electrical_type: PinElectricalType::Bidirectional,
+            }],
+            links: vec![],
+        })
+        .unwrap();
+        pin
+    }
+
+    #[test]
+    fn create_pin_capability_and_assignment_seam_folds_and_replays_byte_identically() {
+        let mut core = new_core();
+        let pin = seed_mcu_pin(&mut core);
+        let cap_id = core.fresh_id();
+        let assign_id = core.fresh_id();
+
+        core.invoke(CapabilityRequest::CreatePinCapability {
+            capability: PinCapability {
+                id: cap_id,
+                pin,
+                functions: vec!["SPI1_MOSI".into(), "UART1_TX".into()],
+            },
+            links: vec![],
+        })
+        .expect("a capability on a committed pin is accepted at the seam");
+        core.invoke(CapabilityRequest::CreatePinAssignment {
+            assignment: PinAssignment {
+                id: assign_id,
+                pin,
+                function: "SPI1_MOSI".into(),
+            },
+            links: vec![],
+        })
+        .expect("a well-formed assignment on a committed pin is accepted at the seam");
+
+        // The fold pushed both objects and the accessors read them back by id.
+        assert_eq!(core.state.pin_capabilities.len(), 1);
+        assert_eq!(core.state.pin_assignments.len(), 1);
+        let c = core
+            .state
+            .pin_capability(cap_id)
+            .expect("capability folded by id");
+        assert_eq!(c.pin, pin);
+        assert!(c.functions.contains(&"SPI1_MOSI".to_string()));
+        let a = core
+            .state
+            .pin_assignment(assign_id)
+            .expect("assignment folded by id");
+        assert_eq!(a.pin, pin);
+        assert_eq!(a.function, "SPI1_MOSI");
+
+        // Byte-identical replay with both objects in the log (P4).
+        let replayed = replay(core.log()).unwrap();
+        assert_eq!(core.state, replayed);
+        assert_eq!(core.state.canonical_json(), replayed.canonical_json());
+    }
+
+    #[test]
+    fn create_pin_capability_seam_rejects_malformed_and_dangling_proposals() {
+        let mut core = new_core();
+        let pin = seed_mcu_pin(&mut core);
+        let (c_null_pin, c_empty, c_phantom) = (core.fresh_id(), core.fresh_id(), core.fresh_id());
+
+        // (1) Null pin — a capability for nothing is untraceable (P3).
+        let err = core
+            .invoke(CapabilityRequest::CreatePinCapability {
+                capability: PinCapability {
+                    id: c_null_pin,
+                    pin: EntityId::NULL,
+                    functions: vec!["SPI1_MOSI".into()],
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // (2) Empty functions — declaring a capability with nothing assignable is inert.
+        let err = core
+            .invoke(CapabilityRequest::CreatePinCapability {
+                capability: PinCapability {
+                    id: c_empty,
+                    pin,
+                    functions: vec![],
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // (3) Dangling pin — references a pin never committed (P3): no phantom pin capabilities.
+        let err = core
+            .invoke(CapabilityRequest::CreatePinCapability {
+                capability: PinCapability {
+                    id: c_phantom,
+                    pin: EntityId(0xDEAD_BEEF),
+                    functions: vec!["SPI1_MOSI".into()],
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // Nothing entered the log.
+        assert!(core.state.pin_capabilities.is_empty());
+        assert!(core.state.pin_assignments.is_empty());
+    }
+
+    #[test]
+    fn create_pin_assignment_seam_rejects_malformed_and_dangling_proposals() {
+        let mut core = new_core();
+        let pin = seed_mcu_pin(&mut core);
+        let (a_null_pin, a_blank, a_phantom) = (core.fresh_id(), core.fresh_id(), core.fresh_id());
+
+        // (1) Null pin — an assignment binding a function to nothing is untraceable (P3).
+        let err = core
+            .invoke(CapabilityRequest::CreatePinAssignment {
+                assignment: PinAssignment {
+                    id: a_null_pin,
+                    pin: EntityId::NULL,
+                    function: "SPI1_MOSI".into(),
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // (2) Blank function — an assignment with no function declares nothing.
+        let err = core
+            .invoke(CapabilityRequest::CreatePinAssignment {
+                assignment: PinAssignment {
+                    id: a_blank,
+                    pin,
+                    function: "   ".into(),
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // (3) Dangling pin — references a pin never committed (P3): no phantom pin assignments.
+        let err = core
+            .invoke(CapabilityRequest::CreatePinAssignment {
+                assignment: PinAssignment {
+                    id: a_phantom,
+                    pin: EntityId(0xDEAD_BEEF),
+                    function: "SPI1_MOSI".into(),
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // Nothing entered the log.
+        assert!(core.state.pin_capabilities.is_empty());
+        assert!(core.state.pin_assignments.is_empty());
     }
 }

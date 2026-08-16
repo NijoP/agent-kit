@@ -8,8 +8,8 @@
 use eak_domain::{
     Board, BoardSide, BomLineItem, ClockDomain, Component, ComponentClass, Constraint,
     ConstraintKind, EntityId, Layer, LayerStack, Net, NetClass, Part, PartLifecycle, Pin,
-    PinElectricalType, Placement, PowerDomain, Requirement, RequirementCategory, ReturnPath, Track,
-    Violation, ViolationSeverity,
+    PinAssignment, PinCapability, PinElectricalType, Placement, PowerDomain, Requirement,
+    RequirementCategory, ReturnPath, Track, Violation, ViolationSeverity,
 };
 use eak_units::{Dimension, PhysicalQuantity, Unit, UnitError};
 use std::cmp::Ordering;
@@ -127,6 +127,15 @@ pub struct VerificationContext<'a> {
     /// return-path rules reason over the return half of the signal loop — the reference net a
     /// controlled net's return current flows on (`engineering-science/pcb/return-path.md`).
     pub return_paths: &'a [ReturnPath],
+    /// Band B (Phase 5): the committed pin capabilities (the pin-function / mux architecture,
+    /// Map 22). A pin's datasheet truth — the set of mux functions it can carry. Lets the
+    /// capability rule verify each assignment against its pin's declared functions.
+    pub pin_capabilities: &'a [PinCapability],
+    /// Band B (Phase 5): the committed pin assignments (the pin-function / mux architecture,
+    /// Map 22). The design truth — the function each pin is assigned. Lets the mux-conflict rule
+    /// catch two assignments claiming one pin (master-prompt §31: a conflicting assignment is an
+    /// engineering violation, not silently accepted).
+    pub pin_assignments: &'a [PinAssignment],
 }
 
 /// A problem a rule detected. Not yet a domain `Violation` — the runtime mints that at the
@@ -571,6 +580,146 @@ impl Rule for ReturnPathRule {
                         net.name,
                         net.id.short(),
                         target,
+                    ),
+                });
+            }
+        }
+        findings
+    }
+}
+
+// ===================== Band B (increment 4): Pin-Function / Mux =====================
+
+/// A pin-mux-conflict rule (Map 22): two [`PinAssignment`]s claiming the SAME pin for DIFFERENT
+/// functions is a real hardware conflict — a physical pin can carry only one function at a time.
+/// This is the master-prompt §31 directive made concrete: a conflicting assignment is caught as an
+/// **engineering violation**, never silently accepted as "just another string." Each assignment is
+/// well-formed and belongs in state (the seam enforces only pin existence); the *conflict* is this
+/// rule's judgement at ERC time. Deterministic (P4): assignments are scanned in slice order; for
+/// each pin with ≥2 assignments, every distinct function yields one Error finding, so a two-way
+/// conflict over the same pin produces exactly one finding, named with the offending function. The
+/// implicated pin (→ its component → blocks → intent) and the conflicting assignments are the
+/// subjects.
+pub struct PinMuxConflictRule;
+
+impl PinMuxConflictRule {
+    pub const ID: &'static str = "erc-pin-mux-conflict";
+
+    pub fn new() -> Self {
+        Self
+    }
+}
+impl Default for PinMuxConflictRule {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Rule for PinMuxConflictRule {
+    fn id(&self) -> &str {
+        Self::ID
+    }
+
+    fn evaluate(&self, ctx: &VerificationContext) -> Vec<ViolationFinding> {
+        let mut findings = Vec::new();
+        // Group by pin in slice order; keep the first-seen assignment id as the finding's anchor.
+        let mut by_pin: Vec<(EntityId, Vec<&PinAssignment>)> = Vec::new();
+        for a in ctx.pin_assignments.iter() {
+            match by_pin.iter_mut().find(|(p, _)| *p == a.pin) {
+                Some((_, group)) => group.push(a),
+                None => by_pin.push((a.pin, vec![a])),
+            }
+        }
+        for (pin, group) in by_pin {
+            // Two assignments of the SAME function on one pin are a benign re-assertion, not a mux
+            // conflict; a pin claimed for DIFFERENT functions is a real hardware conflict.
+            let mut functions: Vec<&str> = group.iter().map(|a| a.function.as_str()).collect();
+            functions.sort_unstable();
+            functions.dedup();
+            if functions.len() < 2 {
+                continue;
+            }
+            findings.push(ViolationFinding {
+                rule: Self::ID.to_string(),
+                severity: ViolationSeverity::Error,
+                // The implicated pin (→ its component → blocks → intent, P3) plus every assignment
+                // claiming it, so the report shows the exact function clash.
+                subjects: std::iter::once(pin)
+                    .chain(group.iter().map(|a| a.id))
+                    .collect(),
+                message: format!(
+                    "pin {} is claimed for {} different functions [{}] — a physical pin carries \
+                     one mux function at a time (pin-mux conflict)",
+                    pin.short(),
+                    functions.len(),
+                    functions.join(", "),
+                ),
+            });
+        }
+        findings
+    }
+}
+
+/// A pin-capability rule (Map 22): an [`PinAssignment`] must name a function the pin's
+/// [`PinCapability`] declares. Assigning a function a pin physically cannot carry is a capability
+/// violation — the pin is being asked to do something its silicon cannot (the MCU/FPGA pin-planning
+/// failure the Map exists to prevent). Deterministic (P4): assignments are scanned in slice order,
+/// one Error finding per violating assignment. The implicated pin and the assignment are the
+/// subjects. A pin with NO capability at all that gets assigned is ALSO flagged: an unverified
+/// assignment is under-specified (the capability is the datasheet truth the design never imported),
+/// and the assignment cannot be verified against nothing — surfacing that is the honesty principle,
+/// not an invented requirement.
+pub struct PinCapabilityRule;
+
+impl PinCapabilityRule {
+    pub const ID: &'static str = "erc-pin-capability";
+
+    pub fn new() -> Self {
+        Self
+    }
+}
+impl Default for PinCapabilityRule {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Rule for PinCapabilityRule {
+    fn id(&self) -> &str {
+        Self::ID
+    }
+
+    fn evaluate(&self, ctx: &VerificationContext) -> Vec<ViolationFinding> {
+        let mut findings = Vec::new();
+        for a in ctx.pin_assignments.iter() {
+            let capability = ctx.pin_capabilities.iter().find(|c| c.pin == a.pin);
+            let Some(capability) = capability else {
+                // An assignment with no declared capability cannot be verified — under-specified.
+                findings.push(ViolationFinding {
+                    rule: Self::ID.to_string(),
+                    severity: ViolationSeverity::Error,
+                    subjects: vec![a.pin, a.id],
+                    message: format!(
+                        "pin {} is assigned function \"{}\" but declares no pin capability — \
+                         the assignment cannot be verified (capability under-specified)",
+                        a.pin.short(),
+                        a.function,
+                    ),
+                });
+                continue;
+            };
+            if !capability.functions.iter().any(|f| f == &a.function) {
+                findings.push(ViolationFinding {
+                    rule: Self::ID.to_string(),
+                    severity: ViolationSeverity::Error,
+                    subjects: vec![a.pin, a.id],
+                    message: format!(
+                        "pin {} is assigned function \"{}\" but its capability only declares \
+                         [{}] — the assignment exceeds what the pin can carry (capability \
+                         violation)",
+                        a.pin.short(),
+                        a.function,
+                        capability.functions.join(", "),
                     ),
                 });
             }
@@ -2121,6 +2270,8 @@ mod tests {
             power_domains: &[],
             clock_domains: &[],
             return_paths: &[],
+            pin_capabilities: &[],
+            pin_assignments: &[],
         };
         let findings = rule.evaluate(&ctx);
         assert_eq!(findings.len(), 1);
@@ -2152,6 +2303,8 @@ mod tests {
             power_domains: &[],
             clock_domains: &[],
             return_paths: &[],
+            pin_capabilities: &[],
+            pin_assignments: &[],
         });
         assert_eq!(findings.len(), 1);
     }
@@ -2176,6 +2329,8 @@ mod tests {
             power_domains: &[],
             clock_domains: &[],
             return_paths: &[],
+            pin_capabilities: &[],
+            pin_assignments: &[],
         });
         assert!(findings.is_empty());
     }
@@ -2242,6 +2397,8 @@ mod tests {
             power_domains: &[],
             clock_domains: &[],
             return_paths: &[],
+            pin_capabilities: &[],
+            pin_assignments: &[],
         }
     }
 
@@ -2335,6 +2492,8 @@ mod tests {
             power_domains: domains,
             clock_domains: &[],
             return_paths: &[],
+            pin_capabilities: &[],
+            pin_assignments: &[],
         }
     }
 
@@ -2433,6 +2592,8 @@ mod tests {
             power_domains: &[],
             clock_domains: domains,
             return_paths: &[],
+            pin_capabilities: &[],
+            pin_assignments: &[],
         }
     }
 
@@ -2536,6 +2697,8 @@ mod tests {
             power_domains: &[],
             clock_domains: &[],
             return_paths: paths,
+            pin_capabilities: &[],
+            pin_assignments: &[],
         }
     }
 
@@ -2590,6 +2753,129 @@ mod tests {
             .is_empty());
     }
 
+    // --------------------------- pin-function / mux (Band B) tests ---------------------------
+
+    fn capability(id: u128, pin: u128, functions: &[&str]) -> PinCapability {
+        PinCapability {
+            id: EntityId(id),
+            pin: EntityId(pin),
+            functions: functions.iter().map(|f| f.to_string()).collect(),
+        }
+    }
+
+    fn assignment(id: u128, pin: u128, function: &str) -> PinAssignment {
+        PinAssignment {
+            id: EntityId(id),
+            pin: EntityId(pin),
+            function: function.to_string(),
+        }
+    }
+
+    fn pin_ctx<'a>(
+        capabilities: &'a [PinCapability],
+        assignments: &'a [PinAssignment],
+    ) -> VerificationContext<'a> {
+        VerificationContext {
+            requirements: &[],
+            constraints: &[],
+            components: &[],
+            pins: &[],
+            nets: &[],
+            parts: &[],
+            bom_line_items: &[],
+            board: None,
+            placements: &[],
+            tracks: &[],
+            power_domains: &[],
+            clock_domains: &[],
+            return_paths: &[],
+            pin_capabilities: capabilities,
+            pin_assignments: assignments,
+        }
+    }
+
+    #[test]
+    fn pin_claimed_for_two_functions_is_a_mux_conflict() {
+        // Two assignments claiming pin 10 for different functions: a real hardware clash — a
+        // physical pin carries one mux function at a time (master-prompt §31). Exactly one finding.
+        let caps = vec![capability(1, 10, &["SPI1_MOSI", "UART1_TX"])];
+        let assigns = vec![
+            assignment(2, 10, "SPI1_MOSI"),
+            assignment(3, 10, "UART1_TX"),
+        ];
+        let findings = PinMuxConflictRule::new().evaluate(&pin_ctx(&caps, &assigns));
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].rule, PinMuxConflictRule::ID);
+        assert_eq!(findings[0].severity, ViolationSeverity::Error);
+        assert!(findings[0].subjects.contains(&EntityId(10)));
+        assert!(findings[0].message.contains("SPI1_MOSI"));
+        assert!(findings[0].message.contains("UART1_TX"));
+    }
+
+    #[test]
+    fn pin_claimed_for_same_function_twice_is_silent() {
+        // Re-asserting the same function on one pin is benign, not a mux conflict.
+        let caps = vec![capability(1, 10, &["SPI1_MOSI"])];
+        let assigns = vec![
+            assignment(2, 10, "SPI1_MOSI"),
+            assignment(3, 10, "SPI1_MOSI"),
+        ];
+        assert!(PinMuxConflictRule::new()
+            .evaluate(&pin_ctx(&caps, &assigns))
+            .is_empty());
+    }
+
+    #[test]
+    fn unassigned_pin_is_silent_for_mux_conflict() {
+        // A capability alone (datasheet truth) with no assignments is not a conflict.
+        let caps = vec![capability(1, 10, &["SPI1_MOSI"])];
+        assert!(PinMuxConflictRule::new()
+            .evaluate(&pin_ctx(&caps, &[]))
+            .is_empty());
+    }
+
+    #[test]
+    fn assignment_without_declared_capability_is_flagged() {
+        // An assignment with no capability cannot be verified — under-specified, a finding.
+        let assigns = vec![assignment(2, 10, "SPI1_MOSI")];
+        let findings = PinCapabilityRule::new().evaluate(&pin_ctx(&[], &assigns));
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].rule, PinCapabilityRule::ID);
+        assert_eq!(findings[0].severity, ViolationSeverity::Error);
+        assert_eq!(findings[0].subjects, vec![EntityId(10), EntityId(2)]);
+    }
+
+    #[test]
+    fn assignment_exceeding_capability_is_flagged() {
+        // The pin can only carry SPI1_MOSI; assigning UART1_TX asks silicon it does not have.
+        let caps = vec![capability(1, 10, &["SPI1_MOSI"])];
+        let assigns = vec![assignment(2, 10, "UART1_TX")];
+        let findings = PinCapabilityRule::new().evaluate(&pin_ctx(&caps, &assigns));
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].rule, PinCapabilityRule::ID);
+        assert!(findings[0].message.contains("UART1_TX"));
+        assert!(findings[0].message.contains("SPI1_MOSI"));
+    }
+
+    #[test]
+    fn assignment_honoring_capability_passes() {
+        let caps = vec![capability(1, 10, &["SPI1_MOSI", "UART1_TX"])];
+        let assigns = vec![assignment(2, 10, "UART1_TX")];
+        assert!(PinCapabilityRule::new()
+            .evaluate(&pin_ctx(&caps, &assigns))
+            .is_empty());
+    }
+
+    #[test]
+    fn empty_pin_architecture_produces_no_findings() {
+        assert!(PinMuxConflictRule::new()
+            .evaluate(&pin_ctx(&[], &[]))
+            .is_empty());
+        assert!(PinCapabilityRule::new()
+            .evaluate(&pin_ctx(&[], &[]))
+            .is_empty());
+    }
+
     // ------------------------------ catalog + BOM tests ------------------------------
 
     fn component(id: u128, class: ComponentClass) -> Component {
@@ -2641,6 +2927,8 @@ mod tests {
             power_domains: &[],
             clock_domains: &[],
             return_paths: &[],
+            pin_capabilities: &[],
+            pin_assignments: &[],
         }
     }
 
@@ -2802,6 +3090,8 @@ mod tests {
             power_domains: &[],
             clock_domains: &[],
             return_paths: &[],
+            pin_capabilities: &[],
+            pin_assignments: &[],
         }
     }
 
@@ -2824,6 +3114,8 @@ mod tests {
             power_domains: &[],
             clock_domains: &[],
             return_paths: &[],
+            pin_capabilities: &[],
+            pin_assignments: &[],
         }
     }
 
@@ -3098,6 +3390,8 @@ mod tests {
             power_domains: &[],
             clock_domains: &[],
             return_paths: &[],
+            pin_capabilities: &[],
+            pin_assignments: &[],
         }
     }
 
@@ -3164,6 +3458,8 @@ mod tests {
             power_domains: &[],
             clock_domains: &[],
             return_paths: &[],
+            pin_capabilities: &[],
+            pin_assignments: &[],
         }
     }
 
@@ -3240,6 +3536,8 @@ mod tests {
             power_domains: &[],
             clock_domains: &[],
             return_paths: &[],
+            pin_capabilities: &[],
+            pin_assignments: &[],
         }
     }
 
@@ -3445,6 +3743,8 @@ mod tests {
             power_domains: &[],
             clock_domains: &[],
             return_paths: &[],
+            pin_capabilities: &[],
+            pin_assignments: &[],
         }
     }
 
@@ -3639,6 +3939,8 @@ mod tests {
             power_domains: &[],
             clock_domains: &[],
             return_paths: &[],
+            pin_capabilities: &[],
+            pin_assignments: &[],
         }
     }
 
@@ -3661,6 +3963,8 @@ mod tests {
             power_domains: &[],
             clock_domains: &[],
             return_paths: &[],
+            pin_capabilities: &[],
+            pin_assignments: &[],
         }
     }
 
@@ -3773,6 +4077,8 @@ mod tests {
             power_domains: &[],
             clock_domains: &[],
             return_paths: &[],
+            pin_capabilities: &[],
+            pin_assignments: &[],
         }
     }
 

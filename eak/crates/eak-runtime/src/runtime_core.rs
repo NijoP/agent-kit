@@ -11,8 +11,8 @@ use crate::state::EngineeringState;
 use eak_domain::{
     Assumption, Board, BomLineItem, ClockDomain, Component, ComponentOrigin, Constraint, Decision,
     DesignIntent, Discharge, EntityId, Evidence, FunctionalBlock, Net, NetOrigin, Objective, Part,
-    Pin, Placement, PowerDomain, ProvenanceLink, Requirement, ReturnPath, Risk, Track, Tradeoff,
-    Violation, Waiver,
+    Pin, PinAssignment, PinCapability, Placement, PowerDomain, ProvenanceLink, Requirement,
+    ReturnPath, Risk, Track, Tradeoff, Violation, Waiver,
 };
 use eak_ports::{
     Event, EventLog, EventRecord, EventSink, ReasoningEngine, ReasoningError, ReasoningRequest,
@@ -881,6 +881,64 @@ impl RuntimeCore {
             .map_err(|e| CapabilityError::Rejected(e.to_string()))?;
         Ok(CapabilityAck { committed: seqs })
     }
+
+    fn handle_create_pin_capability(
+        &mut self,
+        capability: PinCapability,
+        links: Vec<ProvenanceLink>,
+    ) -> Result<CapabilityAck, CapabilityError> {
+        // The seam (P3): re-validate the capability (non-null pin, non-empty functions) before
+        // committing — the model is never trusted to have formed a well-shaped capability.
+        capability
+            .validate()
+            .map_err(|e| CapabilityError::Rejected(e.to_string()))?;
+        // Referential integrity at the seam: the pin must be a committed pin (P3, P5) — a
+        // capability can never attach to a phantom pin.
+        if self.state.pin(capability.pin).is_none() {
+            return Err(CapabilityError::Rejected(format!(
+                "pin capability references unknown pin {}",
+                capability.pin.short()
+            )));
+        }
+
+        let mut events = vec![Event::PinCapabilityCommitted { capability }];
+        for link in links {
+            events.push(Event::ProvenanceLinked { link });
+        }
+        let seqs = self
+            .commit(events)
+            .map_err(|e| CapabilityError::Rejected(e.to_string()))?;
+        Ok(CapabilityAck { committed: seqs })
+    }
+
+    fn handle_create_pin_assignment(
+        &mut self,
+        assignment: PinAssignment,
+        links: Vec<ProvenanceLink>,
+    ) -> Result<CapabilityAck, CapabilityError> {
+        // The seam (P3): re-validate the assignment (non-null pin, non-empty function) before
+        // committing — the model is never trusted to have formed a well-shaped assignment.
+        assignment
+            .validate()
+            .map_err(|e| CapabilityError::Rejected(e.to_string()))?;
+        // Referential integrity at the seam: the pin must be a committed pin (P3, P5) — an
+        // assignment can never bind a function to a phantom pin.
+        if self.state.pin(assignment.pin).is_none() {
+            return Err(CapabilityError::Rejected(format!(
+                "pin assignment references unknown pin {}",
+                assignment.pin.short()
+            )));
+        }
+
+        let mut events = vec![Event::PinAssignmentCommitted { assignment }];
+        for link in links {
+            events.push(Event::ProvenanceLinked { link });
+        }
+        let seqs = self
+            .commit(events)
+            .map_err(|e| CapabilityError::Rejected(e.to_string()))?;
+        Ok(CapabilityAck { committed: seqs })
+    }
 }
 
 impl AgentContext for RuntimeCore {
@@ -992,6 +1050,14 @@ impl AgentContext for RuntimeCore {
         self.state.return_paths.clone()
     }
 
+    fn pin_capabilities(&self) -> Vec<PinCapability> {
+        self.state.pin_capabilities.clone()
+    }
+
+    fn pin_assignments(&self) -> Vec<PinAssignment> {
+        self.state.pin_assignments.clone()
+    }
+
     fn reason(
         &mut self,
         mut req: ReasoningRequest,
@@ -1069,6 +1135,12 @@ impl AgentContext for RuntimeCore {
             }
             CapabilityRequest::CreateReturnPath { path, links } => {
                 self.handle_create_return_path(path, links)
+            }
+            CapabilityRequest::CreatePinCapability { capability, links } => {
+                self.handle_create_pin_capability(capability, links)
+            }
+            CapabilityRequest::CreatePinAssignment { assignment, links } => {
+                self.handle_create_pin_assignment(assignment, links)
             }
         }
     }

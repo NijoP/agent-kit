@@ -6,8 +6,9 @@
 
 use eak_domain::{
     Assumption, Board, BomLineItem, ClockDomain, Component, Constraint, Decision, DesignIntent,
-    Discharge, EntityId, Evidence, FunctionalBlock, Net, Objective, Part, Pin, Placement,
-    PowerDomain, ProvenanceLink, Requirement, ReturnPath, Risk, Track, Tradeoff, Violation, Waiver,
+    Discharge, EntityId, Evidence, FunctionalBlock, Net, Objective, Part, Pin, PinAssignment,
+    PinCapability, Placement, PowerDomain, ProvenanceLink, Requirement, ReturnPath, Risk, Track,
+    Tradeoff, Violation, Waiver,
 };
 use eak_ports::{Event, ReasoningError, ReasoningRequest, ReasoningResponse, Seq, StoreError};
 
@@ -198,6 +199,24 @@ pub enum CapabilityRequest {
         path: ReturnPath,
         links: Vec<ProvenanceLink>,
     },
+    /// Commit a first-class [`PinCapability`] (a pin's datasheet truth — its mux functions) with its
+    /// provenance links (Band B, increment 4; Map 22). The runtime re-validates the capability
+    /// (non-null pin, non-empty functions) and checks its `pin` resolves to a committed pin before
+    /// committing (P3).
+    CreatePinCapability {
+        capability: PinCapability,
+        links: Vec<ProvenanceLink>,
+    },
+    /// Commit a first-class [`PinAssignment`] (the design's chosen mux function for a pin) with its
+    /// provenance links (Band B, increment 4; Map 22). The runtime re-validates the assignment
+    /// (non-null pin, non-empty function) and checks its `pin` resolves to a committed pin before
+    /// committing (P3). A well-formed assignment that ignores its pin's capability or conflicts with
+    /// another on the same pin IS accepted — the PinCapabilityRule / PinMuxConflictRule at ERC time
+    /// report those as design findings, so the assignment must be able to enter state (§31).
+    CreatePinAssignment {
+        assignment: PinAssignment,
+        links: Vec<ProvenanceLink>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -276,6 +295,14 @@ pub trait AgentContext {
     /// Owned clones, like every other reader. The ERC phase reads these to run the
     /// [`ReturnPathRule`](eak_engines::ReturnPathRule).
     fn return_paths(&self) -> Vec<ReturnPath>;
+    /// Band B (increment 4): read the committed pin capabilities (the pin-function architecture;
+    /// Map 22). Owned clones, like every other reader. The ERC phase reads these to run the
+    /// [`PinCapabilityRule`](eak_engines::PinCapabilityRule).
+    fn pin_capabilities(&self) -> Vec<PinCapability>;
+    /// Band B (increment 4): read the committed pin assignments (the pin-function architecture;
+    /// Map 22). Owned clones, like every other reader. The ERC phase reads these to run the
+    /// [`PinMuxConflictRule`](eak_engines::PinMuxConflictRule).
+    fn pin_assignments(&self) -> Vec<PinAssignment>;
     /// Call the reasoning engine, record the call (returning its event [`Seq`]), and
     /// return the judgement. Recording here is what makes replay deterministic (P4).
     fn reason(&mut self, req: ReasoningRequest)

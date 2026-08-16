@@ -7,8 +7,8 @@
 use eak_domain::{
     Assumption, AssumptionStatus, Board, BomLineItem, ClockDomain, Component, Constraint, Decision,
     DesignIntent, EntityId, Evidence, FunctionalBlock, ModelFidelity, Net, Objective, Part, Pin,
-    Placement, PowerDomain, ProvenanceLink, Requirement, ReturnPath, Risk, RiskSeverity,
-    RiskStatus, Track, Tradeoff, Violation, ViolationStatus, Waiver,
+    PinAssignment, PinCapability, Placement, PowerDomain, ProvenanceLink, Requirement, ReturnPath,
+    Risk, RiskSeverity, RiskStatus, Track, Tradeoff, Violation, ViolationStatus, Waiver,
 };
 use eak_ports::{Event, Seq};
 use serde::{Deserialize, Serialize};
@@ -108,6 +108,15 @@ pub struct EngineeringState {
     // return path is the ReturnPathRule's judgement at ERC time — a well-formed path still belongs
     // in state so the rule can reason over the return architecture.
     pub return_paths: Vec<ReturnPath>,
+    // Band B (Phase 5, increment 4): the pin-function / mux architecture (Map 22). A capability is a
+    // pin's datasheet truth — the set of mux functions it can carry; an assignment is the design
+    // truth — the function assigned to a pin. Kept in insertion (event) order so a run and its
+    // replay serialize byte-identically. Whether two assignments conflict on one pin
+    // (`erc-pin-mux-conflict`) or an assignment ignores its pin's capability (`erc-pin-capability`)
+    // is the rules' judgement at ERC time — a well-formed assignment still belongs in state so the
+    // rules can report the conflicts (master-prompt §31).
+    pub pin_capabilities: Vec<PinCapability>,
+    pub pin_assignments: Vec<PinAssignment>,
 }
 
 impl EngineeringState {
@@ -213,6 +222,15 @@ impl EngineeringState {
             // Band B (Phase 5, increment 3): the return-path architecture. Committing a return path
             // pushes it into its own store (insertion order, so replay is byte-identical, P4).
             Event::ReturnPathCommitted { path } => self.return_paths.push(path.clone()),
+            // Band B (Phase 5, increment 4): the pin-function / mux architecture. Committing a
+            // capability or an assignment pushes it into its own store (insertion order, so replay
+            // is byte-identical, P4).
+            Event::PinCapabilityCommitted { capability } => {
+                self.pin_capabilities.push(capability.clone())
+            }
+            Event::PinAssignmentCommitted { assignment } => {
+                self.pin_assignments.push(assignment.clone())
+            }
             // Audit-only events (phase lifecycle, reasoning calls, IR-boundary milestones)
             // carry no state and are intentionally not folded. AUDIT: any NEW state-bearing
             // event variant MUST get an explicit arm above, or replay will silently diverge.
@@ -347,6 +365,14 @@ impl EngineeringState {
 
     pub fn return_path(&self, id: EntityId) -> Option<&ReturnPath> {
         self.return_paths.iter().find(|p| p.id == id)
+    }
+
+    pub fn pin_capability(&self, id: EntityId) -> Option<&PinCapability> {
+        self.pin_capabilities.iter().find(|c| c.id == id)
+    }
+
+    pub fn pin_assignment(&self, id: EntityId) -> Option<&PinAssignment> {
+        self.pin_assignments.iter().find(|a| a.id == id)
     }
 
     /// Deterministic serialization used to assert byte-identity between a run and its

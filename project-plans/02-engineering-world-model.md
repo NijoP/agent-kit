@@ -250,11 +250,11 @@ the product roadmap.
 - *Relationships · runtime rep:* domains span signals/nets; `erc-clock-domain-conflict` flags a net in ≥2 domains as a crossing.
 - *AI · verify · evolves:* AI proposes domain assignment; runtime checks crossings/timing. Verified by skew/length-match rules. Scales to static timing over the board.
 
-**22. Pin-Function / GPIO / Mux Map** ○ *(new; only `PinElectricalType` today)*
+**22. Pin-Function / GPIO / Mux Map** ◐
 - *Purpose & why:* a pin's *capabilities* and its *assigned function* — the MCU/FPGA pin-planning problem, a top real-world pain point.
-- *Objects · owner · in→out:* (missing) `PinCapability`, `PinAssignment{function, mux-option}`. Owner: runtime. In: part datasheets (capabilities) + intent (needed functions). Out: a validated pin-out.
+- *Objects · owner · in→out:* `PinCapability` (implemented Band B inc 4), `PinAssignment` (implemented Band B inc 4). Owner: runtime. In: part datasheets (capabilities) + intent (needed functions). Out: a validated pin-out.
 - *Relationships · runtime rep:* assignments bind functions to `Pin`s under mux constraints.
-- *AI · verify · evolves:* AI proposes pin assignments (a genuinely hard search); runtime validates against capability + mutual-exclusion rules. Verified by mux-conflict + capability checks. Scales to constraint-solved auto pin-assignment.
+- *AI · verify · evolves:* AI proposes pin assignments (a genuinely hard search); runtime validates against capability + mutual-exclusion rules (`erc-pin-mux-conflict` + `erc-pin-capability` now; electrical-type matrix later). Scales to constraint-solved auto pin-assignment.
 
 ### Tier 4 — Realization Maps
 
@@ -418,7 +418,11 @@ Signal Flow, Interface/Contract, Bus/Protocol, Subsystem.**
   `ReturnPath` implemented (domain `validate()`, seam `CreateReturnPath`, `erc-return-path-required`
   rule — the return half of the signal loop, gated on the design's own `impedance_target`
   declaration rather than a fabricated clock threshold per `transmission-lines.md` L145/L170;
-  [ADR-0024](../docs/decisions/0024-band-b-return-path.md)).
+  [ADR-0024](../docs/decisions/0024-band-b-return-path.md)); increment 4 — `PinCapability` +
+  `PinAssignment` implemented (domain `validate()`, seam `CreatePinCapability`/`CreatePinAssignment`,
+  `erc-pin-mux-conflict` + `erc-pin-capability` rules — capability and assignment kept separate per
+  the master-prompt §31 rule, so a mux conflict is an engineering violation, not a silent string
+  collision; [ADR-0025](../docs/decisions/0025-band-b-pin-function-mux.md)).
   Remaining objects follow one per increment through the same seam. NOTE: ClockDomain precedes ReturnPath
   because return-path continuity targets controlled/electrically-long nets; the truthful v0 gate is the
   net's own controlled-impedance declaration (`Net::impedance_target`), NOT clock frequency — the

@@ -132,8 +132,8 @@ mod tests {
     use crate::protocol::{Autonomy, CapabilityAck, CapabilityError, CapabilityRequest};
     use eak_domain::{
         Assumption, Board, BomLineItem, ClockDomain, Component, Constraint, DesignIntent, EntityId,
-        FunctionalBlock, Net, Objective, Part, Pin, Placement, PowerDomain, ProvenanceLink,
-        Requirement, ReturnPath, Risk, Track, Tradeoff, Violation,
+        FunctionalBlock, Net, Objective, Part, Pin, PinAssignment, PinCapability, Placement,
+        PowerDomain, ProvenanceLink, Requirement, ReturnPath, Risk, Track, Tradeoff, Violation,
     };
     use eak_ports::{Event, ReasoningError, ReasoningRequest, ReasoningResponse, Seq, StoreError};
 
@@ -202,6 +202,12 @@ mod tests {
             vec![]
         }
         fn return_paths(&self) -> Vec<ReturnPath> {
+            vec![]
+        }
+        fn pin_capabilities(&self) -> Vec<PinCapability> {
+            vec![]
+        }
+        fn pin_assignments(&self) -> Vec<PinAssignment> {
             vec![]
         }
         fn assumptions(&self) -> Vec<Assumption> {

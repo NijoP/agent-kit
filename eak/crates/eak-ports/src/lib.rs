@@ -11,9 +11,9 @@
 
 use eak_domain::{
     Assumption, Board, BomLineItem, ClockDomain, Component, Constraint, Decision, DesignIntent,
-    Discharge, Evidence, FunctionalBlock, ModelFidelity, Net, Objective, Part, Pin, Placement,
-    PowerDomain, Priority, ProvenanceLink, Requirement, RequirementCategory, ReturnPath, Risk,
-    Track, Tradeoff, Violation, Waiver,
+    Discharge, Evidence, FunctionalBlock, ModelFidelity, Net, Objective, Part, Pin, PinAssignment,
+    PinCapability, Placement, PowerDomain, Priority, ProvenanceLink, Requirement,
+    RequirementCategory, ReturnPath, Risk, Track, Tradeoff, Violation, Waiver,
 };
 use eak_units::PhysicalQuantity;
 use serde::{Deserialize, Serialize};
@@ -283,6 +283,21 @@ pub enum Event {
     /// path must enter state so the rule can reason over the return architecture.
     ReturnPathCommitted {
         path: ReturnPath,
+    },
+    /// A [`PinCapability`] was committed (Band B inc 4): a physical pin's datasheet truth — the set
+    /// of mux functions it can carry. Owned, never fabricated (P7). The capability's link to a real
+    /// pin was re-checked at the seam; whether an *assignment* honors it is the
+    /// [`PinCapabilityRule`]'s judgement at ERC time.
+    PinCapabilityCommitted {
+        capability: PinCapability,
+    },
+    /// A [`PinAssignment`] was committed (Band B inc 4): the mux function the design assigns to a
+    /// physical pin. The pin link was re-checked at the seam; whether the assignment conflicts with
+    /// another on the same pin (`erc-pin-mux-conflict`) or honors the pin's capability
+    /// (`erc-pin-capability`) is the rules' judgement at ERC time — a well-formed assignment must
+    /// enter state so the conflicts are *reported*, not silently swallowed (master-prompt §31).
+    PinAssignmentCommitted {
+        assignment: PinAssignment,
     },
 }
 
@@ -657,6 +672,41 @@ mod tests {
                 name: "SYS_CLK ret on GND".into(),
                 net: EntityId(41),
                 reference_plane: EntityId(60),
+            },
+        };
+        let s = serde_json::to_string(&ev).unwrap();
+        let back: Event = serde_json::from_str(&s).unwrap();
+        assert_eq!(ev, back);
+    }
+
+    // ===================== Band B (increment 4): Pin-Function / Mux events =====================
+    //
+    // TDD: every new state-delta Event variant carries a serde round-trip test so its on-disk
+    // form is pinned and replay-from-log is byte-stable (P4).
+
+    #[test]
+    fn pin_capability_committed_event_roundtrips_through_json() {
+        use eak_domain::{EntityId, PinCapability};
+        let ev = Event::PinCapabilityCommitted {
+            capability: PinCapability {
+                id: EntityId(70),
+                pin: EntityId(71),
+                functions: vec!["SPI1_MOSI".into(), "UART1_TX".into()],
+            },
+        };
+        let s = serde_json::to_string(&ev).unwrap();
+        let back: Event = serde_json::from_str(&s).unwrap();
+        assert_eq!(ev, back);
+    }
+
+    #[test]
+    fn pin_assignment_committed_event_roundtrips_through_json() {
+        use eak_domain::{EntityId, PinAssignment};
+        let ev = Event::PinAssignmentCommitted {
+            assignment: PinAssignment {
+                id: EntityId(72),
+                pin: EntityId(71),
+                function: "SPI1_MOSI".into(),
             },
         };
         let s = serde_json::to_string(&ev).unwrap();
