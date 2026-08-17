@@ -9,7 +9,7 @@ use eak_domain::{
     Board, BoardSide, BomLineItem, ClockDomain, Component, ComponentClass, Constraint,
     ConstraintKind, EntityId, Layer, LayerStack, Net, NetClass, Part, PartLifecycle, Pin,
     PinAssignment, PinCapability, PinElectricalType, Placement, PowerDomain, Requirement,
-    RequirementCategory, ReturnPath, Track, Violation, ViolationSeverity,
+    RequirementCategory, ReturnPath, Signal, Track, Violation, ViolationSeverity,
 };
 use eak_units::{Dimension, PhysicalQuantity, Unit, UnitError};
 use std::cmp::Ordering;
@@ -136,6 +136,11 @@ pub struct VerificationContext<'a> {
     /// catch two assignments claiming one pin (master-prompt §31: a conflicting assignment is an
     /// engineering violation, not silently accepted).
     pub pin_assignments: &'a [PinAssignment],
+    /// Band B (Phase 5): the committed signals (the signal flow architecture, Map 16). A named,
+    /// directional logical flow (source → sinks) with a meaning, distinct from the undirected
+    /// copper of a net. Lets the driver/sink rule check source/load legality against pin electrical
+    /// types (circuit-theory.md L134/L152).
+    pub signals: &'a [Signal],
 }
 
 /// A problem a rule detected. Not yet a domain `Violation` — the runtime mints that at the
@@ -722,6 +727,111 @@ impl Rule for PinCapabilityRule {
                         capability.functions.join(", "),
                     ),
                 });
+            }
+        }
+        findings
+    }
+}
+
+// ===================== Band B (increment 5): Signal Flow =====================
+
+/// A signal driver/sink rule (Map 16): a [`Signal`] names a directional logical flow — a `source`
+/// pin driving one or more `sink` pins — so the flow is only legal if the source is *capable of
+/// driving* and every sink is *capable of receiving*. This is source/load legality as a
+/// Thévenin/KCL question (`engineering-science/electrical/circuit-theory.md` L134/L152): a signal
+/// whose source is an Input pin cannot drive, and one whose sink is an Output pin cannot receive —
+/// such a pairing has no consistent operating point. Deterministic (P4): signals are scanned in
+/// slice order; each illegal signal yields one Error finding per illegal pin (the source, or each
+/// offending sink), so a signal with an input source AND an output sink produces two findings, each
+/// naming the specific pin. The implicated pin and the signal are the subjects. A signal referencing
+/// a pin the runtime has never seen is ALSO flagged: the flow is unverifiable (honesty, not an
+/// invented requirement).
+pub struct SignalDriverSinkRule;
+
+impl SignalDriverSinkRule {
+    pub const ID: &'static str = "erc-signal-driver-sink";
+
+    pub fn new() -> Self {
+        Self
+    }
+}
+impl Default for SignalDriverSinkRule {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Rule for SignalDriverSinkRule {
+    fn id(&self) -> &str {
+        Self::ID
+    }
+
+    fn evaluate(&self, ctx: &VerificationContext) -> Vec<ViolationFinding> {
+        let mut findings = Vec::new();
+        for sig in ctx.signals.iter() {
+            let source = ctx.pins.iter().find(|p| p.id == sig.source);
+            let Some(source) = source else {
+                findings.push(ViolationFinding {
+                    rule: Self::ID.to_string(),
+                    severity: ViolationSeverity::Error,
+                    subjects: vec![sig.source, sig.id],
+                    message: format!(
+                        "signal \"{}\" names source pin {} which the runtime has never seen — \
+                         the flow is unverifiable (signal driver/sink)",
+                        sig.name,
+                        sig.source.short(),
+                    ),
+                });
+                continue;
+            };
+            // A source must be capable of driving: Output or Bidirectional.
+            match source.electrical_type {
+                PinElectricalType::Output | PinElectricalType::Bidirectional => {}
+                _ => findings.push(ViolationFinding {
+                    rule: Self::ID.to_string(),
+                    severity: ViolationSeverity::Error,
+                    subjects: vec![source.id, sig.id],
+                    message: format!(
+                        "signal \"{}\" names source pin {} (a {:?}) — that pin cannot drive, so \
+                         the flow has no operating point (signal driver/sink)",
+                        sig.name,
+                        source.id.short(),
+                        source.electrical_type,
+                    ),
+                }),
+            }
+            // Every sink must be capable of receiving: Input or Bidirectional.
+            for sink_id in sig.sinks.iter() {
+                let sink = ctx.pins.iter().find(|p| p.id == *sink_id);
+                let Some(sink) = sink else {
+                    findings.push(ViolationFinding {
+                        rule: Self::ID.to_string(),
+                        severity: ViolationSeverity::Error,
+                        subjects: vec![*sink_id, sig.id],
+                        message: format!(
+                            "signal \"{}\" names sink pin {} which the runtime has never seen — \
+                             the flow is unverifiable (signal driver/sink)",
+                            sig.name,
+                            sink_id.short(),
+                        ),
+                    });
+                    continue;
+                };
+                match sink.electrical_type {
+                    PinElectricalType::Input | PinElectricalType::Bidirectional => {}
+                    _ => findings.push(ViolationFinding {
+                        rule: Self::ID.to_string(),
+                        severity: ViolationSeverity::Error,
+                        subjects: vec![sink.id, sig.id],
+                        message: format!(
+                            "signal \"{}\" names sink pin {} (a {:?}) — that pin cannot receive, \
+                             so the flow has no operating point (signal driver/sink)",
+                            sig.name,
+                            sink.id.short(),
+                            sink.electrical_type,
+                        ),
+                    }),
+                }
             }
         }
         findings
@@ -2272,6 +2382,7 @@ mod tests {
             return_paths: &[],
             pin_capabilities: &[],
             pin_assignments: &[],
+            signals: &[],
         };
         let findings = rule.evaluate(&ctx);
         assert_eq!(findings.len(), 1);
@@ -2305,6 +2416,7 @@ mod tests {
             return_paths: &[],
             pin_capabilities: &[],
             pin_assignments: &[],
+            signals: &[],
         });
         assert_eq!(findings.len(), 1);
     }
@@ -2331,6 +2443,7 @@ mod tests {
             return_paths: &[],
             pin_capabilities: &[],
             pin_assignments: &[],
+            signals: &[],
         });
         assert!(findings.is_empty());
     }
@@ -2399,6 +2512,7 @@ mod tests {
             return_paths: &[],
             pin_capabilities: &[],
             pin_assignments: &[],
+            signals: &[],
         }
     }
 
@@ -2494,6 +2608,7 @@ mod tests {
             return_paths: &[],
             pin_capabilities: &[],
             pin_assignments: &[],
+            signals: &[],
         }
     }
 
@@ -2594,6 +2709,7 @@ mod tests {
             return_paths: &[],
             pin_capabilities: &[],
             pin_assignments: &[],
+            signals: &[],
         }
     }
 
@@ -2699,6 +2815,7 @@ mod tests {
             return_paths: paths,
             pin_capabilities: &[],
             pin_assignments: &[],
+            signals: &[],
         }
     }
 
@@ -2791,6 +2908,7 @@ mod tests {
             return_paths: &[],
             pin_capabilities: capabilities,
             pin_assignments: assignments,
+            signals: &[],
         }
     }
 
@@ -2876,6 +2994,143 @@ mod tests {
             .is_empty());
     }
 
+    // --------------------------- signal flow (Band B) tests ---------------------------
+
+    fn signal(id: u128, name: &str, source: u128, sinks: &[u128], semantics: &str) -> Signal {
+        Signal {
+            id: EntityId(id),
+            name: name.to_string(),
+            source: EntityId(source),
+            sinks: sinks.iter().map(|&s| EntityId(s)).collect(),
+            semantics: semantics.to_string(),
+        }
+    }
+
+    fn sig_pin(id: u128, et: PinElectricalType) -> Pin {
+        Pin {
+            id: EntityId(id),
+            component: EntityId(100 + id),
+            designation: format!("P{id}"),
+            electrical_type: et,
+        }
+    }
+
+    fn sig_ctx<'a>(pins: &'a [Pin], signals: &'a [Signal]) -> VerificationContext<'a> {
+        VerificationContext {
+            requirements: &[],
+            constraints: &[],
+            components: &[],
+            pins,
+            nets: &[],
+            parts: &[],
+            bom_line_items: &[],
+            board: None,
+            placements: &[],
+            tracks: &[],
+            power_domains: &[],
+            clock_domains: &[],
+            return_paths: &[],
+            pin_capabilities: &[],
+            pin_assignments: &[],
+            signals,
+        }
+    }
+
+    #[test]
+    fn signal_with_output_source_and_input_sinks_passes() {
+        // Source is Output (can drive), sinks are Input (can receive) — legal flow.
+        let pins = vec![
+            sig_pin(10, PinElectricalType::Output),
+            sig_pin(11, PinElectricalType::Input),
+        ];
+        let sigs = vec![signal(1, "SYS_CLK", 10, &[11], "system clock")];
+        assert!(SignalDriverSinkRule::new()
+            .evaluate(&sig_ctx(&pins, &sigs))
+            .is_empty());
+    }
+
+    #[test]
+    fn signal_with_bidirectional_source_and_sinks_passes() {
+        // Bidirectional can both drive and receive — legal both ways.
+        let pins = vec![
+            sig_pin(10, PinElectricalType::Bidirectional),
+            sig_pin(11, PinElectricalType::Bidirectional),
+        ];
+        let sigs = vec![signal(1, "I2C_SDA", 10, &[11], "I2C data")];
+        assert!(SignalDriverSinkRule::new()
+            .evaluate(&sig_ctx(&pins, &sigs))
+            .is_empty());
+    }
+
+    #[test]
+    fn signal_with_input_source_is_flagged() {
+        // An Input pin cannot drive — no Thévenin source (circuit-theory.md L134/L152).
+        let pins = vec![
+            sig_pin(10, PinElectricalType::Input),
+            sig_pin(11, PinElectricalType::Input),
+        ];
+        let sigs = vec![signal(1, "BAD_CLK", 10, &[11], "illegal clock")];
+        let findings = SignalDriverSinkRule::new().evaluate(&sig_ctx(&pins, &sigs));
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].rule, SignalDriverSinkRule::ID);
+        assert!(findings[0].message.contains("Input"));
+    }
+
+    #[test]
+    fn signal_with_output_sink_is_flagged() {
+        // An Output pin cannot receive — it would fight the driver.
+        let pins = vec![
+            sig_pin(10, PinElectricalType::Output),
+            sig_pin(11, PinElectricalType::Output),
+        ];
+        let sigs = vec![signal(1, "BAD_FLOW", 10, &[11], "illegal flow")];
+        let findings = SignalDriverSinkRule::new().evaluate(&sig_ctx(&pins, &sigs));
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].rule, SignalDriverSinkRule::ID);
+        assert!(findings[0].message.contains("Output"));
+    }
+
+    #[test]
+    fn signal_with_power_sink_is_flagged() {
+        // A PowerIn/Out pin is not a signal receiver.
+        let pins = vec![
+            sig_pin(10, PinElectricalType::Output),
+            sig_pin(11, PinElectricalType::PowerIn),
+        ];
+        let sigs = vec![signal(1, "BAD_PWR", 10, &[11], "illegal power")];
+        let findings = SignalDriverSinkRule::new().evaluate(&sig_ctx(&pins, &sigs));
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].rule, SignalDriverSinkRule::ID);
+    }
+
+    #[test]
+    fn signal_with_unknown_source_is_flagged() {
+        // Source pin never seen by runtime — flow unverifiable (honesty).
+        let pins = vec![sig_pin(11, PinElectricalType::Input)];
+        let sigs = vec![signal(1, "GHOST_SRC", 10, &[11], "ghost")];
+        let findings = SignalDriverSinkRule::new().evaluate(&sig_ctx(&pins, &sigs));
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].rule, SignalDriverSinkRule::ID);
+        assert!(findings[0].message.contains("never seen"));
+    }
+
+    #[test]
+    fn signal_with_unknown_sink_is_flagged() {
+        // Sink pin never seen — unverifiable.
+        let pins = vec![sig_pin(10, PinElectricalType::Output)];
+        let sigs = vec![signal(1, "GHOST_SNK", 10, &[11], "ghost")];
+        let findings = SignalDriverSinkRule::new().evaluate(&sig_ctx(&pins, &sigs));
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].rule, SignalDriverSinkRule::ID);
+    }
+
+    #[test]
+    fn empty_signal_architecture_produces_no_findings() {
+        assert!(SignalDriverSinkRule::new()
+            .evaluate(&sig_ctx(&[], &[]))
+            .is_empty());
+    }
+
     // ------------------------------ catalog + BOM tests ------------------------------
 
     fn component(id: u128, class: ComponentClass) -> Component {
@@ -2929,6 +3184,7 @@ mod tests {
             return_paths: &[],
             pin_capabilities: &[],
             pin_assignments: &[],
+            signals: &[],
         }
     }
 
@@ -3092,6 +3348,7 @@ mod tests {
             return_paths: &[],
             pin_capabilities: &[],
             pin_assignments: &[],
+            signals: &[],
         }
     }
 
@@ -3116,6 +3373,7 @@ mod tests {
             return_paths: &[],
             pin_capabilities: &[],
             pin_assignments: &[],
+            signals: &[],
         }
     }
 
@@ -3392,6 +3650,7 @@ mod tests {
             return_paths: &[],
             pin_capabilities: &[],
             pin_assignments: &[],
+            signals: &[],
         }
     }
 
@@ -3460,6 +3719,7 @@ mod tests {
             return_paths: &[],
             pin_capabilities: &[],
             pin_assignments: &[],
+            signals: &[],
         }
     }
 
@@ -3538,6 +3798,7 @@ mod tests {
             return_paths: &[],
             pin_capabilities: &[],
             pin_assignments: &[],
+            signals: &[],
         }
     }
 
@@ -3745,6 +4006,7 @@ mod tests {
             return_paths: &[],
             pin_capabilities: &[],
             pin_assignments: &[],
+            signals: &[],
         }
     }
 
@@ -3941,6 +4203,7 @@ mod tests {
             return_paths: &[],
             pin_capabilities: &[],
             pin_assignments: &[],
+            signals: &[],
         }
     }
 
@@ -3965,6 +4228,7 @@ mod tests {
             return_paths: &[],
             pin_capabilities: &[],
             pin_assignments: &[],
+            signals: &[],
         }
     }
 
@@ -4079,6 +4343,7 @@ mod tests {
             return_paths: &[],
             pin_capabilities: &[],
             pin_assignments: &[],
+            signals: &[],
         }
     }
 

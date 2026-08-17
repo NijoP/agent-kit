@@ -783,6 +783,7 @@ mod tests {
             return_paths: &[],
             pin_capabilities: &[],
             pin_assignments: &[],
+            signals: &[],
         };
         let findings = DrcTraceWidthRule::new().evaluate(&ctx);
         // The two 0.15 mm traces are under the 0.20 mm floor; the 0.25 mm one clears it.

@@ -3,7 +3,7 @@
 //! Structurally a sibling of `ConstraintVerificationMachine`, but its [`VerificationEngine`]
 //! is loaded with the ERC rules ([`ErcPowerNetUndrivenRule`], [`ErcMultipleDriversRule`],
 //! [`PowerBalanceRule`], [`ClockDomainMembershipRule`], [`ReturnPathRule`],
-//! [`PinMuxConflictRule`], [`PinCapabilityRule`]) and
+//! [`PinMuxConflictRule`], [`PinCapabilityRule`], [`SignalDriverSinkRule`]) and
 //! it runs them over the realized schematic (components, pins, nets). Each *new* finding
 //! becomes a first-class [`Violation`] linked back to the net(s) it implicates so it is fully
 //! traceable to its cause (P3), and the [`Event::VerificationCompleted`] milestone is
@@ -16,7 +16,8 @@
 use eak_domain::{ProvenanceLink, RelationType, Violation, ViolationStatus};
 use eak_engines::{
     ClockDomainMembershipRule, ErcMultipleDriversRule, ErcPowerNetUndrivenRule, PinCapabilityRule,
-    PinMuxConflictRule, PowerBalanceRule, ReturnPathRule, VerificationContext, VerificationEngine,
+    PinMuxConflictRule, PowerBalanceRule, ReturnPathRule, SignalDriverSinkRule,
+    VerificationContext, VerificationEngine,
 };
 use eak_ports::Event;
 use eak_runtime::{AgentContext, CapabilityRequest, Machine, MachineError, StepResult};
@@ -29,9 +30,9 @@ impl ErcVerificationMachine {
     }
 
     /// The verification engine for this phase: the Phase-3 ERC rules (undriven power net, multiple
-    /// drivers) plus the Band B power-balance, clock-domain, return-path and pin-function rules,
-    /// registered against the same generic framework that Constraint Verification uses (reuse: one
-    /// framework, many checks).
+    /// drivers) plus the Band B power-balance, clock-domain, return-path, pin-function and
+    /// signal-flow rules, registered against the same generic framework that Constraint Verification
+    /// uses (reuse: one framework, many checks).
     fn engine() -> VerificationEngine {
         VerificationEngine::new()
             .with_rule(Box::new(ErcPowerNetUndrivenRule::new()))
@@ -41,6 +42,7 @@ impl ErcVerificationMachine {
             .with_rule(Box::new(ReturnPathRule::new()))
             .with_rule(Box::new(PinMuxConflictRule::new()))
             .with_rule(Box::new(PinCapabilityRule::new()))
+            .with_rule(Box::new(SignalDriverSinkRule::new()))
     }
 }
 impl Default for ErcVerificationMachine {
@@ -86,6 +88,7 @@ impl Machine for ErcVerificationMachine {
                 let return_paths = ctx.return_paths();
                 let pin_capabilities = ctx.pin_capabilities();
                 let pin_assignments = ctx.pin_assignments();
+                let signals = ctx.signals();
                 let findings = engine.run(&VerificationContext {
                     requirements: &requirements,
                     constraints: &constraints,
@@ -102,6 +105,7 @@ impl Machine for ErcVerificationMachine {
                     return_paths: &return_paths,
                     pin_capabilities: &pin_capabilities,
                     pin_assignments: &pin_assignments,
+                    signals: &signals,
                 });
 
                 let existing = ctx.violations();

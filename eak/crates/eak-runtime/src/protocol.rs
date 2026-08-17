@@ -7,8 +7,8 @@
 use eak_domain::{
     Assumption, Board, BomLineItem, ClockDomain, Component, Constraint, Decision, DesignIntent,
     Discharge, EntityId, Evidence, FunctionalBlock, Net, Objective, Part, Pin, PinAssignment,
-    PinCapability, Placement, PowerDomain, ProvenanceLink, Requirement, ReturnPath, Risk, Track,
-    Tradeoff, Violation, Waiver,
+    PinCapability, Placement, PowerDomain, ProvenanceLink, Requirement, ReturnPath, Risk, Signal,
+    Track, Tradeoff, Violation, Waiver,
 };
 use eak_ports::{Event, ReasoningError, ReasoningRequest, ReasoningResponse, Seq, StoreError};
 
@@ -217,6 +217,17 @@ pub enum CapabilityRequest {
         assignment: PinAssignment,
         links: Vec<ProvenanceLink>,
     },
+    /// Commit a first-class [`Signal`] (a named, directional logical signal flow) with its
+    /// provenance links (Band B, increment 5; Map 16). The runtime re-validates the signal
+    /// (non-empty name, non-empty semantics, non-null source, ≥1 sink, source not among sinks) and
+    /// checks its `source` and every `sink` resolve to committed pins before committing (P3). A
+    /// well-formed signal with an *illegal* driver/sink pairing (an input source, an output sink)
+    /// IS accepted — the SignalDriverSinkRule at ERC time reports the legality as a design finding,
+    /// so the signal must be able to enter state (circuit-theory.md L134/L152).
+    CreateSignal {
+        signal: Signal,
+        links: Vec<ProvenanceLink>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -303,6 +314,10 @@ pub trait AgentContext {
     /// Map 22). Owned clones, like every other reader. The ERC phase reads these to run the
     /// [`PinMuxConflictRule`](eak_engines::PinMuxConflictRule).
     fn pin_assignments(&self) -> Vec<PinAssignment>;
+    /// Band B (increment 5): read the committed signals (the signal flow architecture; Map 16).
+    /// Owned clones, like every other reader. The ERC phase reads these to run the
+    /// [`SignalDriverSinkRule`](eak_engines::SignalDriverSinkRule).
+    fn signals(&self) -> Vec<Signal>;
     /// Call the reasoning engine, record the call (returning its event [`Seq`]), and
     /// return the judgement. Recording here is what makes replay deterministic (P4).
     fn reason(&mut self, req: ReasoningRequest)

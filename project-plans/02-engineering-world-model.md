@@ -212,11 +212,11 @@ the product roadmap.
 - *Relationships · runtime rep:* interfaces bind block ports to nets/buses; enforce protocol rules.
 - *AI · verify · evolves:* AI proposes interface matches; runtime checks contract compatibility. Verified by interface-contract rules (voltage-level, protocol, direction). Scales to automatic subsystem interconnect + ERC-by-contract.
 
-**16. Signal Flow Map** ○ *(new)*
+**16. Signal Flow Map** ◐
 - *Purpose & why:* directional *logical* signal flow (source→sink), distinct from undirected copper. Exists because a Net says "connected"; a Signal says "flows from here to there, and means this."
-- *Objects · owner · in→out:* (missing) `Signal{source, sinks, direction, semantics}`. Owner: runtime. In: interfaces + pins. Out: the logical layer nets realize.
+- *Objects · owner · in→out:* `Signal{name, source, sinks, semantics}` (implemented Band B inc 5; `direction` is encoded by source→sinks topology). Owner: runtime. In: interfaces + pins. Out: the logical layer nets realize.
 - *Relationships · runtime rep:* `Signal` realized-by `Net`; carried-by pins.
-- *AI · verify · evolves:* AI infers flow; runtime validates against pin electrical types. Verified by driver/sink consistency (extends ERC). Scales to full behavioral signal-flow simulation.
+- *AI · verify · evolves:* AI infers flow; runtime validates against pin electrical types. Verified by driver/sink consistency (extends ERC, `erc-signal-driver-sink` now; `signal→Net` realization check later). Scales to full behavioral signal-flow simulation.
 
 **17. Bus / Protocol Map** ○ *(new)*
 - *Purpose & why:* bus topologies (I²C/SPI/USB/CAN…) and their structural rules (addressing, termination, fan-out).
@@ -422,7 +422,10 @@ Signal Flow, Interface/Contract, Bus/Protocol, Subsystem.**
   `PinAssignment` implemented (domain `validate()`, seam `CreatePinCapability`/`CreatePinAssignment`,
   `erc-pin-mux-conflict` + `erc-pin-capability` rules — capability and assignment kept separate per
   the master-prompt §31 rule, so a mux conflict is an engineering violation, not a silent string
-  collision; [ADR-0025](../docs/decisions/0025-band-b-pin-function-mux.md)).
+  collision; [ADR-0025](../docs/decisions/0025-band-b-pin-function-mux.md)); increment 5 — `Signal`
+  implemented (domain `validate()`, seam `CreateSignal`, `erc-signal-driver-sink` rule — the
+  logical electrical meaning above raw connectivity, NOT a Net rename, only fields the architecture
+  can justify per §32; direction encoded by source→sinks; [ADR-0026](../docs/decisions/0026-band-b-signal-flow.md)).
   Remaining objects follow one per increment through the same seam. NOTE: ClockDomain precedes ReturnPath
   because return-path continuity targets controlled/electrically-long nets; the truthful v0 gate is the
   net's own controlled-impedance declaration (`Net::impedance_target`), NOT clock frequency — the

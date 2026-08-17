@@ -80,6 +80,7 @@ impl Machine for ConstraintVerificationMachine {
                 let return_paths = ctx.return_paths();
                 let pin_capabilities = ctx.pin_capabilities();
                 let pin_assignments = ctx.pin_assignments();
+                let signals = ctx.signals();
                 let findings = engine.run(&VerificationContext {
                     requirements: &requirements,
                     constraints: &constraints,
@@ -96,6 +97,7 @@ impl Machine for ConstraintVerificationMachine {
                     return_paths: &return_paths,
                     pin_capabilities: &pin_capabilities,
                     pin_assignments: &pin_assignments,
+                    signals: &signals,
                 });
 
                 let existing = ctx.violations();

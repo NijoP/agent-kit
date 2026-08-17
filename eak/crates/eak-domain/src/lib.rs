@@ -1350,6 +1350,76 @@ impl PinAssignment {
     }
 }
 
+// ===================== Band B (Phase 5, increment 5): Signal Flow Map =====================
+//
+// The fifth logical-electrical Map (Map 16; `02 §Band B`). A [`Net`] says "these pins are
+// connected" (undirected copper); a [`Signal`] says "a named, *directional* logical flow goes from
+// this source to these sinks, and means this" (`02` Map 16 — the schematic's logical layer above
+// the copper). This is the master-prompt §32 object: the logical-electrical meaning ABOVE raw
+// connectivity — a signal is NOT a Net rename, it carries only the fields the architecture can
+// truthfully justify: a source pin, the sink pins, and the semantics. Direction is encoded by the
+// source→sinks pair; a redundant `direction` enum would over-encode (a signal with one source and
+// N sinks has one direction by construction).
+//
+// The seam keeps referential integrity (source and every sink must be committed pins; P3). Whether
+// the flow is *legal* — an Output/Bidirectional pin driving, every sink an Input/Bidirectional pin
+// (`engineering-science/electrical/circuit-theory.md` L134/L152: source/load legality is a
+// Thévenin/KCL question) — is the [`SignalDriverSinkRule`]'s judgement at ERC time, NOT a validation
+// error: a well-formed signal must enter state so the rule can report an illegal driver/sink
+// pairing (two outputs driving, an input source). `semantics` is a `String` because logical meaning
+// is open-ended ("SPI clock", "active-low reset"); an enum would fabricate a closed world (P7).
+//
+// `Signal` carries no `PhysicalQuantity`, so — like [`Pin`] / [`FunctionalBlock`] — it derives
+// `Eq`. `validate()` reuses existing [`DomainError`] variants only.
+
+/// A named, directional logical signal flow (Map 16): from a `source` pin to one or more `sink`
+/// pins, carrying a meaning. Distinct from the undirected copper of a [`Net`]. See the module
+/// comment above.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Signal {
+    pub id: EntityId,
+    /// The logical signal name (e.g. `"SYS_CLK"`, `"SPI_MOSI"`). Non-empty.
+    pub name: String,
+    /// The driving pin. Must resolve to a committed pin (re-checked at the seam, P3).
+    pub source: EntityId,
+    /// The receiving pins. Must be non-empty and resolve to committed pins (re-checked at the
+    /// seam, P3). Must not include `source` — a signal cannot drive itself.
+    pub sinks: Vec<EntityId>,
+    /// The logical meaning (e.g. `"SPI clock"`, `"active-low reset"`). Non-empty — a signal that
+    /// means nothing carries no engineering intent.
+    pub semantics: String,
+}
+
+impl Signal {
+    /// Domain invariants (reuses existing [`DomainError`] variants only): a non-empty `name`, a
+    /// non-empty `semantics`, a non-null `source`, at least one `sink`, and `source` not among the
+    /// `sinks` (a self-driving loop is nonsensical — KCL). Link integrity is re-checked at the
+    /// signal seam (P3); driver/sink *legality* is the rule's judgement at ERC time, not this
+    /// object's.
+    pub fn validate(&self) -> Result<(), DomainError> {
+        if self.name.trim().is_empty() {
+            return Err(DomainError::EmptyField("signal name"));
+        }
+        if self.semantics.trim().is_empty() {
+            return Err(DomainError::EmptyField("signal semantics"));
+        }
+        if self.source.is_null() {
+            return Err(DomainError::Inconsistent("signal must have a source pin"));
+        }
+        if self.sinks.is_empty() {
+            return Err(DomainError::Inconsistent(
+                "signal must drive at least one sink pin",
+            ));
+        }
+        if self.sinks.contains(&self.source) {
+            return Err(DomainError::Inconsistent(
+                "signal cannot drive itself (source is also a sink)",
+            ));
+        }
+        Ok(())
+    }
+}
+
 /// A violated domain invariant.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DomainError {
@@ -2544,6 +2614,84 @@ mod tests {
         assert_eq!(
             a.validate(),
             Err(DomainError::EmptyField("pin assignment function"))
+        );
+    }
+
+    // ========== Band B (inc 5): Signal ==========
+
+    fn well_formed_signal() -> Signal {
+        Signal {
+            id: EntityId(12),
+            name: "SYS_CLK".into(),
+            source: EntityId(30),
+            sinks: vec![EntityId(31), EntityId(32)],
+            semantics: "system clock".into(),
+        }
+    }
+
+    #[test]
+    fn well_formed_signal_validates() {
+        assert!(well_formed_signal().validate().is_ok());
+    }
+
+    #[test]
+    fn signal_rejects_blank_name() {
+        let s = Signal {
+            name: "   ".into(),
+            ..well_formed_signal()
+        };
+        assert_eq!(s.validate(), Err(DomainError::EmptyField("signal name")));
+    }
+
+    #[test]
+    fn signal_rejects_blank_semantics() {
+        let s = Signal {
+            semantics: "   ".into(),
+            ..well_formed_signal()
+        };
+        assert_eq!(
+            s.validate(),
+            Err(DomainError::EmptyField("signal semantics"))
+        );
+    }
+
+    #[test]
+    fn signal_rejects_null_source() {
+        let s = Signal {
+            source: EntityId::NULL,
+            ..well_formed_signal()
+        };
+        assert_eq!(
+            s.validate(),
+            Err(DomainError::Inconsistent("signal must have a source pin"))
+        );
+    }
+
+    #[test]
+    fn signal_rejects_no_sinks() {
+        let s = Signal {
+            sinks: vec![],
+            ..well_formed_signal()
+        };
+        assert_eq!(
+            s.validate(),
+            Err(DomainError::Inconsistent(
+                "signal must drive at least one sink pin"
+            ))
+        );
+    }
+
+    #[test]
+    fn signal_rejects_self_drive() {
+        let s = Signal {
+            sinks: vec![EntityId(30)],
+            ..well_formed_signal()
+        };
+        assert_eq!(
+            s.validate(),
+            Err(DomainError::Inconsistent(
+                "signal cannot drive itself (source is also a sink)"
+            ))
         );
     }
 }

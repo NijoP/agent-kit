@@ -13,7 +13,7 @@ use eak_domain::{
     Assumption, Board, BomLineItem, ClockDomain, Component, Constraint, Decision, DesignIntent,
     Discharge, Evidence, FunctionalBlock, ModelFidelity, Net, Objective, Part, Pin, PinAssignment,
     PinCapability, Placement, PowerDomain, Priority, ProvenanceLink, Requirement,
-    RequirementCategory, ReturnPath, Risk, Track, Tradeoff, Violation, Waiver,
+    RequirementCategory, ReturnPath, Risk, Signal, Track, Tradeoff, Violation, Waiver,
 };
 use eak_units::PhysicalQuantity;
 use serde::{Deserialize, Serialize};
@@ -298,6 +298,14 @@ pub enum Event {
     /// enter state so the conflicts are *reported*, not silently swallowed (master-prompt §31).
     PinAssignmentCommitted {
         assignment: PinAssignment,
+    },
+    /// A [`Signal`] was committed (Band B inc 5): a named, *directional* logical signal flow
+    /// (source → sinks) with a meaning — the schematic's logical layer above the undirected copper
+    /// of a [`Net`] (Map 16). The source and every sink were re-checked at the seam to be committed
+    /// pins; whether the flow is *legal* (an output/bidirectional source, every sink
+    /// input/bidirectional) is the [`SignalDriverSinkRule`]'s judgement at ERC time.
+    SignalCommitted {
+        signal: Signal,
     },
 }
 
@@ -707,6 +715,28 @@ mod tests {
                 id: EntityId(72),
                 pin: EntityId(71),
                 function: "SPI1_MOSI".into(),
+            },
+        };
+        let s = serde_json::to_string(&ev).unwrap();
+        let back: Event = serde_json::from_str(&s).unwrap();
+        assert_eq!(ev, back);
+    }
+
+    // ===================== Band B (increment 5): Signal event =====================
+    //
+    // TDD: every new state-delta Event variant carries a serde round-trip test so its on-disk
+    // form is pinned and replay-from-log is byte-stable (P4).
+
+    #[test]
+    fn signal_committed_event_roundtrips_through_json() {
+        use eak_domain::{EntityId, Signal};
+        let ev = Event::SignalCommitted {
+            signal: Signal {
+                id: EntityId(80),
+                name: "SYS_CLK".into(),
+                source: EntityId(81),
+                sinks: vec![EntityId(82), EntityId(83)],
+                semantics: "system clock".into(),
             },
         };
         let s = serde_json::to_string(&ev).unwrap();

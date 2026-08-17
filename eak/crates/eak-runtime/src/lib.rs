@@ -57,7 +57,7 @@ mod kernel_tests {
         Net, NetClass, NetOrigin, Objective, Part, PartLifecycle, Pin, PinAssignment,
         PinCapability, PinElectricalType, Placement, PowerDomain, Priority, Requirement,
         RequirementCategory, RequirementStatus, ReturnPath, Risk, RiskLikelihood, RiskSeverity,
-        RiskStatus, Track, Tradeoff,
+        RiskStatus, Signal, Track, Tradeoff,
     };
     use eak_ports::{
         Event, EventLog, EventRecord, ReasoningEngine, ReasoningError, ReasoningRequest,
@@ -2791,5 +2791,214 @@ mod kernel_tests {
         // Nothing entered the log.
         assert!(core.state.pin_capabilities.is_empty());
         assert!(core.state.pin_assignments.is_empty());
+    }
+
+    // ===================== Band B (increment 5): Signal seam =====================
+    //
+    // TDD (written before the seam handler exists): Signal flows through the same seam as every
+    // other object. CreateSignal re-validates (non-empty name/semantics, non-null source, ≥1 sink,
+    // source ∉ sinks) and rejects a source or sink that was never committed (P3 referential
+    // integrity — a signal can never flow from/to a phantom pin). The fold pushes the committed
+    // signal into state; the log replays byte-identically (P4). Whether the flow is *legal* (an
+    // output/bidirectional source, input/bidirectional sinks) is the SignalDriverSinkRule's
+    // judgement at ERC time — a well-formed signal must enter state so the illegal pairing is
+    // reported (master-prompt §32, circuit-theory.md L134/L152).
+
+    /// Seed a driver pin (Output) and a receiver pin (Input) so a signal has real referential
+    /// anchors. Returns (source pin id, sink pin id).
+    fn seed_driver_and_receiver_pins(core: &mut RuntimeCore) -> (EntityId, EntityId) {
+        let comp = core.fresh_id();
+        let source = core.fresh_id();
+        let sink = core.fresh_id();
+        core.invoke(CapabilityRequest::RealizeComponent {
+            component: Component {
+                id: comp,
+                refdes: "U1".into(),
+                class: ComponentClass::Ic,
+                value: None,
+                from_block: EntityId::NULL,
+                origin: ComponentOrigin::Imported,
+            },
+            pins: vec![
+                Pin {
+                    id: source,
+                    component: comp,
+                    designation: "TX".into(),
+                    electrical_type: PinElectricalType::Output,
+                },
+                Pin {
+                    id: sink,
+                    component: comp,
+                    designation: "RX".into(),
+                    electrical_type: PinElectricalType::Input,
+                },
+            ],
+            links: vec![],
+        })
+        .unwrap();
+        (source, sink)
+    }
+
+    #[test]
+    fn create_signal_seam_accepts_valid_then_folds_and_replays_byte_identically() {
+        let mut core = new_core();
+        let (source, sink) = seed_driver_and_receiver_pins(&mut core);
+        let sig_id = core.fresh_id();
+
+        core.invoke(CapabilityRequest::CreateSignal {
+            signal: Signal {
+                id: sig_id,
+                name: "SYS_CLK".into(),
+                source,
+                sinks: vec![sink],
+                semantics: "system clock".into(),
+            },
+            links: vec![],
+        })
+        .expect("a well-formed signal on committed pins is accepted at the seam");
+
+        // The fold pushed exactly one signal and the accessor reads it back by id.
+        assert_eq!(core.state.signals.len(), 1);
+        let s = core.state.signal(sig_id).expect("signal folded by id");
+        assert_eq!(s.name, "SYS_CLK");
+        assert_eq!(s.source, source);
+        assert_eq!(s.sinks, vec![sink]);
+        assert_eq!(s.semantics, "system clock");
+
+        // Byte-identical replay with the signal in the log (P4).
+        let replayed = replay(core.log()).unwrap();
+        assert_eq!(core.state, replayed);
+        assert_eq!(core.state.canonical_json(), replayed.canonical_json());
+    }
+
+    #[test]
+    fn create_signal_seam_rejects_malformed_and_dangling_proposals() {
+        let mut core = new_core();
+        let (source, sink) = seed_driver_and_receiver_pins(&mut core);
+        let (
+            s_blank_name,
+            s_blank_sem,
+            s_null_src,
+            s_no_sinks,
+            s_self,
+            s_phantom_src,
+            s_phantom_sink,
+        ) = (
+            core.fresh_id(),
+            core.fresh_id(),
+            core.fresh_id(),
+            core.fresh_id(),
+            core.fresh_id(),
+            core.fresh_id(),
+            core.fresh_id(),
+        );
+
+        // (1) Blank signal name — domain validate() rejects.
+        let err = core
+            .invoke(CapabilityRequest::CreateSignal {
+                signal: Signal {
+                    id: s_blank_name,
+                    name: "   ".into(),
+                    source,
+                    sinks: vec![sink],
+                    semantics: "system clock".into(),
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // (2) Blank semantics — a signal that means nothing carries no intent.
+        let err = core
+            .invoke(CapabilityRequest::CreateSignal {
+                signal: Signal {
+                    id: s_blank_sem,
+                    name: "SYS_CLK".into(),
+                    source,
+                    sinks: vec![sink],
+                    semantics: "   ".into(),
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // (3) Null source — a flow from nowhere is untraceable (P3).
+        let err = core
+            .invoke(CapabilityRequest::CreateSignal {
+                signal: Signal {
+                    id: s_null_src,
+                    name: "SYS_CLK".into(),
+                    source: EntityId::NULL,
+                    sinks: vec![sink],
+                    semantics: "system clock".into(),
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // (4) No sinks — a signal driving nothing is a dangling declaration.
+        let err = core
+            .invoke(CapabilityRequest::CreateSignal {
+                signal: Signal {
+                    id: s_no_sinks,
+                    name: "SYS_CLK".into(),
+                    source,
+                    sinks: vec![],
+                    semantics: "system clock".into(),
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // (5) Self-drive — source is also a sink (KCL nonsense).
+        let err = core
+            .invoke(CapabilityRequest::CreateSignal {
+                signal: Signal {
+                    id: s_self,
+                    name: "SELF_CLK".into(),
+                    source,
+                    sinks: vec![source],
+                    semantics: "self loop".into(),
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // (6) Dangling source — references a pin never committed (P3): no phantom driver.
+        let err = core
+            .invoke(CapabilityRequest::CreateSignal {
+                signal: Signal {
+                    id: s_phantom_src,
+                    name: "SYS_CLK".into(),
+                    source: EntityId(0xDEAD_BEEF),
+                    sinks: vec![sink],
+                    semantics: "system clock".into(),
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // (7) Dangling sink — references a pin never committed (P3): no phantom receiver.
+        let err = core
+            .invoke(CapabilityRequest::CreateSignal {
+                signal: Signal {
+                    id: s_phantom_sink,
+                    name: "SYS_CLK".into(),
+                    source,
+                    sinks: vec![EntityId(0xDEAD_BEEF)],
+                    semantics: "system clock".into(),
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // Nothing entered the log: every malformed/dangling proposal was rejected pre-commit.
+        assert!(core.state.signals.is_empty());
     }
 }

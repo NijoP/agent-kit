@@ -12,7 +12,7 @@ use eak_domain::{
     Assumption, Board, BomLineItem, ClockDomain, Component, ComponentOrigin, Constraint, Decision,
     DesignIntent, Discharge, EntityId, Evidence, FunctionalBlock, Net, NetOrigin, Objective, Part,
     Pin, PinAssignment, PinCapability, Placement, PowerDomain, ProvenanceLink, Requirement,
-    ReturnPath, Risk, Track, Tradeoff, Violation, Waiver,
+    ReturnPath, Risk, Signal, Track, Tradeoff, Violation, Waiver,
 };
 use eak_ports::{
     Event, EventLog, EventRecord, EventSink, ReasoningEngine, ReasoningError, ReasoningRequest,
@@ -939,6 +939,46 @@ impl RuntimeCore {
             .map_err(|e| CapabilityError::Rejected(e.to_string()))?;
         Ok(CapabilityAck { committed: seqs })
     }
+
+    fn handle_create_signal(
+        &mut self,
+        signal: Signal,
+        links: Vec<ProvenanceLink>,
+    ) -> Result<CapabilityAck, CapabilityError> {
+        // The seam (P3): re-validate the signal (non-empty name/semantics, non-null source, ≥1
+        // sink, source not among sinks) before committing — the model is never trusted to have
+        // formed a well-shaped signal.
+        signal
+            .validate()
+            .map_err(|e| CapabilityError::Rejected(e.to_string()))?;
+        // Referential integrity at the seam: the source must be a committed pin (P3, P5) — a
+        // signal can never flow from a phantom driver.
+        if self.state.pin(signal.source).is_none() {
+            return Err(CapabilityError::Rejected(format!(
+                "signal references unknown source pin {}",
+                signal.source.short()
+            )));
+        }
+        // Referential integrity at the seam: every sink must be a committed pin (P3, P5) — a
+        // signal can never flow into a phantom receiver.
+        for sink in &signal.sinks {
+            if self.state.pin(*sink).is_none() {
+                return Err(CapabilityError::Rejected(format!(
+                    "signal references unknown sink pin {}",
+                    sink.short()
+                )));
+            }
+        }
+
+        let mut events = vec![Event::SignalCommitted { signal }];
+        for link in links {
+            events.push(Event::ProvenanceLinked { link });
+        }
+        let seqs = self
+            .commit(events)
+            .map_err(|e| CapabilityError::Rejected(e.to_string()))?;
+        Ok(CapabilityAck { committed: seqs })
+    }
 }
 
 impl AgentContext for RuntimeCore {
@@ -1058,6 +1098,10 @@ impl AgentContext for RuntimeCore {
         self.state.pin_assignments.clone()
     }
 
+    fn signals(&self) -> Vec<Signal> {
+        self.state.signals.clone()
+    }
+
     fn reason(
         &mut self,
         mut req: ReasoningRequest,
@@ -1141,6 +1185,9 @@ impl AgentContext for RuntimeCore {
             }
             CapabilityRequest::CreatePinAssignment { assignment, links } => {
                 self.handle_create_pin_assignment(assignment, links)
+            }
+            CapabilityRequest::CreateSignal { signal, links } => {
+                self.handle_create_signal(signal, links)
             }
         }
     }

@@ -8,7 +8,7 @@ use eak_domain::{
     Assumption, AssumptionStatus, Board, BomLineItem, ClockDomain, Component, Constraint, Decision,
     DesignIntent, EntityId, Evidence, FunctionalBlock, ModelFidelity, Net, Objective, Part, Pin,
     PinAssignment, PinCapability, Placement, PowerDomain, ProvenanceLink, Requirement, ReturnPath,
-    Risk, RiskSeverity, RiskStatus, Track, Tradeoff, Violation, ViolationStatus, Waiver,
+    Risk, RiskSeverity, RiskStatus, Signal, Track, Tradeoff, Violation, ViolationStatus, Waiver,
 };
 use eak_ports::{Event, Seq};
 use serde::{Deserialize, Serialize};
@@ -117,6 +117,13 @@ pub struct EngineeringState {
     // rules can report the conflicts (master-prompt §31).
     pub pin_capabilities: Vec<PinCapability>,
     pub pin_assignments: Vec<PinAssignment>,
+    // Band B (Phase 5, increment 5): the signal flow architecture (Map 16). A signal is a named,
+    // directional logical flow (source → sinks) with a meaning — the schematic's logical layer
+    // above the undirected copper of a net. Kept in insertion (event) order so a run and its
+    // replay serialize byte-identically. Whether the flow is legal (output/bidirectional source,
+    // input/bidirectional sinks) is the SignalDriverSinkRule's judgement at ERC time — a
+    // well-formed signal still belongs in state so the rule can report an illegal pairing.
+    pub signals: Vec<Signal>,
 }
 
 impl EngineeringState {
@@ -231,6 +238,9 @@ impl EngineeringState {
             Event::PinAssignmentCommitted { assignment } => {
                 self.pin_assignments.push(assignment.clone())
             }
+            // Band B (Phase 5, increment 5): the signal flow architecture. Committing a signal
+            // pushes it into its own store (insertion order, so replay is byte-identical, P4).
+            Event::SignalCommitted { signal } => self.signals.push(signal.clone()),
             // Audit-only events (phase lifecycle, reasoning calls, IR-boundary milestones)
             // carry no state and are intentionally not folded. AUDIT: any NEW state-bearing
             // event variant MUST get an explicit arm above, or replay will silently diverge.
@@ -373,6 +383,10 @@ impl EngineeringState {
 
     pub fn pin_assignment(&self, id: EntityId) -> Option<&PinAssignment> {
         self.pin_assignments.iter().find(|a| a.id == id)
+    }
+
+    pub fn signal(&self, id: EntityId) -> Option<&Signal> {
+        self.signals.iter().find(|s| s.id == id)
     }
 
     /// Deterministic serialization used to assert byte-identity between a run and its

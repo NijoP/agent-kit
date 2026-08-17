@@ -133,7 +133,8 @@ mod tests {
     use eak_domain::{
         Assumption, Board, BomLineItem, ClockDomain, Component, Constraint, DesignIntent, EntityId,
         FunctionalBlock, Net, Objective, Part, Pin, PinAssignment, PinCapability, Placement,
-        PowerDomain, ProvenanceLink, Requirement, ReturnPath, Risk, Track, Tradeoff, Violation,
+        PowerDomain, ProvenanceLink, Requirement, ReturnPath, Risk, Signal, Track, Tradeoff,
+        Violation,
     };
     use eak_ports::{Event, ReasoningError, ReasoningRequest, ReasoningResponse, Seq, StoreError};
 
@@ -208,6 +209,9 @@ mod tests {
             vec![]
         }
         fn pin_assignments(&self) -> Vec<PinAssignment> {
+            vec![]
+        }
+        fn signals(&self) -> Vec<Signal> {
             vec![]
         }
         fn assumptions(&self) -> Vec<Assumption> {

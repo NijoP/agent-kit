@@ -173,15 +173,16 @@ Each phase states: **Build** · **Why here (dependency)** · **Introduces** · *
 - **Exit criterion:** the runtime owns and verifies a power/pin/interface architecture for a real small
   board, every assignment traced to intent and checked by construction.
 - **Invariant:** Principles 1, 4, 7 (owned truth; correctness by construction; layered authority).
-- **Status in `eak/`:** ◐ **inc 1–4 built** — `PowerDomain` (seam + `erc-power-balance` rule,
+- **Status in `eak/`:** ◐ **inc 1–5 built** — `PowerDomain` (seam + `erc-power-balance` rule,
   [ADR-0022](../docs/decisions/0022-band-b-power-domain.md)), `ClockDomain` (seam +
   `erc-clock-domain-conflict` rule, [ADR-0023](../docs/decisions/0023-band-b-clock-domain.md)),
   `ReturnPath` (seam + `erc-return-path-required` rule, gated on the design's own
   `impedance_target` declaration per `engineering-science/electrical/transmission-lines.md`
-  L145/L170; [ADR-0024](../docs/decisions/0024-band-b-return-path.md)), and
+  L145/L170; [ADR-0024](../docs/decisions/0024-band-b-return-path.md)),
   `PinCapability`+`PinAssignment` (seam + `erc-pin-mux-conflict`/`erc-pin-capability` rules,
-  [ADR-0025](../docs/decisions/0025-band-b-pin-function-mux.md)); remaining objects one per
-  increment.
+  [ADR-0025](../docs/decisions/0025-band-b-pin-function-mux.md)), and `Signal` (seam +
+  `erc-signal-driver-sink` rule — the logical electrical meaning above raw connectivity per §32;
+  [ADR-0026](../docs/decisions/0026-band-b-signal-flow.md)); remaining objects one per increment.
 
 ### Phase 6 — Band C: the behavior/world-model Maps *(checker → generative)*
 - **Build:** the **Behavior** Map (component/subsystem behavior over conditions); **Power-Integrity**;
@@ -265,7 +266,7 @@ parallel with Band A once the contract is frozen.
 | 2 Skeleton Maps + IR + verify + orchestrator + gate | L2 | ✅ **built** (236 tests) |
 | 3 Band A — epistemic Maps | L3 | ✅ **built** (282 tests; ADR-0018–0021; branch `phase-3-band-a`) |
 | 4 Surfacing / interface | L4 | ◐ **stubbed** (`app/` spine; needs founder's machine) |
-| 5 Band B — logical-electrical | L5 | ◐ **inc 1–4 built** (`PowerDomain` + `ClockDomain` + `ReturnPath` + `PinCapability`/`PinAssignment` + `erc-power-balance`/`erc-clock-domain-conflict`/`erc-return-path-required`/`erc-pin-mux-conflict`/`erc-pin-capability`; 339 tests; ADR-0022–0025) |
+| 5 Band B — logical-electrical | L5 | ◐ **inc 1–5 built** (`PowerDomain` + `ClockDomain` + `ReturnPath` + `PinCapability`/`PinAssignment` + `Signal` + `erc-power-balance`/`erc-clock-domain-conflict`/`erc-return-path-required`/`erc-pin-mux-conflict`/`erc-pin-capability`/`erc-signal-driver-sink`; 356 tests; ADR-0022–0026) |
 | 6 Band C — behavior/world-model + solvers | L6 | ◐ first-order proxies only |
 | 7 Band D — lifecycle + memory | L7 | ○ not built |
 | 8 Engineering OS | L8 | ○ destination |
