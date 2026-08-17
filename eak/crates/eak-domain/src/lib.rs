@@ -1420,6 +1420,89 @@ impl Signal {
     }
 }
 
+// ===================== Band B (Phase 5, increment 6): Interface / Contract Map =====================
+//
+// The sixth logical-electrical Map (unnumbered in `02`; sits between Signal Flow and Bus/Protocol;
+// `02 §Band B` lists `Interface` as a Band B object). An [`Interface`] is a named collection of
+// [`Signal`]s that forms a logical connection point between subsystems — the "port" of a
+// subsystem. A [`Contract`] is the protocol rule-set that governs an interface (e.g. "I²C", "SPI",
+// "USB 2.0"). They are deliberately two objects in one increment: an interface without a contract
+// has no rules to enforce, and a contract without an interface has nowhere to apply. This is a
+// documented exception to the one-object-per-increment discipline (mirrors PinCapability/PinAssignment).
+//
+// The seam keeps referential integrity (signals and contract must be committed). Whether the
+// interface's signals *satisfy* the contract (correct signal count, direction, protocol rules) is
+// the [`InterfaceContractRule`]'s judgement at ERC time — a well-formed interface must enter state
+// so the rule can report a contract violation (e.g. an I²C interface missing SDA, a SPI interface
+// with two MOSI signals). `Contract.protocol` is a `String` because protocol names are open-ended;
+// an enum would fabricate a closed world (P7).
+//
+// Neither object carries a `PhysicalQuantity`, so — like [`Pin`] / [`FunctionalBlock`] — they
+// derive `Eq`. `validate()` reuses existing [`DomainError`] variants only.
+
+/// A protocol contract: the rule-set governing an interface (e.g. "I²C" requires SDA+SCL, unique
+/// addresses, pull-ups; "SPI" requires SCLK+MOSI+MISO+CS). See the module comment above.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Contract {
+    pub id: EntityId,
+    /// The protocol name (e.g. `"I2C"`, `"SPI"`, `"USB2"`). Non-empty.
+    pub protocol: String,
+    /// Human-readable name (e.g. `"I2C bus 1"`). Non-empty.
+    pub name: String,
+    /// Additional protocol-specific constraints (free-form; structured rules live in the rule
+    /// engine, not here). Empty is valid (minimal contract = just the protocol name).
+    pub constraints: Vec<String>,
+}
+
+impl Contract {
+    /// Domain invariants (reuses existing [`DomainError`] variants only): non-empty `protocol` and
+    /// non-empty `name`. Link integrity (referenced by Interface) is re-checked at the seam (P3).
+    pub fn validate(&self) -> Result<(), DomainError> {
+        if self.protocol.trim().is_empty() {
+            return Err(DomainError::EmptyField("contract protocol"));
+        }
+        if self.name.trim().is_empty() {
+            return Err(DomainError::EmptyField("contract name"));
+        }
+        Ok(())
+    }
+}
+
+/// A logical interface: a named collection of [`Signal`]s governed by a [`Contract`]. See the
+/// module comment above.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Interface {
+    pub id: EntityId,
+    /// The interface name (e.g. `"I2C1"`, `"SPI_FLASH"`, `"USB_HOST"`). Non-empty.
+    pub name: String,
+    /// The member signals forming this interface. Non-empty — an interface with no signals is
+    /// vacuous.
+    pub signals: Vec<EntityId>,
+    /// The [`Contract`] governing this interface. Must resolve to a committed contract (re-checked
+    /// at the seam, P3).
+    pub contract: EntityId,
+}
+
+impl Interface {
+    /// Domain invariants (reuses existing [`DomainError`] variants only): non-empty `name`,
+    /// non-empty `signals`, non-null `contract`. Link integrity is re-checked at the seam (P3);
+    /// contract *satisfaction* is the rule's judgement at ERC time, not this object's.
+    pub fn validate(&self) -> Result<(), DomainError> {
+        if self.name.trim().is_empty() {
+            return Err(DomainError::EmptyField("interface name"));
+        }
+        if self.signals.is_empty() {
+            return Err(DomainError::Inconsistent(
+                "interface must contain at least one signal",
+            ));
+        }
+        if self.contract.is_null() {
+            return Err(DomainError::Inconsistent("interface must name a contract"));
+        }
+        Ok(())
+    }
+}
+
 /// A violated domain invariant.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DomainError {
@@ -2692,6 +2775,92 @@ mod tests {
             Err(DomainError::Inconsistent(
                 "signal cannot drive itself (source is also a sink)"
             ))
+        );
+    }
+
+    // ========== Band B (inc 6): Contract / Interface ==========
+
+    fn well_formed_contract() -> Contract {
+        Contract {
+            id: EntityId(100),
+            protocol: "I2C".into(),
+            name: "I2C Bus 1".into(),
+            constraints: vec!["unique addresses".into(), "pull-ups required".into()],
+        }
+    }
+
+    #[test]
+    fn well_formed_contract_validates() {
+        assert!(well_formed_contract().validate().is_ok());
+    }
+
+    #[test]
+    fn contract_rejects_blank_protocol() {
+        let c = Contract {
+            protocol: "   ".into(),
+            ..well_formed_contract()
+        };
+        assert_eq!(
+            c.validate(),
+            Err(DomainError::EmptyField("contract protocol"))
+        );
+    }
+
+    #[test]
+    fn contract_rejects_blank_name() {
+        let c = Contract {
+            name: "   ".into(),
+            ..well_formed_contract()
+        };
+        assert_eq!(c.validate(), Err(DomainError::EmptyField("contract name")));
+    }
+
+    fn well_formed_interface() -> Interface {
+        Interface {
+            id: EntityId(101),
+            name: "I2C1".into(),
+            signals: vec![EntityId(200), EntityId(201)],
+            contract: EntityId(100),
+        }
+    }
+
+    #[test]
+    fn well_formed_interface_validates() {
+        assert!(well_formed_interface().validate().is_ok());
+    }
+
+    #[test]
+    fn interface_rejects_blank_name() {
+        let i = Interface {
+            name: "   ".into(),
+            ..well_formed_interface()
+        };
+        assert_eq!(i.validate(), Err(DomainError::EmptyField("interface name")));
+    }
+
+    #[test]
+    fn interface_rejects_no_signals() {
+        let i = Interface {
+            signals: vec![],
+            ..well_formed_interface()
+        };
+        assert_eq!(
+            i.validate(),
+            Err(DomainError::Inconsistent(
+                "interface must contain at least one signal"
+            ))
+        );
+    }
+
+    #[test]
+    fn interface_rejects_null_contract() {
+        let i = Interface {
+            contract: EntityId::NULL,
+            ..well_formed_interface()
+        };
+        assert_eq!(
+            i.validate(),
+            Err(DomainError::Inconsistent("interface must name a contract"))
         );
     }
 }

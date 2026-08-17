@@ -81,6 +81,8 @@ impl Machine for ConstraintVerificationMachine {
                 let pin_capabilities = ctx.pin_capabilities();
                 let pin_assignments = ctx.pin_assignments();
                 let signals = ctx.signals();
+                let contracts = ctx.contracts();
+                let interfaces = ctx.interfaces();
                 let findings = engine.run(&VerificationContext {
                     requirements: &requirements,
                     constraints: &constraints,
@@ -98,6 +100,8 @@ impl Machine for ConstraintVerificationMachine {
                     pin_capabilities: &pin_capabilities,
                     pin_assignments: &pin_assignments,
                     signals: &signals,
+                    contracts: &contracts,
+                    interfaces: &interfaces,
                 });
 
                 let existing = ctx.violations();

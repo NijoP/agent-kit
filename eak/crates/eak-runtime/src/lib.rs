@@ -52,12 +52,12 @@ mod kernel_tests {
     use super::*;
     use eak_domain::{
         Alternative, Assumption, AssumptionCriticality, AssumptionStatus, Board, BoardSide,
-        BomLineItem, ClockDomain, Component, ComponentClass, ComponentOrigin, Decision, Discharge,
-        DischargeResolution, EntityId, FidelityMethod, FunctionalBlock, LayerStack, ModelFidelity,
-        Net, NetClass, NetOrigin, Objective, Part, PartLifecycle, Pin, PinAssignment,
-        PinCapability, PinElectricalType, Placement, PowerDomain, Priority, Requirement,
-        RequirementCategory, RequirementStatus, ReturnPath, Risk, RiskLikelihood, RiskSeverity,
-        RiskStatus, Signal, Track, Tradeoff,
+        BomLineItem, ClockDomain, Component, ComponentClass, ComponentOrigin, Contract, Decision,
+        Discharge, DischargeResolution, EntityId, FidelityMethod, FunctionalBlock, Interface,
+        LayerStack, ModelFidelity, Net, NetClass, NetOrigin, Objective, Part, PartLifecycle, Pin,
+        PinAssignment, PinCapability, PinElectricalType, Placement, PowerDomain, Priority,
+        Requirement, RequirementCategory, RequirementStatus, ReturnPath, Risk, RiskLikelihood,
+        RiskSeverity, RiskStatus, Signal, Track, Tradeoff,
     };
     use eak_ports::{
         Event, EventLog, EventRecord, ReasoningEngine, ReasoningError, ReasoningRequest,
@@ -3000,5 +3000,248 @@ mod kernel_tests {
 
         // Nothing entered the log: every malformed/dangling proposal was rejected pre-commit.
         assert!(core.state.signals.is_empty());
+    }
+
+    // ===================== Band B (increment 6): Interface / Contract seam =====================
+    //
+    // TDD (written before the seam handlers exist): Contract and Interface flow through the same
+    // seam. CreateContract re-validates (non-empty protocol, non-empty name). CreateInterface
+    // re-validates (non-empty name, ≥1 signal, non-null contract) and checks its contract and
+    // every signal resolve to committed objects (P3). Whether the interface *satisfies* the
+    // contract (correct signal count for the protocol) is the InterfaceContractRule's judgement
+    // at ERC time — a well-formed interface must enter state so the violation is reported.
+
+    #[test]
+    fn create_contract_seam_accepts_valid_then_folds_and_replays_byte_identically() {
+        let mut core = new_core();
+        let c_id = core.fresh_id();
+
+        core.invoke(CapabilityRequest::CreateContract {
+            contract: Contract {
+                id: c_id,
+                protocol: "I2C".into(),
+                name: "I2C Bus 1".into(),
+                constraints: vec!["unique addresses".into()],
+            },
+            links: vec![],
+        })
+        .expect("a well-formed contract is accepted at the seam");
+
+        assert_eq!(core.state.contracts.len(), 1);
+        let c = core.state.contract(c_id).expect("contract folded by id");
+        assert_eq!(c.protocol, "I2C");
+        assert_eq!(c.name, "I2C Bus 1");
+
+        let replayed = replay(core.log()).unwrap();
+        assert_eq!(core.state, replayed);
+        assert_eq!(core.state.canonical_json(), replayed.canonical_json());
+    }
+
+    #[test]
+    fn create_contract_seam_rejects_malformed_proposals() {
+        let mut core = new_core();
+        let (c_blank_proto, c_blank_name) = (core.fresh_id(), core.fresh_id());
+
+        // (1) Blank protocol.
+        let err = core
+            .invoke(CapabilityRequest::CreateContract {
+                contract: Contract {
+                    id: c_blank_proto,
+                    protocol: "   ".into(),
+                    name: "I2C Bus 1".into(),
+                    constraints: vec![],
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // (2) Blank name.
+        let err = core
+            .invoke(CapabilityRequest::CreateContract {
+                contract: Contract {
+                    id: c_blank_name,
+                    protocol: "I2C".into(),
+                    name: "   ".into(),
+                    constraints: vec![],
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        assert!(core.state.contracts.is_empty());
+        assert!(core.state.interfaces.is_empty());
+    }
+
+    fn seed_interface_anchors(core: &mut RuntimeCore) -> (EntityId, EntityId, EntityId) {
+        // Seed a contract and two signals so an interface has real referential anchors.
+        let c_id = core.fresh_id();
+        core.invoke(CapabilityRequest::CreateContract {
+            contract: Contract {
+                id: c_id,
+                protocol: "I2C".into(),
+                name: "I2C Bus 1".into(),
+                constraints: vec![],
+            },
+            links: vec![],
+        })
+        .unwrap();
+
+        let s1_id = core.fresh_id();
+        let s2_id = core.fresh_id();
+        // Need pins for signals — seed minimal pins
+        let comp = core.fresh_id();
+        let p1 = core.fresh_id();
+        let p2 = core.fresh_id();
+        core.invoke(CapabilityRequest::RealizeComponent {
+            component: Component {
+                id: comp,
+                refdes: "U1".into(),
+                class: ComponentClass::Ic,
+                value: None,
+                from_block: EntityId::NULL,
+                origin: ComponentOrigin::Imported,
+            },
+            pins: vec![
+                Pin {
+                    id: p1,
+                    component: comp,
+                    designation: "SDA".into(),
+                    electrical_type: PinElectricalType::Bidirectional,
+                },
+                Pin {
+                    id: p2,
+                    component: comp,
+                    designation: "SCL".into(),
+                    electrical_type: PinElectricalType::Bidirectional,
+                },
+            ],
+            links: vec![],
+        })
+        .unwrap();
+        core.invoke(CapabilityRequest::CreateSignal {
+            signal: Signal {
+                id: s1_id,
+                name: "I2C_SDA".into(),
+                source: p1,
+                sinks: vec![p2],
+                semantics: "I2C data".into(),
+            },
+            links: vec![],
+        })
+        .unwrap();
+        core.invoke(CapabilityRequest::CreateSignal {
+            signal: Signal {
+                id: s2_id,
+                name: "I2C_SCL".into(),
+                source: p2,
+                sinks: vec![p1],
+                semantics: "I2C clock".into(),
+            },
+            links: vec![],
+        })
+        .unwrap();
+
+        (c_id, s1_id, s2_id)
+    }
+
+    #[test]
+    fn create_interface_seam_accepts_valid_then_folds_and_replays_byte_identically() {
+        let mut core = new_core();
+        let (c_id, s1_id, s2_id) = seed_interface_anchors(&mut core);
+        let i_id = core.fresh_id();
+
+        core.invoke(CapabilityRequest::CreateInterface {
+            interface: Interface {
+                id: i_id,
+                name: "I2C1".into(),
+                signals: vec![s1_id, s2_id],
+                contract: c_id,
+            },
+            links: vec![],
+        })
+        .expect("a well-formed interface on committed contract+signals is accepted at the seam");
+
+        assert_eq!(core.state.interfaces.len(), 1);
+        let i = core.state.interface(i_id).expect("interface folded by id");
+        assert_eq!(i.name, "I2C1");
+        assert_eq!(i.contract, c_id);
+        assert_eq!(i.signals, vec![s1_id, s2_id]);
+
+        let replayed = replay(core.log()).unwrap();
+        assert_eq!(core.state, replayed);
+        assert_eq!(core.state.canonical_json(), replayed.canonical_json());
+    }
+
+    #[test]
+    fn create_interface_seam_rejects_malformed_and_dangling_proposals() {
+        let mut core = new_core();
+        let (c_id, s1_id, s2_id) = seed_interface_anchors(&mut core);
+        let (i_blank, i_no_sigs, i_bad_contract, i_bad_signal) = (
+            core.fresh_id(),
+            core.fresh_id(),
+            core.fresh_id(),
+            core.fresh_id(),
+        );
+
+        // (1) Blank name.
+        let err = core
+            .invoke(CapabilityRequest::CreateInterface {
+                interface: Interface {
+                    id: i_blank,
+                    name: "   ".into(),
+                    signals: vec![s1_id, s2_id],
+                    contract: c_id,
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // (2) No signals.
+        let err = core
+            .invoke(CapabilityRequest::CreateInterface {
+                interface: Interface {
+                    id: i_no_sigs,
+                    name: "I2C1".into(),
+                    signals: vec![],
+                    contract: c_id,
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // (3) Dangling contract.
+        let err = core
+            .invoke(CapabilityRequest::CreateInterface {
+                interface: Interface {
+                    id: i_bad_contract,
+                    name: "I2C1".into(),
+                    signals: vec![s1_id, s2_id],
+                    contract: EntityId(0xDEAD_BEEF),
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // (4) Dangling signal.
+        let err = core
+            .invoke(CapabilityRequest::CreateInterface {
+                interface: Interface {
+                    id: i_bad_signal,
+                    name: "I2C1".into(),
+                    signals: vec![s1_id, EntityId(0xDEAD_BEEF)],
+                    contract: c_id,
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // Nothing entered the log (for interfaces; the contract from setup remains).
+        assert!(core.state.interfaces.is_empty());
     }
 }

@@ -5,10 +5,10 @@
 //! via a [`CapabilityRequest`] (P2). Agents never touch state or a model directly.
 
 use eak_domain::{
-    Assumption, Board, BomLineItem, ClockDomain, Component, Constraint, Decision, DesignIntent,
-    Discharge, EntityId, Evidence, FunctionalBlock, Net, Objective, Part, Pin, PinAssignment,
-    PinCapability, Placement, PowerDomain, ProvenanceLink, Requirement, ReturnPath, Risk, Signal,
-    Track, Tradeoff, Violation, Waiver,
+    Assumption, Board, BomLineItem, ClockDomain, Component, Constraint, Contract, Decision,
+    DesignIntent, Discharge, EntityId, Evidence, FunctionalBlock, Interface, Net, Objective, Part,
+    Pin, PinAssignment, PinCapability, Placement, PowerDomain, ProvenanceLink, Requirement,
+    ReturnPath, Risk, Signal, Track, Tradeoff, Violation, Waiver,
 };
 use eak_ports::{Event, ReasoningError, ReasoningRequest, ReasoningResponse, Seq, StoreError};
 
@@ -228,6 +228,24 @@ pub enum CapabilityRequest {
         signal: Signal,
         links: Vec<ProvenanceLink>,
     },
+    /// Commit a first-class [`Contract`] (a protocol rule-set, e.g. "I²C", "SPI") with its
+    /// provenance links (Band B, increment 6). The runtime re-validates the contract (non-empty
+    /// protocol, non-empty name) before committing.
+    CreateContract {
+        contract: Contract,
+        links: Vec<ProvenanceLink>,
+    },
+    /// Commit a first-class [`Interface`] (a named collection of signals governed by a contract) with
+    /// its provenance links (Band B, increment 6). The runtime re-validates the interface
+    /// (non-empty name, ≥1 signal, non-null contract) and checks its `contract` and every
+    /// `signal` resolve to committed objects before committing (P3). A well-formed interface that
+    /// *violates* its contract (wrong signals, missing required signals) IS accepted — the
+    /// InterfaceContractRule at ERC time reports the violation as a design finding, so the
+    /// interface must be able to enter state.
+    CreateInterface {
+        interface: Interface,
+        links: Vec<ProvenanceLink>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -318,6 +336,14 @@ pub trait AgentContext {
     /// Owned clones, like every other reader. The ERC phase reads these to run the
     /// [`SignalDriverSinkRule`](eak_engines::SignalDriverSinkRule).
     fn signals(&self) -> Vec<Signal>;
+    /// Band B (increment 6): read the committed contracts (the interface / contract architecture).
+    /// Owned clones, like every other reader. The ERC phase reads these to run the
+    /// [`InterfaceContractRule`](eak_engines::InterfaceContractRule).
+    fn contracts(&self) -> Vec<Contract>;
+    /// Band B (increment 6): read the committed interfaces (the interface / contract architecture).
+    /// Owned clones, like every other reader. The ERC phase reads these to run the
+    /// [`InterfaceContractRule`](eak_engines::InterfaceContractRule).
+    fn interfaces(&self) -> Vec<Interface>;
     /// Call the reasoning engine, record the call (returning its event [`Seq`]), and
     /// return the judgement. Recording here is what makes replay deterministic (P4).
     fn reason(&mut self, req: ReasoningRequest)

@@ -10,10 +10,10 @@
 //! the "a contract lives with the ring that needs it" rule they belong to the kernel.
 
 use eak_domain::{
-    Assumption, Board, BomLineItem, ClockDomain, Component, Constraint, Decision, DesignIntent,
-    Discharge, Evidence, FunctionalBlock, ModelFidelity, Net, Objective, Part, Pin, PinAssignment,
-    PinCapability, Placement, PowerDomain, Priority, ProvenanceLink, Requirement,
-    RequirementCategory, ReturnPath, Risk, Signal, Track, Tradeoff, Violation, Waiver,
+    Assumption, Board, BomLineItem, ClockDomain, Component, Constraint, Contract, Decision,
+    DesignIntent, Discharge, Evidence, FunctionalBlock, Interface, ModelFidelity, Net, Objective,
+    Part, Pin, PinAssignment, PinCapability, Placement, PowerDomain, Priority, ProvenanceLink,
+    Requirement, RequirementCategory, ReturnPath, Risk, Signal, Track, Tradeoff, Violation, Waiver,
 };
 use eak_units::PhysicalQuantity;
 use serde::{Deserialize, Serialize};
@@ -306,6 +306,19 @@ pub enum Event {
     /// input/bidirectional) is the [`SignalDriverSinkRule`]'s judgement at ERC time.
     SignalCommitted {
         signal: Signal,
+    },
+    /// A [`Contract`] was committed (Band B inc 6): a protocol rule-set (e.g. "I²C", "SPI") that
+    /// governs an interface. The protocol name is open-ended (String) — an enum would fabricate a
+    /// closed world (P7).
+    ContractCommitted {
+        contract: Contract,
+    },
+    /// An [`Interface`] was committed (Band B inc 6): a named collection of signals governed by a
+    /// contract. The signals and contract were re-checked at the seam to be committed; whether the
+    /// interface satisfies the contract (correct signals, directions, protocol rules) is the
+    /// [`InterfaceContractRule`]'s judgement at ERC time.
+    InterfaceCommitted {
+        interface: Interface,
     },
 }
 
@@ -737,6 +750,43 @@ mod tests {
                 source: EntityId(81),
                 sinks: vec![EntityId(82), EntityId(83)],
                 semantics: "system clock".into(),
+            },
+        };
+        let s = serde_json::to_string(&ev).unwrap();
+        let back: Event = serde_json::from_str(&s).unwrap();
+        assert_eq!(ev, back);
+    }
+
+    // ===================== Band B (increment 6): Interface / Contract events =====================
+    //
+    // TDD: every new state-delta Event variant carries a serde round-trip test so its on-disk
+    // form is pinned and replay-from-log is byte-stable (P4).
+
+    #[test]
+    fn contract_committed_event_roundtrips_through_json() {
+        use eak_domain::{Contract, EntityId};
+        let ev = Event::ContractCommitted {
+            contract: Contract {
+                id: EntityId(90),
+                protocol: "I2C".into(),
+                name: "I2C Bus 1".into(),
+                constraints: vec!["unique addresses".into()],
+            },
+        };
+        let s = serde_json::to_string(&ev).unwrap();
+        let back: Event = serde_json::from_str(&s).unwrap();
+        assert_eq!(ev, back);
+    }
+
+    #[test]
+    fn interface_committed_event_roundtrips_through_json() {
+        use eak_domain::{EntityId, Interface};
+        let ev = Event::InterfaceCommitted {
+            interface: Interface {
+                id: EntityId(91),
+                name: "I2C1".into(),
+                signals: vec![EntityId(92), EntityId(93)],
+                contract: EntityId(90),
             },
         };
         let s = serde_json::to_string(&ev).unwrap();

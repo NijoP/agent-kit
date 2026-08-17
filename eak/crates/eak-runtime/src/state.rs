@@ -5,10 +5,11 @@
 //! run and during [`crate::replay`], guaranteeing identical reconstruction.
 
 use eak_domain::{
-    Assumption, AssumptionStatus, Board, BomLineItem, ClockDomain, Component, Constraint, Decision,
-    DesignIntent, EntityId, Evidence, FunctionalBlock, ModelFidelity, Net, Objective, Part, Pin,
-    PinAssignment, PinCapability, Placement, PowerDomain, ProvenanceLink, Requirement, ReturnPath,
-    Risk, RiskSeverity, RiskStatus, Signal, Track, Tradeoff, Violation, ViolationStatus, Waiver,
+    Assumption, AssumptionStatus, Board, BomLineItem, ClockDomain, Component, Constraint, Contract,
+    Decision, DesignIntent, EntityId, Evidence, FunctionalBlock, Interface, ModelFidelity, Net,
+    Objective, Part, Pin, PinAssignment, PinCapability, Placement, PowerDomain, ProvenanceLink,
+    Requirement, ReturnPath, Risk, RiskSeverity, RiskStatus, Signal, Track, Tradeoff, Violation,
+    ViolationStatus, Waiver,
 };
 use eak_ports::{Event, Seq};
 use serde::{Deserialize, Serialize};
@@ -124,6 +125,13 @@ pub struct EngineeringState {
     // input/bidirectional sinks) is the SignalDriverSinkRule's judgement at ERC time — a
     // well-formed signal still belongs in state so the rule can report an illegal pairing.
     pub signals: Vec<Signal>,
+    // Band B (Phase 5, increment 6): the interface / contract architecture. An interface is a
+    // named collection of signals governed by a contract. Kept in insertion (event) order so a
+    // run and its replay serialize byte-identically. Whether an interface satisfies its contract
+    // is the InterfaceContractRule's judgement at ERC time — a well-formed interface still belongs
+    // in state so the rule can report a violation.
+    pub contracts: Vec<Contract>,
+    pub interfaces: Vec<Interface>,
 }
 
 impl EngineeringState {
@@ -241,6 +249,11 @@ impl EngineeringState {
             // Band B (Phase 5, increment 5): the signal flow architecture. Committing a signal
             // pushes it into its own store (insertion order, so replay is byte-identical, P4).
             Event::SignalCommitted { signal } => self.signals.push(signal.clone()),
+            // Band B (Phase 5, increment 6): the interface / contract architecture. Committing a
+            // contract or an interface pushes it into its own store (insertion order, so replay is
+            // byte-identical, P4).
+            Event::ContractCommitted { contract } => self.contracts.push(contract.clone()),
+            Event::InterfaceCommitted { interface } => self.interfaces.push(interface.clone()),
             // Audit-only events (phase lifecycle, reasoning calls, IR-boundary milestones)
             // carry no state and are intentionally not folded. AUDIT: any NEW state-bearing
             // event variant MUST get an explicit arm above, or replay will silently diverge.
@@ -387,6 +400,14 @@ impl EngineeringState {
 
     pub fn signal(&self, id: EntityId) -> Option<&Signal> {
         self.signals.iter().find(|s| s.id == id)
+    }
+
+    pub fn contract(&self, id: EntityId) -> Option<&Contract> {
+        self.contracts.iter().find(|c| c.id == id)
+    }
+
+    pub fn interface(&self, id: EntityId) -> Option<&Interface> {
+        self.interfaces.iter().find(|i| i.id == id)
     }
 
     /// Deterministic serialization used to assert byte-identity between a run and its

@@ -43,6 +43,7 @@ Phase 1 (implementation start) records the technology and scoping decisions Phas
 | [0024](0024-band-b-return-path.md) | `ReturnPath`: the return half of the signal loop, named and verified | Accepted |
 | [0025](0025-band-b-pin-function-mux.md) | `PinCapability` + `PinAssignment`: a pin's datasheet truth, separated from the design's chosen function | Accepted |
 | [0026](0026-band-b-signal-flow.md) | `Signal`: the logical electrical meaning above raw connectivity | Accepted |
+| [0027](0027-band-b-interface-contract.md) | `Contract` + `Interface`: a protocol rule-set and its governed signal collection | Accepted |
 
 ## The ADR lifecycle
 

@@ -7,9 +7,9 @@
 
 use eak_domain::{
     Board, BoardSide, BomLineItem, ClockDomain, Component, ComponentClass, Constraint,
-    ConstraintKind, EntityId, Layer, LayerStack, Net, NetClass, Part, PartLifecycle, Pin,
-    PinAssignment, PinCapability, PinElectricalType, Placement, PowerDomain, Requirement,
-    RequirementCategory, ReturnPath, Signal, Track, Violation, ViolationSeverity,
+    ConstraintKind, Contract, EntityId, Interface, Layer, LayerStack, Net, NetClass, Part,
+    PartLifecycle, Pin, PinAssignment, PinCapability, PinElectricalType, Placement, PowerDomain,
+    Requirement, RequirementCategory, ReturnPath, Signal, Track, Violation, ViolationSeverity,
 };
 use eak_units::{Dimension, PhysicalQuantity, Unit, UnitError};
 use std::cmp::Ordering;
@@ -141,6 +141,12 @@ pub struct VerificationContext<'a> {
     /// copper of a net. Lets the driver/sink rule check source/load legality against pin electrical
     /// types (circuit-theory.md L134/L152).
     pub signals: &'a [Signal],
+    /// Band B (Phase 5): the committed contracts (the interface / contract architecture).
+    /// Protocol rule-sets (e.g. "I²C", "SPI") governing interfaces.
+    pub contracts: &'a [Contract],
+    /// Band B (Phase 5): the committed interfaces (the interface / contract architecture).
+    /// Named collections of signals governed by a contract.
+    pub interfaces: &'a [Interface],
 }
 
 /// A problem a rule detected. Not yet a domain `Violation` — the runtime mints that at the
@@ -831,6 +837,113 @@ impl Rule for SignalDriverSinkRule {
                             sink.electrical_type,
                         ),
                     }),
+                }
+            }
+        }
+        findings
+    }
+}
+
+// ===================== Band B (increment 6): Interface / Contract =====================
+
+/// An interface/contract rule: an [`Interface`] names a [`Contract`] and a set of
+/// [`Signal`]s — the interface *satisfies* the contract if its signals match the protocol's
+/// requirements (e.g. an I²C interface must contain exactly SDA+SCL, an SPI interface must
+/// contain SCLK+MOSI+MISO+CS, a USB interface must contain D+/D-). This is a structural
+/// contract check: the runtime does not yet own a full protocol knowledge library (that's a
+/// Memory-layer concern), so this v0 encodes a minimal set of well-known protocol
+/// requirements directly. Deterministic (P4): interfaces scanned in slice order; one Error
+/// finding per violated requirement, subjects = the interface + offending signals. A missing
+/// contract or unknown signals are also flagged (honesty).
+pub struct InterfaceContractRule;
+
+impl InterfaceContractRule {
+    pub const ID: &'static str = "erc-interface-contract";
+
+    pub fn new() -> Self {
+        Self
+    }
+}
+impl Default for InterfaceContractRule {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Rule for InterfaceContractRule {
+    fn id(&self) -> &str {
+        Self::ID
+    }
+
+    fn evaluate(&self, ctx: &VerificationContext) -> Vec<ViolationFinding> {
+        let mut findings = Vec::new();
+        for iface in ctx.interfaces.iter() {
+            let contract = ctx.contracts.iter().find(|c| c.id == iface.contract);
+            let Some(contract) = contract else {
+                findings.push(ViolationFinding {
+                    rule: Self::ID.to_string(),
+                    severity: ViolationSeverity::Error,
+                    subjects: vec![iface.id, iface.contract],
+                    message: format!(
+                        "interface \"{}\" names contract {} which the runtime has never seen — \
+                         the interface is unverifiable (interface contract)",
+                        iface.name,
+                        iface.contract.short(),
+                    ),
+                });
+                continue;
+            };
+            // Minimal v0 protocol checks: known protocols with required signal count/names.
+            match contract.protocol.as_str() {
+                "I2C" | "I2c" | "i2c" => {
+                    // I2C requires exactly 2 signals: SDA (bidirectional data) and SCL (clock).
+                    if iface.signals.len() != 2 {
+                        findings.push(ViolationFinding {
+                            rule: Self::ID.to_string(),
+                            severity: ViolationSeverity::Error,
+                            subjects: vec![iface.id],
+                            message: format!(
+                                "I²C interface \"{}\" must contain exactly 2 signals (SDA, SCL); \
+                                 found {} (interface contract)",
+                                iface.name,
+                                iface.signals.len(),
+                            ),
+                        });
+                    }
+                }
+                "SPI" | "Spi" | "spi" => {
+                    // SPI requires at least 4 signals: SCLK, MOSI, MISO, CS (plus optional extras).
+                    if iface.signals.len() < 4 {
+                        findings.push(ViolationFinding {
+                            rule: Self::ID.to_string(),
+                            severity: ViolationSeverity::Error,
+                            subjects: vec![iface.id],
+                            message: format!(
+                                "SPI interface \"{}\" must contain at least 4 signals (SCLK, MOSI, MISO, CS); \
+                                 found {} (interface contract)",
+                                iface.name,
+                                iface.signals.len(),
+                            ),
+                        });
+                    }
+                }
+                "USB2" | "USB" | "usb" if iface.signals.len() < 2 => {
+                    findings.push(ViolationFinding {
+                        rule: Self::ID.to_string(),
+                        severity: ViolationSeverity::Error,
+                        subjects: vec![iface.id],
+                        message: format!(
+                            "USB interface \"{}\" must contain at least 2 signals (D+, D-); \
+                             found {} (interface contract)",
+                            iface.name,
+                            iface.signals.len(),
+                        ),
+                    });
+                }
+                _ => {
+                    // Unknown protocol: no structural checks (open world). The contract exists
+                    // but the rule doesn't know its requirements — that's a Memory-layer gap,
+                    // not an error.
                 }
             }
         }
@@ -2383,6 +2496,8 @@ mod tests {
             pin_capabilities: &[],
             pin_assignments: &[],
             signals: &[],
+            contracts: &[],
+            interfaces: &[],
         };
         let findings = rule.evaluate(&ctx);
         assert_eq!(findings.len(), 1);
@@ -2417,6 +2532,8 @@ mod tests {
             pin_capabilities: &[],
             pin_assignments: &[],
             signals: &[],
+            contracts: &[],
+            interfaces: &[],
         });
         assert_eq!(findings.len(), 1);
     }
@@ -2444,6 +2561,8 @@ mod tests {
             pin_capabilities: &[],
             pin_assignments: &[],
             signals: &[],
+            contracts: &[],
+            interfaces: &[],
         });
         assert!(findings.is_empty());
     }
@@ -2513,6 +2632,8 @@ mod tests {
             pin_capabilities: &[],
             pin_assignments: &[],
             signals: &[],
+            contracts: &[],
+            interfaces: &[],
         }
     }
 
@@ -2609,6 +2730,8 @@ mod tests {
             pin_capabilities: &[],
             pin_assignments: &[],
             signals: &[],
+            contracts: &[],
+            interfaces: &[],
         }
     }
 
@@ -2710,6 +2833,8 @@ mod tests {
             pin_capabilities: &[],
             pin_assignments: &[],
             signals: &[],
+            contracts: &[],
+            interfaces: &[],
         }
     }
 
@@ -2816,6 +2941,8 @@ mod tests {
             pin_capabilities: &[],
             pin_assignments: &[],
             signals: &[],
+            contracts: &[],
+            interfaces: &[],
         }
     }
 
@@ -2909,6 +3036,8 @@ mod tests {
             pin_capabilities: capabilities,
             pin_assignments: assignments,
             signals: &[],
+            contracts: &[],
+            interfaces: &[],
         }
     }
 
@@ -3033,6 +3162,8 @@ mod tests {
             pin_capabilities: &[],
             pin_assignments: &[],
             signals,
+            contracts: &[],
+            interfaces: &[],
         }
     }
 
@@ -3131,6 +3262,111 @@ mod tests {
             .is_empty());
     }
 
+    // --------------------------- interface / contract (Band B) tests ---------------------------
+
+    fn contract(id: u128, protocol: &str, name: &str) -> Contract {
+        Contract {
+            id: EntityId(id),
+            protocol: protocol.to_string(),
+            name: name.to_string(),
+            constraints: vec![],
+        }
+    }
+
+    fn interface(id: u128, name: &str, signals: &[u128], contract: u128) -> Interface {
+        Interface {
+            id: EntityId(id),
+            name: name.to_string(),
+            signals: signals.iter().map(|&s| EntityId(s)).collect(),
+            contract: EntityId(contract),
+        }
+    }
+
+    fn iface_ctx<'a>(
+        contracts: &'a [Contract],
+        interfaces: &'a [Interface],
+    ) -> VerificationContext<'a> {
+        VerificationContext {
+            requirements: &[],
+            constraints: &[],
+            components: &[],
+            pins: &[],
+            nets: &[],
+            parts: &[],
+            bom_line_items: &[],
+            board: None,
+            placements: &[],
+            tracks: &[],
+            power_domains: &[],
+            clock_domains: &[],
+            return_paths: &[],
+            pin_capabilities: &[],
+            pin_assignments: &[],
+            signals: &[],
+            contracts,
+            interfaces,
+        }
+    }
+
+    #[test]
+    fn i2c_interface_with_two_signals_passes() {
+        // I2C contract requires exactly 2 signals.
+        let contracts = vec![contract(1, "I2C", "I2C Bus 1")];
+        let interfaces = vec![interface(10, "I2C1", &[20, 21], 1)];
+        assert!(InterfaceContractRule::new()
+            .evaluate(&iface_ctx(&contracts, &interfaces))
+            .is_empty());
+    }
+
+    #[test]
+    fn i2c_interface_with_wrong_signal_count_is_flagged() {
+        // I2C with 3 signals violates the protocol.
+        let contracts = vec![contract(1, "I2C", "I2C Bus 1")];
+        let interfaces = vec![interface(10, "I2C1", &[20, 21, 22], 1)];
+        let findings = InterfaceContractRule::new().evaluate(&iface_ctx(&contracts, &interfaces));
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].rule, InterfaceContractRule::ID);
+        assert!(findings[0].message.contains("I2C"));
+        assert!(findings[0].message.contains("2 signals"));
+    }
+
+    #[test]
+    fn spi_interface_with_four_signals_passes() {
+        let contracts = vec![contract(1, "SPI", "SPI Bus 1")];
+        let interfaces = vec![interface(10, "SPI1", &[20, 21, 22, 23], 1)];
+        assert!(InterfaceContractRule::new()
+            .evaluate(&iface_ctx(&contracts, &interfaces))
+            .is_empty());
+    }
+
+    #[test]
+    fn spi_interface_with_fewer_than_four_signals_is_flagged() {
+        let contracts = vec![contract(1, "SPI", "SPI Bus 1")];
+        let interfaces = vec![interface(10, "SPI1", &[20, 21], 1)];
+        let findings = InterfaceContractRule::new().evaluate(&iface_ctx(&contracts, &interfaces));
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].rule, InterfaceContractRule::ID);
+        assert!(findings[0].message.contains("SPI"));
+        assert!(findings[0].message.contains("4 signals"));
+    }
+
+    #[test]
+    fn interface_with_unknown_contract_is_flagged() {
+        // Contract never seen by runtime — unverifiable (honesty).
+        let interfaces = vec![interface(10, "I2C1", &[20, 21], 999)];
+        let findings = InterfaceContractRule::new().evaluate(&iface_ctx(&[], &interfaces));
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].rule, InterfaceContractRule::ID);
+        assert!(findings[0].message.contains("never seen"));
+    }
+
+    #[test]
+    fn empty_interface_architecture_produces_no_findings() {
+        assert!(InterfaceContractRule::new()
+            .evaluate(&iface_ctx(&[], &[]))
+            .is_empty());
+    }
+
     // ------------------------------ catalog + BOM tests ------------------------------
 
     fn component(id: u128, class: ComponentClass) -> Component {
@@ -3185,6 +3421,8 @@ mod tests {
             pin_capabilities: &[],
             pin_assignments: &[],
             signals: &[],
+            contracts: &[],
+            interfaces: &[],
         }
     }
 
@@ -3349,6 +3587,8 @@ mod tests {
             pin_capabilities: &[],
             pin_assignments: &[],
             signals: &[],
+            contracts: &[],
+            interfaces: &[],
         }
     }
 
@@ -3374,6 +3614,8 @@ mod tests {
             pin_capabilities: &[],
             pin_assignments: &[],
             signals: &[],
+            contracts: &[],
+            interfaces: &[],
         }
     }
 
@@ -3651,6 +3893,8 @@ mod tests {
             pin_capabilities: &[],
             pin_assignments: &[],
             signals: &[],
+            contracts: &[],
+            interfaces: &[],
         }
     }
 
@@ -3720,6 +3964,8 @@ mod tests {
             pin_capabilities: &[],
             pin_assignments: &[],
             signals: &[],
+            contracts: &[],
+            interfaces: &[],
         }
     }
 
@@ -3799,6 +4045,8 @@ mod tests {
             pin_capabilities: &[],
             pin_assignments: &[],
             signals: &[],
+            contracts: &[],
+            interfaces: &[],
         }
     }
 
@@ -4007,6 +4255,8 @@ mod tests {
             pin_capabilities: &[],
             pin_assignments: &[],
             signals: &[],
+            contracts: &[],
+            interfaces: &[],
         }
     }
 
@@ -4204,6 +4454,8 @@ mod tests {
             pin_capabilities: &[],
             pin_assignments: &[],
             signals: &[],
+            contracts: &[],
+            interfaces: &[],
         }
     }
 
@@ -4229,6 +4481,8 @@ mod tests {
             pin_capabilities: &[],
             pin_assignments: &[],
             signals: &[],
+            contracts: &[],
+            interfaces: &[],
         }
     }
 
@@ -4344,6 +4598,8 @@ mod tests {
             pin_capabilities: &[],
             pin_assignments: &[],
             signals: &[],
+            contracts: &[],
+            interfaces: &[],
         }
     }
 

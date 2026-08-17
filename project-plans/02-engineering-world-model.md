@@ -400,7 +400,7 @@ Fidelity.**
   auditable risk posture; trust-weighted reasoning.
 
 **Band B — the electrical-domain gaps: Power Domain, Ground/Return, Clock Domain, Pin-Function/Mux,
-Signal Flow, Interface/Contract, Bus/Protocol, Subsystem.**
+ Signal Flow, Interface/Contract, Bus/Protocol, Subsystem.**
 - *Why missing:* the runtime jumped from flat blocks to nets, skipping the *logical electrical
   architecture* real engineers reason in.
 - *Why it should exist:* power/clock/pin-planning/interfaces are where designs are actually specified
@@ -410,7 +410,7 @@ Signal Flow, Interface/Contract, Bus/Protocol, Subsystem.**
 - *Integration:* new IR stage ("Logical Electrical IR"); domain objects committed through the seam;
   rules (power balance, mux conflict, CDC, protocol) added to the verification engine.
 - *New objects:* `PowerDomain`, `ReturnPath`, `ClockDomain`, `PinAssignment`/`PinCapability`,
-  `Signal`, `Interface`, `Bus`, `Subsystem`.
+  `Signal`, `Interface`, `Contract`, `Bus`, `Subsystem`.
 - *Status:* increment 1 — `PowerDomain` implemented (domain `validate()`, seam `CreatePowerDomain`,
   `erc-power-balance` rule; [ADR-0022](../docs/decisions/0022-band-b-power-domain.md)); increment 2 —
   `ClockDomain` implemented (domain `validate()`, seam `CreateClockDomain`, `erc-clock-domain-conflict`
@@ -425,7 +425,11 @@ Signal Flow, Interface/Contract, Bus/Protocol, Subsystem.**
   collision; [ADR-0025](../docs/decisions/0025-band-b-pin-function-mux.md)); increment 5 — `Signal`
   implemented (domain `validate()`, seam `CreateSignal`, `erc-signal-driver-sink` rule — the
   logical electrical meaning above raw connectivity, NOT a Net rename, only fields the architecture
-  can justify per §32; direction encoded by source→sinks; [ADR-0026](../docs/decisions/0026-band-b-signal-flow.md)).
+  can justify per §32; direction encoded by source→sinks; [ADR-0026](../docs/decisions/0026-band-b-signal-flow.md));
+  increment 6 — `Contract` + `Interface` implemented (domain `validate()`, seam `CreateContract`/
+  `CreateInterface`, `erc-interface-contract` rule — protocol rule-set and its governed signal
+  collection, co-dependent objects per the Map; minimal v0 structural checks for I²C/SPI/USB;
+  [ADR-0027](../docs/decisions/0027-band-b-interface-contract.md)).
   Remaining objects follow one per increment through the same seam. NOTE: ClockDomain precedes ReturnPath
   because return-path continuity targets controlled/electrically-long nets; the truthful v0 gate is the
   net's own controlled-impedance declaration (`Net::impedance_target`), NOT clock frequency — the
