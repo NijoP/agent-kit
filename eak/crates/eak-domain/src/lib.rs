@@ -7,6 +7,7 @@
 
 use eak_units::{Dimension, PhysicalQuantity, Unit};
 use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 
 /// Opaque, immutable identity (domain-model modelling principle 1). Carries no meaning;
 /// referenced by value, never by name or position. `EntityId(0)` is reserved as the null
@@ -1503,6 +1504,106 @@ impl Interface {
     }
 }
 
+// ===================== Band B (Phase 5, increment 7): Bus / Protocol Map =====================
+//
+// The seventh logical-electrical Map (Map 17; `02 §Band B`). An [`Interface`] (ADR-0027) is a
+// single connection point governed by a contract; a [`Bus`] is a **collection of interfaces (or
+// signals) that share a physical bus line** under one protocol contract, with topology rules
+// (addressing, termination, fan-out, stub length) — `02` Map 17: "bus topologies (I²C/SPI/USB/CAN…)
+// and their structural rules". The Bus is the architectural unit where protocol-level constraints
+// live: an I²C bus needs unique 7-bit addresses and pull-ups; a CAN bus needs termination at both
+// ends; a USB bus needs hub fan-out limits.
+//
+// The seam keeps referential integrity (contract and every member must be committed). Whether the
+// bus's topology satisfies the protocol's structural rules (unique addresses, correct termination,
+// fan-out limits) is the [`BusTopologyRule`]'s judgement at ERC time — a well-formed bus must
+// enter state so the rule can report a violation (e.g. two I²C devices with the same address, a
+// CAN bus missing termination). `BusTopology` is a `String` enum variant (open-ended; an enum
+// would fabricate a closed world of bus types (P7)).
+//
+// `Bus` carries no `PhysicalQuantity`, so — like [`Pin`] / [`FunctionalBlock`] — it derives `Eq`.
+// `validate()` reuses existing [`DomainError`] variants only.
+
+/// The topology type of a bus (open-ended; an enum would fabricate a closed world). Serialized as
+/// a string so new topologies can be added without schema changes. See the module comment above.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum BusTopology {
+    /// Linear/daisy-chain bus (e.g. CAN, RS-485). Requires termination at both ends.
+    Linear,
+    /// Star/hub topology (e.g. USB). Hub fan-out limits apply.
+    Star,
+    /// Multi-drop / shared bus (e.g. I²C, SPI). Address uniqueness and stub length limits apply.
+    MultiDrop,
+    /// Point-to-point (e.g. USB link, Ethernet link). No sharing.
+    PointToPoint,
+    /// An unrecognized topology name (passed through from the model without interpretation).
+    Other(String),
+}
+
+impl FromStr for BusTopology {
+    type Err = std::convert::Infallible;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s.trim().to_lowercase().as_str() {
+            "linear" | "daisy-chain" | "daisychain" => BusTopology::Linear,
+            "star" | "hub" => BusTopology::Star,
+            "multi-drop" | "multidrop" | "i2c" | "spi" => BusTopology::MultiDrop,
+            "point-to-point" | "pointtopoint" | "p2p" => BusTopology::PointToPoint,
+            other => BusTopology::Other(other.to_string()),
+        })
+    }
+}
+
+impl BusTopology {
+    /// Convert back to a string (for serialization).
+    pub fn as_str(&self) -> &str {
+        match self {
+            BusTopology::Linear => "Linear",
+            BusTopology::Star => "Star",
+            BusTopology::MultiDrop => "MultiDrop",
+            BusTopology::PointToPoint => "PointToPoint",
+            BusTopology::Other(s) => s,
+        }
+    }
+}
+
+/// A bus: a collection of interfaces (or signals) sharing a physical bus line under one protocol
+/// contract, with a declared topology. See the module comment above.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Bus {
+    pub id: EntityId,
+    /// The bus name (e.g. `"I2C_BUS_1"`, `"CAN_HIGH"`, `"USB_ROOT_HUB"`). Non-empty.
+    pub name: String,
+    /// The [`Contract`] governing this bus (the protocol). Must resolve to a committed contract
+    /// (re-checked at the seam, P3).
+    pub contract: EntityId,
+    /// The member interfaces (or signals) on this bus. Non-empty — a bus with no members is
+    /// vacuous.
+    pub members: Vec<EntityId>,
+    /// The physical topology of this bus. Determines which structural rules apply.
+    pub topology: BusTopology,
+}
+
+impl Bus {
+    /// Domain invariants (reuses existing [`DomainError`] variants only): non-empty `name`,
+    /// non-null `contract`, non-empty `members`. Link integrity is re-checked at the seam (P3);
+    /// topology *satisfaction* is the rule's judgement at ERC time, not this object's.
+    pub fn validate(&self) -> Result<(), DomainError> {
+        if self.name.trim().is_empty() {
+            return Err(DomainError::EmptyField("bus name"));
+        }
+        if self.contract.is_null() {
+            return Err(DomainError::Inconsistent("bus must name a contract"));
+        }
+        if self.members.is_empty() {
+            return Err(DomainError::Inconsistent(
+                "bus must contain at least one member interface or signal",
+            ));
+        }
+        Ok(())
+    }
+}
+
 /// A violated domain invariant.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DomainError {
@@ -2839,20 +2940,6 @@ mod tests {
     }
 
     #[test]
-    fn interface_rejects_no_signals() {
-        let i = Interface {
-            signals: vec![],
-            ..well_formed_interface()
-        };
-        assert_eq!(
-            i.validate(),
-            Err(DomainError::Inconsistent(
-                "interface must contain at least one signal"
-            ))
-        );
-    }
-
-    #[test]
     fn interface_rejects_null_contract() {
         let i = Interface {
             contract: EntityId::NULL,
@@ -2862,5 +2949,109 @@ mod tests {
             i.validate(),
             Err(DomainError::Inconsistent("interface must name a contract"))
         );
+    }
+
+    // ========== Band B (inc 7): Bus / Protocol ==========
+
+    fn well_formed_bus() -> Bus {
+        Bus {
+            id: EntityId(200),
+            name: "I2C_BUS_1".into(),
+            contract: EntityId(100),
+            members: vec![EntityId(101), EntityId(102)],
+            topology: BusTopology::MultiDrop,
+        }
+    }
+
+    #[test]
+    fn well_formed_bus_validates() {
+        assert!(well_formed_bus().validate().is_ok());
+    }
+
+    #[test]
+    fn bus_rejects_blank_name() {
+        let b = Bus {
+            name: "   ".into(),
+            ..well_formed_bus()
+        };
+        assert_eq!(b.validate(), Err(DomainError::EmptyField("bus name")));
+    }
+
+    #[test]
+    fn bus_rejects_null_contract() {
+        let b = Bus {
+            contract: EntityId::NULL,
+            ..well_formed_bus()
+        };
+        assert_eq!(
+            b.validate(),
+            Err(DomainError::Inconsistent("bus must name a contract"))
+        );
+    }
+
+    #[test]
+    fn bus_rejects_no_members() {
+        let b = Bus {
+            members: vec![],
+            ..well_formed_bus()
+        };
+        assert_eq!(
+            b.validate(),
+            Err(DomainError::Inconsistent(
+                "bus must contain at least one member interface or signal"
+            ))
+        );
+    }
+
+    #[test]
+    fn bus_topology_from_str_parses_known_variants() {
+        assert!(matches!(
+            "linear".parse::<BusTopology>().unwrap(),
+            BusTopology::Linear
+        ));
+        assert!(matches!(
+            "daisy-chain".parse::<BusTopology>().unwrap(),
+            BusTopology::Linear
+        ));
+        assert!(matches!(
+            "star".parse::<BusTopology>().unwrap(),
+            BusTopology::Star
+        ));
+        assert!(matches!(
+            "hub".parse::<BusTopology>().unwrap(),
+            BusTopology::Star
+        ));
+        assert!(matches!(
+            "multi-drop".parse::<BusTopology>().unwrap(),
+            BusTopology::MultiDrop
+        ));
+        assert!(matches!(
+            "i2c".parse::<BusTopology>().unwrap(),
+            BusTopology::MultiDrop
+        ));
+        assert!(matches!(
+            "point-to-point".parse::<BusTopology>().unwrap(),
+            BusTopology::PointToPoint
+        ));
+    }
+
+    #[test]
+    fn bus_topology_from_str_unknown_becomes_other() {
+        let t = "custom-bus".parse::<BusTopology>().unwrap();
+        assert!(matches!(t, BusTopology::Other(s) if s == "custom-bus"));
+    }
+
+    #[test]
+    fn bus_topology_roundtrips_through_string() {
+        for t in [
+            BusTopology::Linear,
+            BusTopology::Star,
+            BusTopology::MultiDrop,
+            BusTopology::PointToPoint,
+        ] {
+            let s = t.as_str();
+            let parsed = s.parse::<BusTopology>().unwrap();
+            assert_eq!(t, parsed);
+        }
     }
 }

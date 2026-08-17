@@ -218,11 +218,11 @@ the product roadmap.
 - *Relationships · runtime rep:* `Signal` realized-by `Net`; carried-by pins.
 - *AI · verify · evolves:* AI infers flow; runtime validates against pin electrical types. Verified by driver/sink consistency (extends ERC, `erc-signal-driver-sink` now; `signal→Net` realization check later). Scales to full behavioral signal-flow simulation.
 
-**17. Bus / Protocol Map** ○ *(new)*
+**17. Bus / Protocol Map** ◐
 - *Purpose & why:* bus topologies (I²C/SPI/USB/CAN…) and their structural rules (addressing, termination, fan-out).
-- *Objects · owner · in→out:* (missing) `Bus{protocol, members, topology}`. Owner: runtime. In: interfaces/signals. Out: bus-level constraints (pull-ups, unique addresses, stubs).
-- *Relationships · runtime rep:* a `Bus` groups signals/nets under a protocol contract.
-- *AI · verify · evolves:* AI recognizes/proposes bus structure; runtime enforces protocol rules. Verified by protocol-specific checks (e.g., I²C address collision). Scales to a protocol knowledge library (Memory).
+- *Objects · owner · in→out:* `Bus{name, contract, members, topology}` (implemented Band B inc 7). Owner: runtime. In: interfaces/signals. Out: bus-level constraints (pull-ups, unique addresses, stubs).
+- *Relationships · runtime rep:* a `Bus` groups interfaces under a protocol contract with a declared topology.
+- *AI · verify · evolves:* AI recognizes/proposes bus structure; runtime enforces protocol rules. Verified by protocol-specific checks (e.g., I²C address collision via `erc-bus-topology` now; full protocol knowledge library later). Scales to a protocol knowledge library (Memory).
 
 ### Tier 3 — Electrical-domain Maps
 
@@ -429,7 +429,10 @@ Fidelity.**
   increment 6 — `Contract` + `Interface` implemented (domain `validate()`, seam `CreateContract`/
   `CreateInterface`, `erc-interface-contract` rule — protocol rule-set and its governed signal
   collection, co-dependent objects per the Map; minimal v0 structural checks for I²C/SPI/USB;
-  [ADR-0027](../docs/decisions/0027-band-b-interface-contract.md)).
+  [ADR-0027](../docs/decisions/0027-band-b-interface-contract.md)); increment 7 — `Bus` implemented
+  (domain `validate()`, seam `CreateBus`, `erc-bus-topology` rule — a collection of interfaces
+  sharing a physical bus line under one protocol contract with a declared topology; minimal v0
+  structural checks for I²C/CAN/USB per protocol/topology; [ADR-0028](../docs/decisions/0028-band-b-bus-protocol.md)).
   Remaining objects follow one per increment through the same seam. NOTE: ClockDomain precedes ReturnPath
   because return-path continuity targets controlled/electrically-long nets; the truthful v0 gate is the
   net's own controlled-impedance declaration (`Net::impedance_target`), NOT clock frequency — the

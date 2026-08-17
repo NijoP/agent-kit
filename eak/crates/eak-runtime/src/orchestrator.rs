@@ -131,10 +131,10 @@ mod tests {
     use crate::fsm::{MachineError, StepResult};
     use crate::protocol::{Autonomy, CapabilityAck, CapabilityError, CapabilityRequest};
     use eak_domain::{
-        Assumption, Board, BomLineItem, ClockDomain, Component, Constraint, Contract, DesignIntent,
-        EntityId, FunctionalBlock, Interface, Net, Objective, Part, Pin, PinAssignment,
-        PinCapability, Placement, PowerDomain, ProvenanceLink, Requirement, ReturnPath, Risk,
-        Signal, Track, Tradeoff, Violation,
+        Assumption, Board, BomLineItem, Bus, ClockDomain, Component, Constraint, Contract,
+        DesignIntent, EntityId, FunctionalBlock, Interface, Net, Objective, Part, Pin,
+        PinAssignment, PinCapability, Placement, PowerDomain, ProvenanceLink, Requirement,
+        ReturnPath, Risk, Signal, Track, Tradeoff, Violation,
     };
     use eak_ports::{Event, ReasoningError, ReasoningRequest, ReasoningResponse, Seq, StoreError};
 
@@ -218,6 +218,9 @@ mod tests {
             vec![]
         }
         fn interfaces(&self) -> Vec<Interface> {
+            vec![]
+        }
+        fn buses(&self) -> Vec<Bus> {
             vec![]
         }
         fn assumptions(&self) -> Vec<Assumption> {

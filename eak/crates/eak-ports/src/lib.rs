@@ -10,7 +10,7 @@
 //! the "a contract lives with the ring that needs it" rule they belong to the kernel.
 
 use eak_domain::{
-    Assumption, Board, BomLineItem, ClockDomain, Component, Constraint, Contract, Decision,
+    Assumption, Board, BomLineItem, Bus, ClockDomain, Component, Constraint, Contract, Decision,
     DesignIntent, Discharge, Evidence, FunctionalBlock, Interface, ModelFidelity, Net, Objective,
     Part, Pin, PinAssignment, PinCapability, Placement, PowerDomain, Priority, ProvenanceLink,
     Requirement, RequirementCategory, ReturnPath, Risk, Signal, Track, Tradeoff, Violation, Waiver,
@@ -319,6 +319,14 @@ pub enum Event {
     /// [`InterfaceContractRule`]'s judgement at ERC time.
     InterfaceCommitted {
         interface: Interface,
+    },
+    /// A [`Bus`] was committed (Band B inc 7): a collection of interfaces (or signals) sharing a
+    /// physical bus line under one protocol contract, with a declared topology. The contract and
+    /// all members were re-checked at the seam to be committed; whether the bus's topology
+    /// satisfies the protocol's structural rules (unique addresses, termination, fan-out) is the
+    /// [`BusTopologyRule`]'s judgement at ERC time.
+    BusCommitted {
+        bus: Bus,
     },
 }
 
@@ -787,6 +795,28 @@ mod tests {
                 name: "I2C1".into(),
                 signals: vec![EntityId(92), EntityId(93)],
                 contract: EntityId(90),
+            },
+        };
+        let s = serde_json::to_string(&ev).unwrap();
+        let back: Event = serde_json::from_str(&s).unwrap();
+        assert_eq!(ev, back);
+    }
+
+    // ===================== Band B (increment 7): Bus event =====================
+    //
+    // TDD: every new state-delta Event variant carries a serde round-trip test so its on-disk
+    // form is pinned and replay-from-log is byte-stable (P4).
+
+    #[test]
+    fn bus_committed_event_roundtrips_through_json() {
+        use eak_domain::{Bus, BusTopology, EntityId};
+        let ev = Event::BusCommitted {
+            bus: Bus {
+                id: EntityId(110),
+                name: "I2C_BUS_1".into(),
+                contract: EntityId(100),
+                members: vec![EntityId(101), EntityId(102)],
+                topology: BusTopology::MultiDrop,
             },
         };
         let s = serde_json::to_string(&ev).unwrap();

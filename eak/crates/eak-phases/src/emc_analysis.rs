@@ -89,6 +89,7 @@ impl Machine for EmcAnalysisMachine {
                 let signals = ctx.signals();
                 let contracts = ctx.contracts();
                 let interfaces = ctx.interfaces();
+                let buses = ctx.buses();
                 let findings = engine.run(&VerificationContext {
                     requirements: &requirements,
                     constraints: &constraints,
@@ -108,6 +109,7 @@ impl Machine for EmcAnalysisMachine {
                     signals: &signals,
                     contracts: &contracts,
                     interfaces: &interfaces,
+                    buses: &buses,
                 });
 
                 let existing = ctx.violations();

@@ -9,9 +9,9 @@ use crate::clock::{Clock, IdSource};
 use crate::protocol::{AgentContext, Autonomy, CapabilityAck, CapabilityError, CapabilityRequest};
 use crate::state::EngineeringState;
 use eak_domain::{
-    Assumption, Board, BomLineItem, ClockDomain, Component, ComponentOrigin, Constraint, Contract,
-    Decision, DesignIntent, Discharge, EntityId, Evidence, FunctionalBlock, Interface, Net,
-    NetOrigin, Objective, Part, Pin, PinAssignment, PinCapability, Placement, PowerDomain,
+    Assumption, Board, BomLineItem, Bus, ClockDomain, Component, ComponentOrigin, Constraint,
+    Contract, Decision, DesignIntent, Discharge, EntityId, Evidence, FunctionalBlock, Interface,
+    Net, NetOrigin, Objective, Part, Pin, PinAssignment, PinCapability, Placement, PowerDomain,
     ProvenanceLink, Requirement, ReturnPath, Risk, Signal, Track, Tradeoff, Violation, Waiver,
 };
 use eak_ports::{
@@ -1031,6 +1031,38 @@ impl RuntimeCore {
             .map_err(|e| CapabilityError::Rejected(e.to_string()))?;
         Ok(CapabilityAck { committed: seqs })
     }
+
+    fn handle_create_bus(
+        &mut self,
+        bus: Bus,
+        links: Vec<ProvenanceLink>,
+    ) -> Result<CapabilityAck, CapabilityError> {
+        bus.validate()
+            .map_err(|e| CapabilityError::Rejected(e.to_string()))?;
+        if self.state.contract(bus.contract).is_none() {
+            return Err(CapabilityError::Rejected(format!(
+                "bus references unknown contract {}",
+                bus.contract.short()
+            )));
+        }
+        for member in &bus.members {
+            if self.state.interface(*member).is_none() {
+                return Err(CapabilityError::Rejected(format!(
+                    "bus references unknown member interface {}",
+                    member.short()
+                )));
+            }
+        }
+
+        let mut events = vec![Event::BusCommitted { bus }];
+        for link in links {
+            events.push(Event::ProvenanceLinked { link });
+        }
+        let seqs = self
+            .commit(events)
+            .map_err(|e| CapabilityError::Rejected(e.to_string()))?;
+        Ok(CapabilityAck { committed: seqs })
+    }
 }
 
 impl AgentContext for RuntimeCore {
@@ -1162,6 +1194,10 @@ impl AgentContext for RuntimeCore {
         self.state.interfaces.clone()
     }
 
+    fn buses(&self) -> Vec<Bus> {
+        self.state.buses.clone()
+    }
+
     fn reason(
         &mut self,
         mut req: ReasoningRequest,
@@ -1255,6 +1291,7 @@ impl AgentContext for RuntimeCore {
             CapabilityRequest::CreateInterface { interface, links } => {
                 self.handle_create_interface(interface, links)
             }
+            CapabilityRequest::CreateBus { bus, links } => self.handle_create_bus(bus, links),
         }
     }
 

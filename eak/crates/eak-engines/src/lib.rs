@@ -6,10 +6,11 @@
 //! See `docs/engineering/constraint-engine.md` and `docs/engineering/verification-engine.md`.
 
 use eak_domain::{
-    Board, BoardSide, BomLineItem, ClockDomain, Component, ComponentClass, Constraint,
-    ConstraintKind, Contract, EntityId, Interface, Layer, LayerStack, Net, NetClass, Part,
-    PartLifecycle, Pin, PinAssignment, PinCapability, PinElectricalType, Placement, PowerDomain,
-    Requirement, RequirementCategory, ReturnPath, Signal, Track, Violation, ViolationSeverity,
+    Board, BoardSide, BomLineItem, Bus, BusTopology, ClockDomain, Component, ComponentClass,
+    Constraint, ConstraintKind, Contract, EntityId, Interface, Layer, LayerStack, Net, NetClass,
+    Part, PartLifecycle, Pin, PinAssignment, PinCapability, PinElectricalType, Placement,
+    PowerDomain, Requirement, RequirementCategory, ReturnPath, Signal, Track, Violation,
+    ViolationSeverity,
 };
 use eak_units::{Dimension, PhysicalQuantity, Unit, UnitError};
 use std::cmp::Ordering;
@@ -147,6 +148,11 @@ pub struct VerificationContext<'a> {
     /// Band B (Phase 5): the committed interfaces (the interface / contract architecture).
     /// Named collections of signals governed by a contract.
     pub interfaces: &'a [Interface],
+    /// Band B (Phase 5): the committed buses (the bus / protocol architecture, Map 17). A bus
+    /// is a collection of interfaces sharing a physical bus line under one protocol contract, with
+    /// a declared topology. Lets the topology rule check bus-level constraints (unique addresses,
+    /// termination, fan-out, stub length).
+    pub buses: &'a [Bus],
 }
 
 /// A problem a rule detected. Not yet a domain `Violation` — the runtime mints that at the
@@ -944,6 +950,124 @@ impl Rule for InterfaceContractRule {
                     // Unknown protocol: no structural checks (open world). The contract exists
                     // but the rule doesn't know its requirements — that's a Memory-layer gap,
                     // not an error.
+                }
+            }
+        }
+        findings
+    }
+}
+
+// ===================== Band B (increment 7): Bus / Protocol =====================
+
+/// A bus topology rule (Map 17): a [`Bus`] declares a [`Contract`] (protocol), a set of member
+/// [`Interface`]s, and a [`BusTopology`] — the bus's physical topology determines which
+/// structural rules apply (e.g. I²C = MultiDrop needs unique addresses; CAN = Linear needs
+/// termination at both ends; USB = Star needs hub fan-out limits). This is a minimal v0: the rule
+/// encodes well-known protocol/topology checks directly; a full protocol knowledge library is a
+/// Memory-layer concern. Deterministic (P4): buses scanned in slice order; one Error finding per
+/// violated requirement. An unknown contract or unknown member interfaces are also flagged
+/// (honesty).
+pub struct BusTopologyRule;
+
+impl BusTopologyRule {
+    pub const ID: &'static str = "erc-bus-topology";
+
+    pub fn new() -> Self {
+        Self
+    }
+}
+impl Default for BusTopologyRule {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Rule for BusTopologyRule {
+    fn id(&self) -> &str {
+        Self::ID
+    }
+
+    fn evaluate(&self, ctx: &VerificationContext) -> Vec<ViolationFinding> {
+        let mut findings = Vec::new();
+        for bus in ctx.buses.iter() {
+            let contract = ctx.contracts.iter().find(|c| c.id == bus.contract);
+            let Some(contract) = contract else {
+                findings.push(ViolationFinding {
+                    rule: Self::ID.to_string(),
+                    severity: ViolationSeverity::Error,
+                    subjects: vec![bus.id, bus.contract],
+                    message: format!(
+                        "bus \"{}\" names contract {} which the runtime has never seen — \
+                         the bus is unverifiable (bus topology)",
+                        bus.name,
+                        bus.contract.short(),
+                    ),
+                });
+                continue;
+            };
+            // Check each member interface exists.
+            for member_id in &bus.members {
+                if ctx.interfaces.iter().find(|i| i.id == *member_id).is_none() {
+                    findings.push(ViolationFinding {
+                        rule: Self::ID.to_string(),
+                        severity: ViolationSeverity::Error,
+                        subjects: vec![bus.id, *member_id],
+                        message: format!(
+                            "bus \"{}\" names member interface {} which the runtime has never seen — \
+                             the bus is unverifiable (bus topology)",
+                            bus.name,
+                            member_id.short(),
+                        ),
+                    });
+                }
+            }
+            // Minimal v0 structural checks per protocol/topology combination.
+            match (contract.protocol.as_str(), &bus.topology) {
+                ("I2C" | "I2c" | "i2c", BusTopology::MultiDrop) => {
+                    // I²C MultiDrop: need unique 7-bit addresses on each member interface.
+                    // In v0, we check that each member interface has a unique "address" constraint.
+                    // This is a placeholder for the real check (which needs the constraint engine).
+                    if bus.members.len() > 1 {
+                        // Just flag that address uniqueness needs checking.
+                        findings.push(ViolationFinding {
+                            rule: Self::ID.to_string(),
+                            severity: ViolationSeverity::Error,
+                            subjects: vec![bus.id],
+                            message: format!(
+                                "I²C MultiDrop bus \"{}\" has {} member interfaces — address uniqueness must be verified (bus topology)",
+                                bus.name,
+                                bus.members.len(),
+                            ),
+                        });
+                    }
+                }
+                ("CAN" | "Can" | "can", BusTopology::Linear) => {
+                    // CAN Linear: must have termination at both ends (exactly 2 ends).
+                    // In v0, we just flag that termination must be verified.
+                    findings.push(ViolationFinding {
+                        rule: Self::ID.to_string(),
+                        severity: ViolationSeverity::Error,
+                        subjects: vec![bus.id],
+                        message: format!(
+                            "CAN Linear bus \"{}\" requires termination at both ends — must be verified (bus topology)",
+                            bus.name,
+                        ),
+                    });
+                }
+                ("USB2" | "USB" | "usb", BusTopology::Star) if bus.members.len() > 127 => {
+                    findings.push(ViolationFinding {
+                        rule: Self::ID.to_string(),
+                        severity: ViolationSeverity::Error,
+                        subjects: vec![bus.id],
+                        message: format!(
+                            "USB Star bus \"{}\" has {} members — exceeds USB 127 device limit (bus topology)",
+                            bus.name,
+                            bus.members.len(),
+                        ),
+                    });
+                }
+                _ => {
+                    // Unknown protocol/topology: no structural checks (open world).
                 }
             }
         }
@@ -2498,6 +2622,7 @@ mod tests {
             signals: &[],
             contracts: &[],
             interfaces: &[],
+            buses: &[] as &[Bus],
         };
         let findings = rule.evaluate(&ctx);
         assert_eq!(findings.len(), 1);
@@ -2534,6 +2659,7 @@ mod tests {
             signals: &[],
             contracts: &[],
             interfaces: &[],
+            buses: &[] as &[Bus],
         });
         assert_eq!(findings.len(), 1);
     }
@@ -2563,6 +2689,7 @@ mod tests {
             signals: &[],
             contracts: &[],
             interfaces: &[],
+            buses: &[] as &[Bus],
         });
         assert!(findings.is_empty());
     }
@@ -2634,6 +2761,7 @@ mod tests {
             signals: &[],
             contracts: &[],
             interfaces: &[],
+            buses: &[] as &[Bus],
         }
     }
 
@@ -2732,6 +2860,7 @@ mod tests {
             signals: &[],
             contracts: &[],
             interfaces: &[],
+            buses: &[] as &[Bus],
         }
     }
 
@@ -2835,6 +2964,7 @@ mod tests {
             signals: &[],
             contracts: &[],
             interfaces: &[],
+            buses: &[] as &[Bus],
         }
     }
 
@@ -2943,6 +3073,7 @@ mod tests {
             signals: &[],
             contracts: &[],
             interfaces: &[],
+            buses: &[] as &[Bus],
         }
     }
 
@@ -3038,6 +3169,7 @@ mod tests {
             signals: &[],
             contracts: &[],
             interfaces: &[],
+            buses: &[] as &[Bus],
         }
     }
 
@@ -3164,6 +3296,7 @@ mod tests {
             signals,
             contracts: &[],
             interfaces: &[],
+            buses: &[] as &[Bus],
         }
     }
 
@@ -3305,6 +3438,7 @@ mod tests {
             signals: &[],
             contracts,
             interfaces,
+            buses: &[] as &[Bus],
         }
     }
 
@@ -3423,6 +3557,7 @@ mod tests {
             signals: &[],
             contracts: &[],
             interfaces: &[],
+            buses: &[] as &[Bus],
         }
     }
 
@@ -3589,6 +3724,7 @@ mod tests {
             signals: &[],
             contracts: &[],
             interfaces: &[],
+            buses: &[] as &[Bus],
         }
     }
 
@@ -3616,6 +3752,7 @@ mod tests {
             signals: &[],
             contracts: &[],
             interfaces: &[],
+            buses: &[] as &[Bus],
         }
     }
 
@@ -3895,6 +4032,7 @@ mod tests {
             signals: &[],
             contracts: &[],
             interfaces: &[],
+            buses: &[] as &[Bus],
         }
     }
 
@@ -3966,6 +4104,7 @@ mod tests {
             signals: &[],
             contracts: &[],
             interfaces: &[],
+            buses: &[] as &[Bus],
         }
     }
 
@@ -4047,6 +4186,7 @@ mod tests {
             signals: &[],
             contracts: &[],
             interfaces: &[],
+            buses: &[] as &[Bus],
         }
     }
 
@@ -4257,6 +4397,7 @@ mod tests {
             signals: &[],
             contracts: &[],
             interfaces: &[],
+            buses: &[] as &[Bus],
         }
     }
 
@@ -4456,6 +4597,7 @@ mod tests {
             signals: &[],
             contracts: &[],
             interfaces: &[],
+            buses: &[] as &[Bus],
         }
     }
 
@@ -4483,6 +4625,7 @@ mod tests {
             signals: &[],
             contracts: &[],
             interfaces: &[],
+            buses: &[] as &[Bus],
         }
     }
 
@@ -4600,6 +4743,7 @@ mod tests {
             signals: &[],
             contracts: &[],
             interfaces: &[],
+            buses: &[] as &[Bus],
         }
     }
 

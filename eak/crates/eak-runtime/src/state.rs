@@ -5,11 +5,11 @@
 //! run and during [`crate::replay`], guaranteeing identical reconstruction.
 
 use eak_domain::{
-    Assumption, AssumptionStatus, Board, BomLineItem, ClockDomain, Component, Constraint, Contract,
-    Decision, DesignIntent, EntityId, Evidence, FunctionalBlock, Interface, ModelFidelity, Net,
-    Objective, Part, Pin, PinAssignment, PinCapability, Placement, PowerDomain, ProvenanceLink,
-    Requirement, ReturnPath, Risk, RiskSeverity, RiskStatus, Signal, Track, Tradeoff, Violation,
-    ViolationStatus, Waiver,
+    Assumption, AssumptionStatus, Board, BomLineItem, Bus, ClockDomain, Component, Constraint,
+    Contract, Decision, DesignIntent, EntityId, Evidence, FunctionalBlock, Interface,
+    ModelFidelity, Net, Objective, Part, Pin, PinAssignment, PinCapability, Placement, PowerDomain,
+    ProvenanceLink, Requirement, ReturnPath, Risk, RiskSeverity, RiskStatus, Signal, Track,
+    Tradeoff, Violation, ViolationStatus, Waiver,
 };
 use eak_ports::{Event, Seq};
 use serde::{Deserialize, Serialize};
@@ -132,6 +132,14 @@ pub struct EngineeringState {
     // in state so the rule can report a violation.
     pub contracts: Vec<Contract>,
     pub interfaces: Vec<Interface>,
+    // Band B (Phase 5, increment 7): the bus / protocol architecture (Map 17). A bus is a
+    // collection of interfaces (or signals) sharing a physical bus line under one protocol
+    // contract, with a declared topology. Kept in insertion (event) order so a run and its
+    // replay serialize byte-identically. Whether the bus's topology satisfies the protocol's
+    // structural rules (unique addresses, termination, fan-out) is the BusTopologyRule's
+    // judgement at ERC time — a well-formed bus still belongs in state so the rule can report a
+    // violation.
+    pub buses: Vec<Bus>,
 }
 
 impl EngineeringState {
@@ -254,6 +262,9 @@ impl EngineeringState {
             // byte-identical, P4).
             Event::ContractCommitted { contract } => self.contracts.push(contract.clone()),
             Event::InterfaceCommitted { interface } => self.interfaces.push(interface.clone()),
+            // Band B (Phase 5, increment 7): the bus / protocol architecture. Committing a bus
+            // pushes it into its own store (insertion order, so replay is byte-identical, P4).
+            Event::BusCommitted { bus } => self.buses.push(bus.clone()),
             // Audit-only events (phase lifecycle, reasoning calls, IR-boundary milestones)
             // carry no state and are intentionally not folded. AUDIT: any NEW state-bearing
             // event variant MUST get an explicit arm above, or replay will silently diverge.
@@ -408,6 +419,10 @@ impl EngineeringState {
 
     pub fn interface(&self, id: EntityId) -> Option<&Interface> {
         self.interfaces.iter().find(|i| i.id == id)
+    }
+
+    pub fn bus(&self, id: EntityId) -> Option<&Bus> {
+        self.buses.iter().find(|b| b.id == id)
     }
 
     /// Deterministic serialization used to assert byte-identity between a run and its

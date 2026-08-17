@@ -4,7 +4,7 @@
 //! is loaded with the ERC rules ([`ErcPowerNetUndrivenRule`], [`ErcMultipleDriversRule`],
 //! [`PowerBalanceRule`], [`ClockDomainMembershipRule`], [`ReturnPathRule`],
 //! [`PinMuxConflictRule`], [`PinCapabilityRule`], [`SignalDriverSinkRule`],
-//! [`InterfaceContractRule`]) and
+//! [`InterfaceContractRule`], [`BusTopologyRule`]) and
 //! it runs them over the realized schematic (components, pins, nets). Each *new* finding
 //! becomes a first-class [`Violation`] linked back to the net(s) it implicates so it is fully
 //! traceable to its cause (P3), and the [`Event::VerificationCompleted`] milestone is
@@ -16,7 +16,7 @@
 
 use eak_domain::{ProvenanceLink, RelationType, Violation, ViolationStatus};
 use eak_engines::{
-    ClockDomainMembershipRule, ErcMultipleDriversRule, ErcPowerNetUndrivenRule,
+    BusTopologyRule, ClockDomainMembershipRule, ErcMultipleDriversRule, ErcPowerNetUndrivenRule,
     InterfaceContractRule, PinCapabilityRule, PinMuxConflictRule, PowerBalanceRule, ReturnPathRule,
     SignalDriverSinkRule, VerificationContext, VerificationEngine,
 };
@@ -32,8 +32,8 @@ impl ErcVerificationMachine {
 
     /// The verification engine for this phase: the Phase-3 ERC rules (undriven power net, multiple
     /// drivers) plus the Band B power-balance, clock-domain, return-path, pin-function,
-    /// signal-flow and interface-contract rules, registered against the same generic framework
-    /// that Constraint Verification uses (reuse: one framework, many checks).
+    /// signal-flow, interface-contract and bus-topology rules, registered against the same generic
+    /// framework that Constraint Verification uses (reuse: one framework, many checks).
     fn engine() -> VerificationEngine {
         VerificationEngine::new()
             .with_rule(Box::new(ErcPowerNetUndrivenRule::new()))
@@ -45,6 +45,7 @@ impl ErcVerificationMachine {
             .with_rule(Box::new(PinCapabilityRule::new()))
             .with_rule(Box::new(SignalDriverSinkRule::new()))
             .with_rule(Box::new(InterfaceContractRule::new()))
+            .with_rule(Box::new(BusTopologyRule::new()))
     }
 }
 impl Default for ErcVerificationMachine {
@@ -93,6 +94,7 @@ impl Machine for ErcVerificationMachine {
                 let signals = ctx.signals();
                 let contracts = ctx.contracts();
                 let interfaces = ctx.interfaces();
+                let buses = ctx.buses();
                 let findings = engine.run(&VerificationContext {
                     requirements: &requirements,
                     constraints: &constraints,
@@ -112,6 +114,7 @@ impl Machine for ErcVerificationMachine {
                     signals: &signals,
                     contracts: &contracts,
                     interfaces: &interfaces,
+                    buses: &buses,
                 });
 
                 let existing = ctx.violations();
