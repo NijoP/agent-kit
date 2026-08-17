@@ -432,7 +432,7 @@ Fidelity.**
   [ADR-0027](../docs/decisions/0027-band-b-interface-contract.md)); increment 7 — `Bus` implemented
   (domain `validate()`, seam `CreateBus`, `erc-bus-topology` rule — a collection of interfaces
   sharing a physical bus line under one protocol contract with a declared topology; minimal v0
-  structural checks for I²C/CAN/USB per protocol/topology; [ADR-0028](../docs/decisions/0028-band-b-bus-protocol.md)); increment 8 — `Subsystem` implemented (domain `validate()`, seam `CreateSubsystem`, `erc-subsystem-boundary` rule — the unit of reuse and reasoning at scale, hierarchical grouping of blocks exposing interfaces; [ADR-0029](../docs/decisions/0029-band-b-subsystem.md)).
+  structural checks for I²C/CAN/USB per protocol/topology; [ADR-0028](../docs/decisions/0028-band-b-bus-protocol.md)); increment 8 — `Subsystem` implemented (domain `validate()`, seam `CreateSubsystem`, `erc-subsystem-boundary` rule — the unit of reuse and reasoning at scale, hierarchical grouping of blocks exposing interfaces; [ADR-0029](../docs/decisions/0029-band-b-subsystem.md)); increment 9 — `LogicalElectricalIr` implemented (compiler IR projection enriching EngineeringIr with all Band B domain objects; schema versioning; deterministic projection; [ADR-0030](../docs/decisions/0030-band-b-logical-electrical-ir.md)).
   Remaining objects follow one per increment through the same seam. NOTE: ClockDomain precedes ReturnPath
   because return-path continuity targets controlled/electrically-long nets; the truthful v0 gate is the
   net's own controlled-impedance declaration (`Net::impedance_target`), NOT clock frequency — the

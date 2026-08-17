@@ -173,7 +173,7 @@ Each phase states: **Build** · **Why here (dependency)** · **Introduces** · *
 - **Exit criterion:** the runtime owns and verifies a power/pin/interface architecture for a real small
   board, every assignment traced to intent and checked by construction.
 - **Invariant:** Principles 1, 4, 7 (owned truth; correctness by construction; layered authority).
-- **Status in `eak/`:** ◐ **inc 1–8 built** — `PowerDomain` (seam + `erc-power-balance` rule,
+- **Status in `eak/`:** ◐ **inc 1–9 built** — `PowerDomain` (seam + `erc-power-balance` rule,
   [ADR-0022](../docs/decisions/0022-band-b-power-domain.md)), `ClockDomain` (seam +
   `erc-clock-domain-conflict` rule, [ADR-0023](../docs/decisions/0023-band-b-clock-domain.md)),
   `ReturnPath` (seam + `erc-return-path-required` rule, gated on the design's own
@@ -187,8 +187,10 @@ Each phase states: **Build** · **Why here (dependency)** · **Introduces** · *
   [ADR-0027](../docs/decisions/0027-band-b-interface-contract.md)), `Bus` (seam +
   `erc-bus-topology` rule — a collection of interfaces sharing a physical bus line under one
   protocol contract with a declared topology; [ADR-0028](../docs/decisions/0028-band-b-bus-protocol.md)),
-  and `Subsystem` (seam + `erc-subsystem-boundary` rule — the unit of reuse and reasoning at scale,
-  hierarchical grouping of blocks exposing interfaces; [ADR-0029](../docs/decisions/0029-band-b-subsystem.md));
+  `Subsystem` (seam + `erc-subsystem-boundary` rule — the unit of reuse and reasoning at scale,
+  hierarchical grouping of blocks exposing interfaces; [ADR-0029](../docs/decisions/0029-band-b-subsystem.md)),
+  and `LogicalElectricalIr` (compiler IR projection enriching EngineeringIr with all Band B
+  domain objects; schema versioning; deterministic projection; [ADR-0030](../docs/decisions/0030-band-b-logical-electrical-ir.md));
   remaining objects one per increment.
 
 ### Phase 6 — Band C: the behavior/world-model Maps *(checker → generative)*
@@ -273,7 +275,7 @@ parallel with Band A once the contract is frozen.
 | 2 Skeleton Maps + IR + verify + orchestrator + gate | L2 | ✅ **built** (236 tests) |
 | 3 Band A — epistemic Maps | L3 | ✅ **built** (282 tests; ADR-0018–0021; branch `phase-3-band-a`) |
 | 4 Surfacing / interface | L4 | ◐ **stubbed** (`app/` spine; needs founder's machine) |
-| 5 Band B — logical-electrical | L5 | ◐ **inc 1–8 built** (`PowerDomain` + `ClockDomain` + `ReturnPath` + `PinCapability`/`PinAssignment` + `Signal` + `Contract`/`Interface` + `Bus` + `Subsystem` + `erc-power-balance`/`erc-clock-domain-conflict`/`erc-return-path-required`/`erc-pin-mux-conflict`/`erc-pin-capability`/`erc-signal-driver-sink`/`erc-interface-contract`/`erc-bus-topology`/`erc-subsystem-boundary`; 388 tests; ADR-0022–0029) |
+| 5 Band B — logical-electrical | L5 | ◐ **inc 1–9 built** (`PowerDomain` + `ClockDomain` + `ReturnPath` + `PinCapability`/`PinAssignment` + `Signal` + `Contract`/`Interface` + `Bus` + `Subsystem` + `LogicalElectricalIr` + `erc-power-balance`/`erc-clock-domain-conflict`/`erc-return-path-required`/`erc-pin-mux-conflict`/`erc-pin-capability`/`erc-signal-driver-sink`/`erc-interface-contract`/`erc-bus-topology`/`erc-subsystem-boundary`; 388 tests; ADR-0022–0030) |
 | 6 Band C — behavior/world-model + solvers | L6 | ◐ first-order proxies only |
 | 7 Band D — lifecycle + memory | L7 | ○ not built |
 | 8 Engineering OS | L8 | ○ destination |

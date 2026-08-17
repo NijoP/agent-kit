@@ -46,6 +46,7 @@ Phase 1 (implementation start) records the technology and scoping decisions Phas
 | [0027](0027-band-b-interface-contract.md) | `Contract` + `Interface`: a protocol rule-set and its governed signal collection | Accepted |
 | [0028](0028-band-b-bus-protocol.md) | `Bus`: a collection of interfaces sharing a physical bus line under one protocol contract, with a declared topology | Accepted |
 | [0029](0029-band-b-subsystem.md) | `Subsystem`: the unit of reuse and reasoning at scale | Accepted |
+| [0030](0030-band-b-logical-electrical-ir.md) | `LogicalElectricalIr`: the logical electrical architecture as a first-class IR between Engineering IR and Schematic IR | Accepted |
 
 ## The ADR lifecycle
 
