@@ -8,7 +8,7 @@ use eak_domain::{
     Assumption, Board, BomLineItem, Bus, ClockDomain, Component, Constraint, Contract, Decision,
     DesignIntent, Discharge, EntityId, Evidence, FunctionalBlock, Interface, Net, Objective, Part,
     Pin, PinAssignment, PinCapability, Placement, PowerDomain, ProvenanceLink, Requirement,
-    ReturnPath, Risk, Signal, Track, Tradeoff, Violation, Waiver,
+    ReturnPath, Risk, Signal, Subsystem, Track, Tradeoff, Violation, Waiver,
 };
 use eak_ports::{Event, ReasoningError, ReasoningRequest, ReasoningResponse, Seq, StoreError};
 
@@ -257,6 +257,17 @@ pub enum CapabilityRequest {
         bus: Bus,
         links: Vec<ProvenanceLink>,
     },
+    /// Commit a first-class [`Subsystem`] (a hierarchical grouping of blocks exposing interfaces
+    /// as its boundary) with its provenance links (Band B, increment 8; Map 14). The runtime
+    /// re-validates the subsystem (non-empty name, ≥1 block, ≥1 interface, non-empty boundary)
+    /// and checks its `blocks` and `interfaces` resolve to committed objects before committing
+    /// (P3). A well-formed subsystem with an *incomplete* boundary (missing cross-boundary pins)
+    /// IS accepted — the SubsystemBoundaryRule at ERC time reports the violation as a design
+    /// finding, so the subsystem must be able to enter state.
+    CreateSubsystem {
+        subsystem: Subsystem,
+        links: Vec<ProvenanceLink>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -359,6 +370,10 @@ pub trait AgentContext {
     /// Owned clones, like every other reader. The ERC phase reads these to run the
     /// [`BusTopologyRule`](eak_engines::BusTopologyRule).
     fn buses(&self) -> Vec<Bus>;
+    /// Band B (increment 8): read the committed subsystems (the subsystem architecture; Map 14).
+    /// Owned clones, like every other reader. The ERC phase reads these to run the
+    /// [`SubsystemBoundaryRule`](eak_engines::SubsystemBoundaryRule).
+    fn subsystems(&self) -> Vec<Subsystem>;
     /// Call the reasoning engine, record the call (returning its event [`Seq`]), and
     /// return the judgement. Recording here is what makes replay deterministic (P4).
     fn reason(&mut self, req: ReasoningRequest)

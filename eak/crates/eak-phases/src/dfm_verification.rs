@@ -83,6 +83,7 @@ impl Machine for DfmVerificationMachine {
                 let contracts = ctx.contracts();
                 let interfaces = ctx.interfaces();
                 let buses = ctx.buses();
+                let subsystems = ctx.subsystems();
                 let findings = engine.run(&VerificationContext {
                     requirements: &requirements,
                     constraints: &constraints,
@@ -103,6 +104,7 @@ impl Machine for DfmVerificationMachine {
                     contracts: &contracts,
                     interfaces: &interfaces,
                     buses: &buses,
+                    subsystems: &subsystems,
                 });
 
                 let existing = ctx.violations();

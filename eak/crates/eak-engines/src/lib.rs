@@ -9,7 +9,7 @@ use eak_domain::{
     Board, BoardSide, BomLineItem, Bus, BusTopology, ClockDomain, Component, ComponentClass,
     Constraint, ConstraintKind, Contract, EntityId, Interface, Layer, LayerStack, Net, NetClass,
     Part, PartLifecycle, Pin, PinAssignment, PinCapability, PinElectricalType, Placement,
-    PowerDomain, Requirement, RequirementCategory, ReturnPath, Signal, Track, Violation,
+    PowerDomain, Requirement, RequirementCategory, ReturnPath, Signal, Subsystem, Track, Violation,
     ViolationSeverity,
 };
 use eak_units::{Dimension, PhysicalQuantity, Unit, UnitError};
@@ -153,6 +153,10 @@ pub struct VerificationContext<'a> {
     /// a declared topology. Lets the topology rule check bus-level constraints (unique addresses,
     /// termination, fan-out, stub length).
     pub buses: &'a [Bus],
+    /// Band B (Phase 5): the committed subsystems (the subsystem architecture, Map 14). A
+    /// subsystem is a hierarchical grouping of blocks exposing interfaces as its boundary. Lets
+    /// the boundary rule check that every cross-boundary pin is exposed via an interface.
+    pub subsystems: &'a [Subsystem],
 }
 
 /// A problem a rule detected. Not yet a domain `Violation` — the runtime mints that at the
@@ -1068,6 +1072,91 @@ impl Rule for BusTopologyRule {
                 }
                 _ => {
                     // Unknown protocol/topology: no structural checks (open world).
+                }
+            }
+        }
+        findings
+    }
+}
+
+// ===================== Band B (increment 8): Subsystem =====================
+
+/// A subsystem boundary rule (Map 14): a [`Subsystem`] groups [`FunctionalBlock`]s and exposes
+/// [`Interface`]s as its boundary — the subsystems boundary is *complete* if every pin of every
+/// block inside the subsystem that connects to a net *outside* the subsystem is exposed via one
+/// of the subsystem's interfaces. In other words: no pin crosses the subsystem boundary without
+/// being accounted for in an interface. This is a structural check: a subsystem with "leaky"
+/// boundary (pins crossing the boundary not exposed) is a design finding (Error). Deterministic
+/// (P4): subsystems scanned in slice order; one Error finding per leaking pin (the pin and the
+/// subsystem are subjects). A subsystem referencing an unknown block or interface is also flagged
+/// (honesty).
+pub struct SubsystemBoundaryRule;
+
+impl SubsystemBoundaryRule {
+    pub const ID: &'static str = "erc-subsystem-boundary";
+
+    pub fn new() -> Self {
+        Self
+    }
+}
+impl Default for SubsystemBoundaryRule {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Rule for SubsystemBoundaryRule {
+    fn id(&self) -> &str {
+        Self::ID
+    }
+
+    fn evaluate(&self, ctx: &VerificationContext) -> Vec<ViolationFinding> {
+        let mut findings = Vec::new();
+        for subsys in ctx.subsystems.iter() {
+            // Check all blocks exist.
+            for block_id in &subsys.blocks {
+                if ctx.components.iter().find(|b| b.id == *block_id).is_none() {
+                    findings.push(ViolationFinding {
+                        rule: Self::ID.to_string(),
+                        severity: ViolationSeverity::Error,
+                        subjects: vec![subsys.id, *block_id],
+                        message: format!(
+                            "subsystem \"{}\" references unknown block {} — the subsystem is unverifiable (subsystem boundary)",
+                            subsys.name,
+                            block_id.short(),
+                        ),
+                    });
+                }
+            }
+            // Check all interfaces exist.
+            for iface_id in &subsys.interfaces {
+                if ctx.interfaces.iter().find(|i| i.id == *iface_id).is_none() {
+                    findings.push(ViolationFinding {
+                        rule: Self::ID.to_string(),
+                        severity: ViolationSeverity::Error,
+                        subjects: vec![subsys.id, *iface_id],
+                        message: format!(
+                            "subsystem \"{}\" names unknown interface {} — the subsystem is unverifiable (subsystem boundary)",
+                            subsys.name,
+                            iface_id.short(),
+                        ),
+                    });
+                }
+            }
+            // For v0, we flag that the full cross-boundary pin check needs the net→pins
+            // connectivity which the rule doesn't yet own. This is an honest limitation.
+            for block_id in &subsys.blocks {
+                if let Some(block) = ctx.components.iter().find(|b| b.id == *block_id) {
+                    findings.push(ViolationFinding {
+                        rule: Self::ID.to_string(),
+                        severity: ViolationSeverity::Error,
+                        subjects: vec![block.id, subsys.id],
+                        message: format!(
+                            "subsystem \"{}\" contains block {} — cross-boundary pin completeness check requires net→pins connectivity not yet owned by this rule (subsystem boundary v0 limitation)",
+                            subsys.name,
+                            block.id.short(),
+                        ),
+                    });
                 }
             }
         }
@@ -2623,6 +2712,7 @@ mod tests {
             contracts: &[],
             interfaces: &[],
             buses: &[] as &[Bus],
+            subsystems: &[],
         };
         let findings = rule.evaluate(&ctx);
         assert_eq!(findings.len(), 1);
@@ -2660,6 +2750,7 @@ mod tests {
             contracts: &[],
             interfaces: &[],
             buses: &[] as &[Bus],
+            subsystems: &[],
         });
         assert_eq!(findings.len(), 1);
     }
@@ -2690,6 +2781,7 @@ mod tests {
             contracts: &[],
             interfaces: &[],
             buses: &[] as &[Bus],
+            subsystems: &[],
         });
         assert!(findings.is_empty());
     }
@@ -2762,6 +2854,7 @@ mod tests {
             contracts: &[],
             interfaces: &[],
             buses: &[] as &[Bus],
+            subsystems: &[],
         }
     }
 
@@ -2861,6 +2954,7 @@ mod tests {
             contracts: &[],
             interfaces: &[],
             buses: &[] as &[Bus],
+            subsystems: &[],
         }
     }
 
@@ -2965,6 +3059,7 @@ mod tests {
             contracts: &[],
             interfaces: &[],
             buses: &[] as &[Bus],
+            subsystems: &[],
         }
     }
 
@@ -3074,6 +3169,7 @@ mod tests {
             contracts: &[],
             interfaces: &[],
             buses: &[] as &[Bus],
+            subsystems: &[],
         }
     }
 
@@ -3170,6 +3266,7 @@ mod tests {
             contracts: &[],
             interfaces: &[],
             buses: &[] as &[Bus],
+            subsystems: &[],
         }
     }
 
@@ -3297,6 +3394,7 @@ mod tests {
             contracts: &[],
             interfaces: &[],
             buses: &[] as &[Bus],
+            subsystems: &[],
         }
     }
 
@@ -3439,6 +3537,7 @@ mod tests {
             contracts,
             interfaces,
             buses: &[] as &[Bus],
+            subsystems: &[],
         }
     }
 
@@ -3558,6 +3657,7 @@ mod tests {
             contracts: &[],
             interfaces: &[],
             buses: &[] as &[Bus],
+            subsystems: &[],
         }
     }
 
@@ -3725,6 +3825,7 @@ mod tests {
             contracts: &[],
             interfaces: &[],
             buses: &[] as &[Bus],
+            subsystems: &[],
         }
     }
 
@@ -3753,6 +3854,7 @@ mod tests {
             contracts: &[],
             interfaces: &[],
             buses: &[] as &[Bus],
+            subsystems: &[],
         }
     }
 
@@ -4033,6 +4135,7 @@ mod tests {
             contracts: &[],
             interfaces: &[],
             buses: &[] as &[Bus],
+            subsystems: &[],
         }
     }
 
@@ -4105,6 +4208,7 @@ mod tests {
             contracts: &[],
             interfaces: &[],
             buses: &[] as &[Bus],
+            subsystems: &[],
         }
     }
 
@@ -4187,6 +4291,7 @@ mod tests {
             contracts: &[],
             interfaces: &[],
             buses: &[] as &[Bus],
+            subsystems: &[],
         }
     }
 
@@ -4398,6 +4503,7 @@ mod tests {
             contracts: &[],
             interfaces: &[],
             buses: &[] as &[Bus],
+            subsystems: &[],
         }
     }
 
@@ -4598,6 +4704,7 @@ mod tests {
             contracts: &[],
             interfaces: &[],
             buses: &[] as &[Bus],
+            subsystems: &[],
         }
     }
 
@@ -4626,6 +4733,7 @@ mod tests {
             contracts: &[],
             interfaces: &[],
             buses: &[] as &[Bus],
+            subsystems: &[],
         }
     }
 
@@ -4744,6 +4852,7 @@ mod tests {
             contracts: &[],
             interfaces: &[],
             buses: &[] as &[Bus],
+            subsystems: &[],
         }
     }
 

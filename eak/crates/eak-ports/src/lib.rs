@@ -13,7 +13,8 @@ use eak_domain::{
     Assumption, Board, BomLineItem, Bus, ClockDomain, Component, Constraint, Contract, Decision,
     DesignIntent, Discharge, Evidence, FunctionalBlock, Interface, ModelFidelity, Net, Objective,
     Part, Pin, PinAssignment, PinCapability, Placement, PowerDomain, Priority, ProvenanceLink,
-    Requirement, RequirementCategory, ReturnPath, Risk, Signal, Track, Tradeoff, Violation, Waiver,
+    Requirement, RequirementCategory, ReturnPath, Risk, Signal, Subsystem, Track, Tradeoff,
+    Violation, Waiver,
 };
 use eak_units::PhysicalQuantity;
 use serde::{Deserialize, Serialize};
@@ -327,6 +328,14 @@ pub enum Event {
     /// [`BusTopologyRule`]'s judgement at ERC time.
     BusCommitted {
         bus: Bus,
+    },
+    /// A [`Subsystem`] was committed (Band B inc 8): a hierarchical grouping of blocks exposing
+    /// interfaces as its boundary — the unit of reuse and reasoning at scale (Map 14). The blocks
+    /// and interfaces were re-checked at the seam to be committed; whether the subsystem's
+    /// boundary is *complete* (every cross-boundary pin is exposed) is the
+    /// [`SubsystemBoundaryRule`]'s judgement at ERC time.
+    SubsystemCommitted {
+        subsystem: Subsystem,
     },
 }
 
@@ -817,6 +826,28 @@ mod tests {
                 contract: EntityId(100),
                 members: vec![EntityId(101), EntityId(102)],
                 topology: BusTopology::MultiDrop,
+            },
+        };
+        let s = serde_json::to_string(&ev).unwrap();
+        let back: Event = serde_json::from_str(&s).unwrap();
+        assert_eq!(ev, back);
+    }
+
+    // ===================== Band B (increment 8): Subsystem event =====================
+    //
+    // TDD: every new state-delta Event variant carries a serde round-trip test so its on-disk
+    // form is pinned and replay-from-log is byte-stable (P4).
+
+    #[test]
+    fn subsystem_committed_event_roundtrips_through_json() {
+        use eak_domain::{EntityId, Subsystem};
+        let ev = Event::SubsystemCommitted {
+            subsystem: Subsystem {
+                id: EntityId(120),
+                name: "MCU_SUBSYSTEM".into(),
+                blocks: vec![EntityId(121), EntityId(122)],
+                interfaces: vec![EntityId(123), EntityId(124)],
+                boundary: "MCU + peripherals".into(),
             },
         };
         let s = serde_json::to_string(&ev).unwrap();

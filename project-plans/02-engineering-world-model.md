@@ -200,11 +200,11 @@ the product roadmap.
 - *Relationships · runtime rep:* block `Supports` requirements; components `RealizeComponent` from blocks. Thin today (no ports/interfaces/hierarchy).
 - *AI · verify · evolves:* AI proposes decomposition; kernel validates ≥1 requirement per block. Verified by block→requirement coverage. Scales to hierarchical architecture with interfaces (Maps 14–15).
 
-**14. Subsystem Map** ○ *(new)*
+**14. Subsystem Map** ◐
 - *Purpose & why:* hierarchy and boundaries above the flat block list; the unit of reuse and reasoning at scale.
-- *Objects · owner · in→out:* (missing) `Subsystem{blocks, interfaces, boundary}`. Owner: runtime. In: blocks. Out: composable, reusable units.
-- *Relationships · runtime rep:* subsystems contain blocks and expose interfaces; not modeled today.
-- *AI · verify · evolves:* AI proposes groupings; runtime validates boundaries. Verified by interface completeness. Scales to cross-project subsystem reuse (feeds Memory).
+- *Objects · owner · in→out:* `Subsystem{name, blocks, interfaces, boundary}` (implemented Band B inc 8). Owner: runtime. In: blocks. Out: composable, reusable units.
+- *Relationships · runtime rep:* subsystems contain blocks and expose interfaces; boundary completeness checked at ERC.
+- *AI · verify · evolves:* AI proposes groupings; runtime validates boundaries. Verified by interface completeness (`erc-subsystem-boundary` now; full cross-boundary pin check when net→pins lands). Scales to cross-project subsystem reuse (feeds Memory).
 
 **15. Interface / Contract Map** ○ *(new)*
 - *Purpose & why:* the ports, protocols, and handshakes between blocks/subsystems — where integration fails.
@@ -432,7 +432,7 @@ Fidelity.**
   [ADR-0027](../docs/decisions/0027-band-b-interface-contract.md)); increment 7 — `Bus` implemented
   (domain `validate()`, seam `CreateBus`, `erc-bus-topology` rule — a collection of interfaces
   sharing a physical bus line under one protocol contract with a declared topology; minimal v0
-  structural checks for I²C/CAN/USB per protocol/topology; [ADR-0028](../docs/decisions/0028-band-b-bus-protocol.md)).
+  structural checks for I²C/CAN/USB per protocol/topology; [ADR-0028](../docs/decisions/0028-band-b-bus-protocol.md)); increment 8 — `Subsystem` implemented (domain `validate()`, seam `CreateSubsystem`, `erc-subsystem-boundary` rule — the unit of reuse and reasoning at scale, hierarchical grouping of blocks exposing interfaces; [ADR-0029](../docs/decisions/0029-band-b-subsystem.md)).
   Remaining objects follow one per increment through the same seam. NOTE: ClockDomain precedes ReturnPath
   because return-path continuity targets controlled/electrically-long nets; the truthful v0 gate is the
   net's own controlled-impedance declaration (`Net::impedance_target`), NOT clock frequency — the

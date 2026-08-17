@@ -8,8 +8,8 @@ use eak_domain::{
     Assumption, AssumptionStatus, Board, BomLineItem, Bus, ClockDomain, Component, Constraint,
     Contract, Decision, DesignIntent, EntityId, Evidence, FunctionalBlock, Interface,
     ModelFidelity, Net, Objective, Part, Pin, PinAssignment, PinCapability, Placement, PowerDomain,
-    ProvenanceLink, Requirement, ReturnPath, Risk, RiskSeverity, RiskStatus, Signal, Track,
-    Tradeoff, Violation, ViolationStatus, Waiver,
+    ProvenanceLink, Requirement, ReturnPath, Risk, RiskSeverity, RiskStatus, Signal, Subsystem,
+    Track, Tradeoff, Violation, ViolationStatus, Waiver,
 };
 use eak_ports::{Event, Seq};
 use serde::{Deserialize, Serialize};
@@ -140,6 +140,13 @@ pub struct EngineeringState {
     // judgement at ERC time — a well-formed bus still belongs in state so the rule can report a
     // violation.
     pub buses: Vec<Bus>,
+    // Band B (Phase 5, increment 8): the subsystem architecture (Map 14). A subsystem is a
+    // hierarchical grouping of blocks exposing interfaces as its boundary — the unit of reuse
+    // and reasoning at scale. Kept in insertion (event) order so a run and its replay serialize
+    // byte-identically. Whether the subsystem's boundary is *complete* (every cross-boundary pin
+    /// is exposed) is the SubsystemBoundaryRule's judgement at ERC time — a well-formed
+    // subsystem still belongs in state so the rule can report a missing boundary interface.
+    pub subsystems: Vec<Subsystem>,
 }
 
 impl EngineeringState {
@@ -265,6 +272,9 @@ impl EngineeringState {
             // Band B (Phase 5, increment 7): the bus / protocol architecture. Committing a bus
             // pushes it into its own store (insertion order, so replay is byte-identical, P4).
             Event::BusCommitted { bus } => self.buses.push(bus.clone()),
+            // Band B (Phase 5, increment 8): the subsystem architecture. Committing a subsystem
+            // pushes it into its own store (insertion order, so replay is byte-identical, P4).
+            Event::SubsystemCommitted { subsystem } => self.subsystems.push(subsystem.clone()),
             // Audit-only events (phase lifecycle, reasoning calls, IR-boundary milestones)
             // carry no state and are intentionally not folded. AUDIT: any NEW state-bearing
             // event variant MUST get an explicit arm above, or replay will silently diverge.
@@ -423,6 +433,10 @@ impl EngineeringState {
 
     pub fn bus(&self, id: EntityId) -> Option<&Bus> {
         self.buses.iter().find(|b| b.id == id)
+    }
+
+    pub fn subsystem(&self, id: EntityId) -> Option<&Subsystem> {
+        self.subsystems.iter().find(|s| s.id == id)
     }
 
     /// Deterministic serialization used to assert byte-identity between a run and its

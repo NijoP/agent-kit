@@ -12,7 +12,8 @@ use eak_domain::{
     Assumption, Board, BomLineItem, Bus, ClockDomain, Component, ComponentOrigin, Constraint,
     Contract, Decision, DesignIntent, Discharge, EntityId, Evidence, FunctionalBlock, Interface,
     Net, NetOrigin, Objective, Part, Pin, PinAssignment, PinCapability, Placement, PowerDomain,
-    ProvenanceLink, Requirement, ReturnPath, Risk, Signal, Track, Tradeoff, Violation, Waiver,
+    ProvenanceLink, Requirement, ReturnPath, Risk, Signal, Subsystem, Track, Tradeoff, Violation,
+    Waiver,
 };
 use eak_ports::{
     Event, EventLog, EventRecord, EventSink, ReasoningEngine, ReasoningError, ReasoningRequest,
@@ -1063,6 +1064,46 @@ impl RuntimeCore {
             .map_err(|e| CapabilityError::Rejected(e.to_string()))?;
         Ok(CapabilityAck { committed: seqs })
     }
+
+    fn handle_create_subsystem(
+        &mut self,
+        subsystem: Subsystem,
+        links: Vec<ProvenanceLink>,
+    ) -> Result<CapabilityAck, CapabilityError> {
+        subsystem
+            .validate()
+            .map_err(|e| CapabilityError::Rejected(e.to_string()))?;
+        if subsystem.blocks.is_empty() {
+            return Err(CapabilityError::Rejected(
+                "subsystem must contain at least one block".to_string(),
+            ));
+        }
+        for block_id in &subsystem.blocks {
+            if self.state.functional_block(*block_id).is_none() {
+                return Err(CapabilityError::Rejected(format!(
+                    "subsystem references unknown block {}",
+                    block_id.short()
+                )));
+            }
+        }
+        for iface_id in &subsystem.interfaces {
+            if self.state.interface(*iface_id).is_none() {
+                return Err(CapabilityError::Rejected(format!(
+                    "subsystem references unknown interface {}",
+                    iface_id.short()
+                )));
+            }
+        }
+
+        let mut events = vec![Event::SubsystemCommitted { subsystem }];
+        for link in links {
+            events.push(Event::ProvenanceLinked { link });
+        }
+        let seqs = self
+            .commit(events)
+            .map_err(|e| CapabilityError::Rejected(e.to_string()))?;
+        Ok(CapabilityAck { committed: seqs })
+    }
 }
 
 impl AgentContext for RuntimeCore {
@@ -1198,6 +1239,10 @@ impl AgentContext for RuntimeCore {
         self.state.buses.clone()
     }
 
+    fn subsystems(&self) -> Vec<Subsystem> {
+        self.state.subsystems.clone()
+    }
+
     fn reason(
         &mut self,
         mut req: ReasoningRequest,
@@ -1292,6 +1337,9 @@ impl AgentContext for RuntimeCore {
                 self.handle_create_interface(interface, links)
             }
             CapabilityRequest::CreateBus { bus, links } => self.handle_create_bus(bus, links),
+            CapabilityRequest::CreateSubsystem { subsystem, links } => {
+                self.handle_create_subsystem(subsystem, links)
+            }
         }
     }
 

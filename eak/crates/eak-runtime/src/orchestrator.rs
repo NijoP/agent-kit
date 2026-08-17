@@ -134,7 +134,7 @@ mod tests {
         Assumption, Board, BomLineItem, Bus, ClockDomain, Component, Constraint, Contract,
         DesignIntent, EntityId, FunctionalBlock, Interface, Net, Objective, Part, Pin,
         PinAssignment, PinCapability, Placement, PowerDomain, ProvenanceLink, Requirement,
-        ReturnPath, Risk, Signal, Track, Tradeoff, Violation,
+        ReturnPath, Risk, Signal, Subsystem, Track, Tradeoff, Violation,
     };
     use eak_ports::{Event, ReasoningError, ReasoningRequest, ReasoningResponse, Seq, StoreError};
 
@@ -221,6 +221,9 @@ mod tests {
             vec![]
         }
         fn buses(&self) -> Vec<Bus> {
+            vec![]
+        }
+        fn subsystems(&self) -> Vec<Subsystem> {
             vec![]
         }
         fn assumptions(&self) -> Vec<Assumption> {

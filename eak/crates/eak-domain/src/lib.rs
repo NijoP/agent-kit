@@ -1604,6 +1604,70 @@ impl Bus {
     }
 }
 
+// ===================== Band B (Phase 5, increment 8): Subsystem Map =====================
+//
+// The eighth logical-electrical Map (Map 14; `02 §Band B`). A [`Subsystem`] is a hierarchical
+// grouping of [`FunctionalBlock`]s that exposes a set of [`Interface`]s as its boundary — the
+// unit of reuse and reasoning at scale (`02` Map 14). The flat block list becomes a hierarchy:
+// a subsystem contains blocks (and possibly nested subsystems) and exposes interfaces as its
+// "pins". This is the master-prompt §40 "Subsystem" object: the architectural unit where
+// integration boundaries are explicit.
+//
+// The seam keeps referential integrity (blocks and interfaces must be committed). Whether the
+// subsystem's boundary is *complete* — every block pin crossing the boundary is accounted for in
+// an exposed interface — is the [`SubsystemBoundaryRule`]'s judgement at ERC time: a well-formed
+// subsystem must enter state so the rule can report a missing boundary interface (e.g. a block
+// inside the subsystem has a pin connected to a net outside, but that net is not exposed via an
+// interface). `boundary` is a `String` for future structured boundary definitions (e.g. netlist
+// region, physical outline); an enum would fabricate a closed world (P7).
+//
+// `Subsystem` carries no `PhysicalQuantity`, so — like [`Pin`] / [`FunctionalBlock`] — it derives
+// `Eq`. `validate()` reuses existing [`DomainError`] variants only.
+
+/// A hierarchical grouping of blocks exposing interfaces as its boundary (Map 14): the unit of
+// reuse and reasoning at scale. See the module comment above.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Subsystem {
+    pub id: EntityId,
+    /// The subsystem name (e.g. `"MCU_SUBSYSTEM"`, `"POWER_TREE"`, `"USB_CONTROLLER"`). Non-empty.
+    pub name: String,
+    /// The [`FunctionalBlock`]s contained in this subsystem. Non-empty — a subsystem with no
+    /// blocks is vacuous.
+    pub blocks: Vec<EntityId>,
+    /// The [`Interface`]s exposed at this subsystem's boundary. Non-empty — a subsystem with no
+    /// exposed interfaces has no boundary (but a leaf subsystem with only internal nets could have
+    /// zero; we require ≥1 for v0 honesty).
+    pub interfaces: Vec<EntityId>,
+    /// The subsystem boundary description (e.g. `"netlist region: MCU + peripherals"`, future:
+    /// structured polygon). Non-empty — a subsystem must declare its boundary scope.
+    pub boundary: String,
+}
+
+impl Subsystem {
+    /// Domain invariants (reuses existing [`DomainError`] variants only): non-empty `name`,
+    /// non-empty `blocks`, non-empty `interfaces`, non-empty `boundary`. Link integrity is
+    /// re-checked at the seam (P3); boundary *completeness* is the rule's judgement at ERC time.
+    pub fn validate(&self) -> Result<(), DomainError> {
+        if self.name.trim().is_empty() {
+            return Err(DomainError::EmptyField("subsystem name"));
+        }
+        if self.blocks.is_empty() {
+            return Err(DomainError::Inconsistent(
+                "subsystem must contain at least one block",
+            ));
+        }
+        if self.interfaces.is_empty() {
+            return Err(DomainError::Inconsistent(
+                "subsystem must expose at least one interface",
+            ));
+        }
+        if self.boundary.trim().is_empty() {
+            return Err(DomainError::EmptyField("subsystem boundary"));
+        }
+        Ok(())
+    }
+}
+
 /// A violated domain invariant.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DomainError {
@@ -3053,5 +3117,71 @@ mod tests {
             let parsed = s.parse::<BusTopology>().unwrap();
             assert_eq!(t, parsed);
         }
+    }
+
+    // ========== Band B (inc 8): Subsystem ==========
+
+    fn well_formed_subsystem() -> Subsystem {
+        Subsystem {
+            id: EntityId(200),
+            name: "MCU_SUBSYSTEM".into(),
+            blocks: vec![EntityId(10), EntityId(11)],
+            interfaces: vec![EntityId(30), EntityId(31)],
+            boundary: "MCU + peripherals".into(),
+        }
+    }
+
+    #[test]
+    fn well_formed_subsystem_validates() {
+        assert!(well_formed_subsystem().validate().is_ok());
+    }
+
+    #[test]
+    fn subsystem_rejects_blank_name() {
+        let s = Subsystem {
+            name: "   ".into(),
+            ..well_formed_subsystem()
+        };
+        assert_eq!(s.validate(), Err(DomainError::EmptyField("subsystem name")));
+    }
+
+    #[test]
+    fn subsystem_rejects_no_blocks() {
+        let s = Subsystem {
+            blocks: vec![],
+            ..well_formed_subsystem()
+        };
+        assert_eq!(
+            s.validate(),
+            Err(DomainError::Inconsistent(
+                "subsystem must contain at least one block"
+            ))
+        );
+    }
+
+    #[test]
+    fn subsystem_rejects_no_interfaces() {
+        let s = Subsystem {
+            interfaces: vec![],
+            ..well_formed_subsystem()
+        };
+        assert_eq!(
+            s.validate(),
+            Err(DomainError::Inconsistent(
+                "subsystem must expose at least one interface"
+            ))
+        );
+    }
+
+    #[test]
+    fn subsystem_rejects_blank_boundary() {
+        let s = Subsystem {
+            boundary: "   ".into(),
+            ..well_formed_subsystem()
+        };
+        assert_eq!(
+            s.validate(),
+            Err(DomainError::EmptyField("subsystem boundary"))
+        );
     }
 }
