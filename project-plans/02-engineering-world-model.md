@@ -200,11 +200,11 @@ the product roadmap.
 - *Relationships · runtime rep:* block `Supports` requirements; components `RealizeComponent` from blocks. Thin today (no ports/interfaces/hierarchy).
 - *AI · verify · evolves:* AI proposes decomposition; kernel validates ≥1 requirement per block. Verified by block→requirement coverage. Scales to hierarchical architecture with interfaces (Maps 14–15).
 
-**14. Subsystem Map** ○ *(new)*
+**14. Subsystem Map** ◐
 - *Purpose & why:* hierarchy and boundaries above the flat block list; the unit of reuse and reasoning at scale.
-- *Objects · owner · in→out:* (missing) `Subsystem{blocks, interfaces, boundary}`. Owner: runtime. In: blocks. Out: composable, reusable units.
-- *Relationships · runtime rep:* subsystems contain blocks and expose interfaces; not modeled today.
-- *AI · verify · evolves:* AI proposes groupings; runtime validates boundaries. Verified by interface completeness. Scales to cross-project subsystem reuse (feeds Memory).
+- *Objects · owner · in→out:* `Subsystem{name, blocks, interfaces, boundary}` (implemented Band B inc 8). Owner: runtime. In: blocks. Out: composable, reusable units.
+- *Relationships · runtime rep:* subsystems contain blocks and expose interfaces; boundary completeness checked at ERC.
+- *AI · verify · evolves:* AI proposes groupings; runtime validates boundaries. Verified by interface completeness (`erc-subsystem-boundary` now; full cross-boundary pin check when net→pins lands). Scales to cross-project subsystem reuse (feeds Memory).
 
 **15. Interface / Contract Map** ○ *(new)*
 - *Purpose & why:* the ports, protocols, and handshakes between blocks/subsystems — where integration fails.
@@ -212,17 +212,17 @@ the product roadmap.
 - *Relationships · runtime rep:* interfaces bind block ports to nets/buses; enforce protocol rules.
 - *AI · verify · evolves:* AI proposes interface matches; runtime checks contract compatibility. Verified by interface-contract rules (voltage-level, protocol, direction). Scales to automatic subsystem interconnect + ERC-by-contract.
 
-**16. Signal Flow Map** ○ *(new)*
+**16. Signal Flow Map** ◐
 - *Purpose & why:* directional *logical* signal flow (source→sink), distinct from undirected copper. Exists because a Net says "connected"; a Signal says "flows from here to there, and means this."
-- *Objects · owner · in→out:* (missing) `Signal{source, sinks, direction, semantics}`. Owner: runtime. In: interfaces + pins. Out: the logical layer nets realize.
+- *Objects · owner · in→out:* `Signal{name, source, sinks, semantics}` (implemented Band B inc 5; `direction` is encoded by source→sinks topology). Owner: runtime. In: interfaces + pins. Out: the logical layer nets realize.
 - *Relationships · runtime rep:* `Signal` realized-by `Net`; carried-by pins.
-- *AI · verify · evolves:* AI infers flow; runtime validates against pin electrical types. Verified by driver/sink consistency (extends ERC). Scales to full behavioral signal-flow simulation.
+- *AI · verify · evolves:* AI infers flow; runtime validates against pin electrical types. Verified by driver/sink consistency (extends ERC, `erc-signal-driver-sink` now; `signal→Net` realization check later). Scales to full behavioral signal-flow simulation.
 
-**17. Bus / Protocol Map** ○ *(new)*
+**17. Bus / Protocol Map** ◐
 - *Purpose & why:* bus topologies (I²C/SPI/USB/CAN…) and their structural rules (addressing, termination, fan-out).
-- *Objects · owner · in→out:* (missing) `Bus{protocol, members, topology}`. Owner: runtime. In: interfaces/signals. Out: bus-level constraints (pull-ups, unique addresses, stubs).
-- *Relationships · runtime rep:* a `Bus` groups signals/nets under a protocol contract.
-- *AI · verify · evolves:* AI recognizes/proposes bus structure; runtime enforces protocol rules. Verified by protocol-specific checks (e.g., I²C address collision). Scales to a protocol knowledge library (Memory).
+- *Objects · owner · in→out:* `Bus{name, contract, members, topology}` (implemented Band B inc 7). Owner: runtime. In: interfaces/signals. Out: bus-level constraints (pull-ups, unique addresses, stubs).
+- *Relationships · runtime rep:* a `Bus` groups interfaces under a protocol contract with a declared topology.
+- *AI · verify · evolves:* AI recognizes/proposes bus structure; runtime enforces protocol rules. Verified by protocol-specific checks (e.g., I²C address collision via `erc-bus-topology` now; full protocol knowledge library later). Scales to a protocol knowledge library (Memory).
 
 ### Tier 3 — Electrical-domain Maps
 
@@ -238,23 +238,23 @@ the product roadmap.
 - *Relationships · runtime rep:* domains span nets/pins/components; drive PI and thermal.
 - *AI · verify · evolves:* AI proposes domain structure; runtime computes budgets deterministically. Verified by power-balance + sequencing rules. Scales to full PDN + sequencing simulation (Map 32).
 
-**20. Ground / Return Map** ○ *(new)*
+**20. Ground / Return Map** ◐
 - *Purpose & why:* the reference/return structure — the single most under-modeled cause of SI/EMC failure ("current returns; where?").
-- *Objects · owner · in→out:* (missing) `ReturnPath`, `ReferencePlane`. Owner: runtime. In: stackup + nets. Out: return-path constraints for SI/EMC.
-- *Relationships · runtime rep:* couples nets to reference planes across the stackup.
-- *AI · verify · evolves:* AI flags reference discontinuities; runtime computes return geometry. Verified by return-path continuity rules. Scales to field-solved return analysis.
+- *Objects · owner · in→out:* `ReturnPath` (implemented Band B inc 3; `ReferencePlane` still missing). Owner: runtime. In: stackup + nets. Out: return-path constraints for SI/EMC.
+- *Relationships · runtime rep:* `ReturnPath` couples a controlled net to the reference net its return current flows on; full cross-stackup adjacency still needs the PCB-IR reference-adjacency model.
+- *AI · verify · evolves:* AI flags reference discontinuities; runtime computes return geometry. Verified by return-path continuity rules (`erc-return-path-required` now; reference-continuity geometry when the adjacency model lands). Scales to field-solved return analysis.
 
-**21. Clock Domain Map** ○ *(new)*
+**21. Clock Domain Map** ◐
 - *Purpose & why:* clocks, their domains, crossings, and timing budgets.
-- *Objects · owner · in→out:* (missing) `ClockDomain{frequency, source, members, crossings}`. Owner: runtime. In: components/signals. Out: timing + SI constraints (length matching, skew).
-- *Relationships · runtime rep:* domains span signals/nets; crossings flag CDC concerns.
+- *Objects · owner · in→out:* `ClockDomain{frequency, source, members}` (implemented Band B inc 2; crossings flag CDC concerns). Owner: runtime. In: components/signals. Out: timing + SI constraints (length matching, skew).
+- *Relationships · runtime rep:* domains span signals/nets; `erc-clock-domain-conflict` flags a net in ≥2 domains as a crossing.
 - *AI · verify · evolves:* AI proposes domain assignment; runtime checks crossings/timing. Verified by skew/length-match rules. Scales to static timing over the board.
 
-**22. Pin-Function / GPIO / Mux Map** ○ *(new; only `PinElectricalType` today)*
+**22. Pin-Function / GPIO / Mux Map** ◐
 - *Purpose & why:* a pin's *capabilities* and its *assigned function* — the MCU/FPGA pin-planning problem, a top real-world pain point.
-- *Objects · owner · in→out:* (missing) `PinCapability`, `PinAssignment{function, mux-option}`. Owner: runtime. In: part datasheets (capabilities) + intent (needed functions). Out: a validated pin-out.
+- *Objects · owner · in→out:* `PinCapability` (implemented Band B inc 4), `PinAssignment` (implemented Band B inc 4). Owner: runtime. In: part datasheets (capabilities) + intent (needed functions). Out: a validated pin-out.
 - *Relationships · runtime rep:* assignments bind functions to `Pin`s under mux constraints.
-- *AI · verify · evolves:* AI proposes pin assignments (a genuinely hard search); runtime validates against capability + mutual-exclusion rules. Verified by mux-conflict + capability checks. Scales to constraint-solved auto pin-assignment.
+- *AI · verify · evolves:* AI proposes pin assignments (a genuinely hard search); runtime validates against capability + mutual-exclusion rules (`erc-pin-mux-conflict` + `erc-pin-capability` now; electrical-type matrix later). Scales to constraint-solved auto pin-assignment.
 
 ### Tier 4 — Realization Maps
 
@@ -400,7 +400,7 @@ Fidelity.**
   auditable risk posture; trust-weighted reasoning.
 
 **Band B — the electrical-domain gaps: Power Domain, Ground/Return, Clock Domain, Pin-Function/Mux,
-Signal Flow, Interface/Contract, Bus/Protocol, Subsystem.**
+ Signal Flow, Interface/Contract, Bus/Protocol, Subsystem.**
 - *Why missing:* the runtime jumped from flat blocks to nets, skipping the *logical electrical
   architecture* real engineers reason in.
 - *Why it should exist:* power/clock/pin-planning/interfaces are where designs are actually specified
@@ -410,10 +410,34 @@ Signal Flow, Interface/Contract, Bus/Protocol, Subsystem.**
 - *Integration:* new IR stage ("Logical Electrical IR"); domain objects committed through the seam;
   rules (power balance, mux conflict, CDC, protocol) added to the verification engine.
 - *New objects:* `PowerDomain`, `ReturnPath`, `ClockDomain`, `PinAssignment`/`PinCapability`,
-  `Signal`, `Interface`, `Bus`, `Subsystem`.
+  `Signal`, `Interface`, `Contract`, `Bus`, `Subsystem`.
 - *Status:* increment 1 — `PowerDomain` implemented (domain `validate()`, seam `CreatePowerDomain`,
-  `erc-power-balance` rule; [ADR-0022](../docs/decisions/0022-band-b-power-domain.md)). Remaining
-  objects follow one per increment through the same seam.
+  `erc-power-balance` rule; [ADR-0022](../docs/decisions/0022-band-b-power-domain.md)); increment 2 —
+  `ClockDomain` implemented (domain `validate()`, seam `CreateClockDomain`, `erc-clock-domain-conflict`
+  rule — the seed of CDC reasoning; [ADR-0023](../docs/decisions/0023-band-b-clock-domain.md)); increment 3 —
+  `ReturnPath` implemented (domain `validate()`, seam `CreateReturnPath`, `erc-return-path-required`
+  rule — the return half of the signal loop, gated on the design's own `impedance_target`
+  declaration rather than a fabricated clock threshold per `transmission-lines.md` L145/L170;
+  [ADR-0024](../docs/decisions/0024-band-b-return-path.md)); increment 4 — `PinCapability` +
+  `PinAssignment` implemented (domain `validate()`, seam `CreatePinCapability`/`CreatePinAssignment`,
+  `erc-pin-mux-conflict` + `erc-pin-capability` rules — capability and assignment kept separate per
+  the master-prompt §31 rule, so a mux conflict is an engineering violation, not a silent string
+  collision; [ADR-0025](../docs/decisions/0025-band-b-pin-function-mux.md)); increment 5 — `Signal`
+  implemented (domain `validate()`, seam `CreateSignal`, `erc-signal-driver-sink` rule — the
+  logical electrical meaning above raw connectivity, NOT a Net rename, only fields the architecture
+  can justify per §32; direction encoded by source→sinks; [ADR-0026](../docs/decisions/0026-band-b-signal-flow.md));
+  increment 6 — `Contract` + `Interface` implemented (domain `validate()`, seam `CreateContract`/
+  `CreateInterface`, `erc-interface-contract` rule — protocol rule-set and its governed signal
+  collection, co-dependent objects per the Map; minimal v0 structural checks for I²C/SPI/USB;
+  [ADR-0027](../docs/decisions/0027-band-b-interface-contract.md)); increment 7 — `Bus` implemented
+  (domain `validate()`, seam `CreateBus`, `erc-bus-topology` rule — a collection of interfaces
+  sharing a physical bus line under one protocol contract with a declared topology; minimal v0
+  structural checks for I²C/CAN/USB per protocol/topology; [ADR-0028](../docs/decisions/0028-band-b-bus-protocol.md)); increment 8 — `Subsystem` implemented (domain `validate()`, seam `CreateSubsystem`, `erc-subsystem-boundary` rule — the unit of reuse and reasoning at scale, hierarchical grouping of blocks exposing interfaces; [ADR-0029](../docs/decisions/0029-band-b-subsystem.md)); increment 9 — `LogicalElectricalIr` implemented (compiler IR projection enriching EngineeringIr with all Band B domain objects; schema versioning; deterministic projection; [ADR-0030](../docs/decisions/0030-band-b-logical-electrical-ir.md)).
+  Remaining objects follow one per increment through the same seam. NOTE: ClockDomain precedes ReturnPath
+  because return-path continuity targets controlled/electrically-long nets; the truthful v0 gate is the
+  net's own controlled-impedance declaration (`Net::impedance_target`), NOT clock frequency — the
+  electrically-long boundary is applied against the edge rate, which the model does not yet own
+  (a documented correction to the increment-order rationale; `transmission-lines.md` L145/L170).
 - *Unlocks:* AI that plans power/pin-out/interfaces (huge real value); ERC-by-contract; correct
   return paths (prevents most SI/EMC failure by construction).
 

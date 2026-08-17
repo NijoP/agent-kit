@@ -18,7 +18,9 @@ export default function App() {
   // cassette (real kernel output) in the browser. Same fold either way.
   useEffect(() => {
     if (source) return;
-    const src: EventSource = inTauri() ? new TauriBridge() : new FixturePlayer("/fixtures/hero.jsonl");
+    // Dev affordance: ?fixture=review loads another captured kernel cassette (still CASSETTE mode).
+    const name = new URLSearchParams(window.location.search).get("fixture") ?? "hero";
+    const src: EventSource = inTauri() ? new TauriBridge() : new FixturePlayer(`/fixtures/${name}.jsonl`);
     connect(src);
   }, [connect, source]);
 

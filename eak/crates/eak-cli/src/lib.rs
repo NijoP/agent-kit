@@ -425,7 +425,11 @@ pub fn default_fabrication_floor() -> Vec<PhysicalQuantity> {
 /// board there is no copper to check, so nothing is seeded (the geometry rules are silent without a
 /// board regardless). Returns the seam error unchanged if the runtime rejects the proposal (P3) —
 /// never a back door.
-fn seed_default_fabrication_floor(core: &mut RuntimeCore) -> Result<(), CliError> {
+/// Install the default IPC-2221 Class 2 fabrication process floor through the real `CreateRequirement`
+/// seam, so the geometric DRC rules (`drc-trace-width`, `drc-copper-clearance`) have a bound to
+/// evaluate over imported copper (which carries no process class). Public so the review-cassette
+/// emitter (`examples/emit_review_cassette.rs`) can reproduce `import_and_verify`'s seeding step.
+pub fn seed_default_fabrication_floor(core: &mut RuntimeCore) -> Result<(), CliError> {
     let Some(source) = core.state.board.as_ref().map(|b| b.id) else {
         return Ok(());
     };

@@ -7,6 +7,7 @@
 
 use eak_units::{Dimension, PhysicalQuantity, Unit};
 use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 
 /// Opaque, immutable identity (domain-model modelling principle 1). Carries no meaning;
 /// referenced by value, never by name or position. `EntityId(0)` is reserved as the null
@@ -1146,6 +1147,527 @@ impl PowerDomain {
     }
 }
 
+// ===================== Band B (Phase 5, increment 2): Clock Domain =====================
+//
+// The second logical-electrical Map (Map 21; `02 §Band B`). A [`ClockDomain`] is a named clock
+// region: a single [`Component`] (oscillator / crystal / PLL / clock generator) that sources a
+// `frequency` (P9, typed Hertz) to a set of [`Net`]s that are synchronous to that clock. This is
+// the abstraction the return-path continuity rule (`engineering-science/pcb/return-path.md` L138)
+// targets — that rule applies to *controlled / electrically-long* nets, a set the runtime can only
+// identify once it owns clock frequencies — and the seed of CDC (clock-domain-crossing) reasoning.
+// The seam keeps referential integrity (source component + member nets must be committed); a net
+// that belongs to more than one clock domain is a *design* finding (a clock-domain conflict,
+// [`ClockDomainMembershipRule`] in `eak-engines`), NOT a validation error — the domain itself is
+// well-formed the moment it names a real source, a positive frequency, and at least one net.
+//
+// `ClockDomain` carries a `PhysicalQuantity` field, so — like [`Component`]/[`Net`]/[`PowerDomain`]
+// — it derives `PartialEq` but NOT `Eq`. `validate()` reuses existing [`DomainError`] variants only.
+
+/// A named clock region: one source [`Component`] driving `frequency` onto a set of synchronous
+/// [`Net`]s. See the module comment above.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ClockDomain {
+    pub id: EntityId,
+    /// The domain name (e.g. `"SYS"`, `"48M"`, `"I2S_MCLK"`). The canonical handle engineers use.
+    pub name: String,
+    /// The domain's clock frequency (P9, e.g. 48 MHz). The net class that makes a net
+    /// "electrically-long" for return-path and SI purposes.
+    pub frequency: PhysicalQuantity,
+    /// The [`Component`] (oscillator / crystal / PLL / clock generator) that sources this clock.
+    /// The traceability anchor back to intent (P3). Referential integrity re-checked at the seam.
+    pub source_component: EntityId,
+    /// The [`Net`]s synchronous to this clock. At least one (a clock that drives nothing is inert,
+    /// mirroring `power domain must power at least one net`). Each must be a committed net
+    /// (re-checked at the seam).
+    pub members: Vec<EntityId>,
+}
+
+impl ClockDomain {
+    /// Domain invariants (reuses existing [`DomainError`] variants only): a non-empty `name`; a
+    /// finite, positive `frequency`; and at least one member net — a clock driving nothing is a
+    /// silent defect (P13). Values are compared via `si_magnitude()` so the checks are
+    /// unit-independent (P9). Member-link integrity is re-checked at the capability seam (P3).
+    pub fn validate(&self) -> Result<(), DomainError> {
+        if self.name.trim().is_empty() {
+            return Err(DomainError::EmptyField("clock domain name"));
+        }
+        if !self.frequency.si_magnitude().is_finite() || self.frequency.si_magnitude() <= 0.0 {
+            return Err(DomainError::Inconsistent(
+                "clock domain frequency must be positive and finite",
+            ));
+        }
+        if self.members.is_empty() {
+            return Err(DomainError::Inconsistent(
+                "clock domain must drive at least one net",
+            ));
+        }
+        Ok(())
+    }
+}
+
+// ===================== Band B (Phase 5, increment 3): Return Path =====================
+//
+// The third logical-electrical Map (Map 20; `02 §Band B`). A [`ReturnPath`] is the return half of a
+// signal loop: every signal current must return to its driver, and at the speeds digital edges carry
+// it returns on the conductor directly beneath the trace — almost always a reference plane
+// (`engineering-science/pcb/return-path.md`). The runtime routes a [`Net`] as if it were a single
+// forward conductor; this object names the *return* conductor for a controlled net, closing the loop
+// the connectivity checks cannot see.
+//
+// The honest v0 scope is deliberately narrow. The full reference-continuity rule needs the PCB-IR
+// reference-adjacency model (which layer references which plane, plane voids/splits — return-path.md
+// L141), which the runtime does not yet own. What the runtime CAN own today is the
+// **logical-electrical contract**: a net that declares a controlled characteristic impedance — the
+// model's own transmission-line declaration (`Net::impedance_target`, transmission-lines.md L141) —
+// must name the net its return current flows on. This is the "width-correct, impedance-wrong" silent
+// failure (return-path.md L140): a controlled net with no declared return path is under-specified
+// before any copper exists. NOTE: electrically-long classification is gated on the design's own
+// impedance declaration, NOT on clock frequency — the science directs the boundary be applied against
+// the EDGE RATE, which the model does not own (transmission-lines.md L145/L170); fabricating a
+// threshold from clock frequency would be exactly the "clock instead of edge" under-classification
+// failure the science warns against.
+//
+// `ReturnPath` carries no `PhysicalQuantity` field (only ids and a name), so — like [`Pin`] /
+// [`FunctionalBlock`] — it derives `Eq`. `validate()` reuses existing [`DomainError`] variants only.
+
+/// The declared return conductor for a controlled [`Net`]: the reference net (a plane) the signal's
+/// return current flows on. See the module comment above.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReturnPath {
+    pub id: EntityId,
+    /// A human label (e.g. `"SPI_CLK ret on GND"`). The canonical handle engineers use.
+    pub name: String,
+    /// The controlled signal [`Net`] whose return current this path governs. Must resolve to a
+    /// committed net (re-checked at the seam, P3).
+    pub net: EntityId,
+    /// The reference [`Net`] the return current flows on — the plane conductor beneath the trace.
+    /// Must resolve to a committed net and MUST differ from `net` (a signal cannot return on
+    /// itself — KCL requires a distinct conductor). Re-checked at the seam (P3).
+    pub reference_plane: EntityId,
+}
+
+impl ReturnPath {
+    /// Domain invariants (reuses existing [`DomainError`] variants only): a non-empty `name`; a
+    /// non-null `net`; a non-null `reference_plane`; and `net` != `reference_plane` (a signal cannot
+    /// be its own return conductor). Link integrity is re-checked at the capability seam (P3).
+    pub fn validate(&self) -> Result<(), DomainError> {
+        if self.name.trim().is_empty() {
+            return Err(DomainError::EmptyField("return path name"));
+        }
+        if self.net.is_null() {
+            return Err(DomainError::Inconsistent(
+                "return path must name a signal net",
+            ));
+        }
+        if self.reference_plane.is_null() {
+            return Err(DomainError::Inconsistent(
+                "return path must name a reference plane net",
+            ));
+        }
+        if self.net == self.reference_plane {
+            return Err(DomainError::Inconsistent(
+                "return path net cannot be its own reference plane",
+            ));
+        }
+        Ok(())
+    }
+}
+
+// ===================== Band B (Phase 5, increment 4): Pin-Function / Mux Map =====================
+//
+// The fourth logical-electrical Map (Map 22; `02 §Band B`). The MCU/FPGA pin-planning problem, kept
+// honest by separating CAPABILITY from ASSIGNMENT (master-prompt §31): a [`PinCapability`] is the
+// datasheet truth — the set of mux functions a physical [`Pin`] *can* carry; a [`PinAssignment`] is
+// the design truth — the function the design *assigns* to that pin. These are deliberately two
+// objects: the mux-conflict and capability rules only make sense once both exist (an assignment is
+// verified against its pin's declared capability; two assignments on one pin conflict), so the
+// Pin-Function/Mux Map ships as one increment containing both objects.
+//
+// The seam keeps referential integrity (pin must be committed); whether an assignment violates a
+// capability or conflicts with another assignment is a *design* finding
+// ([`PinMuxConflictRule`] / [`PinCapabilityRule`] in `eak-engines`), NOT a validation error — the
+// assignment itself is well-formed the moment it names a real pin and a non-empty function, so it
+// must enter state for the rules to report the conflict. `PinAssignment.function` is a `String`
+// because mux function names are datasheet-specific and open-ended; forcing an enum would fabricate
+// a closed world (P7).
+//
+// Neither object carries a `PhysicalQuantity`, so — like [`Pin`] / [`FunctionalBlock`] — they derive
+// `Eq`. `validate()` reuses existing [`DomainError`] variants only.
+
+/// A pin's datasheet truth: the set of mux functions a physical [`Pin`] can carry. See the module
+/// comment above.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PinCapability {
+    pub id: EntityId,
+    /// The [`Pin`] whose capabilities these are. Must resolve to a committed pin (re-checked at the
+    /// seam, P3).
+    pub pin: EntityId,
+    /// The mux functions this pin can be assigned (e.g. `["UART1_TX", "SPI1_MOSI", "GPIO13"]`).
+    /// At least one — declaring a capability with nothing assignable is inert (mirrors "a power
+    /// domain must power at least one net").
+    pub functions: Vec<String>,
+}
+
+impl PinCapability {
+    /// Domain invariants (reuses existing [`DomainError`] variants only): a non-null `pin` and a
+    /// non-empty `functions` set. Link integrity is re-checked at the capability seam (P3).
+    pub fn validate(&self) -> Result<(), DomainError> {
+        if self.pin.is_null() {
+            return Err(DomainError::Inconsistent("pin capability must name a pin"));
+        }
+        if self.functions.is_empty() {
+            return Err(DomainError::Inconsistent(
+                "pin capability must declare at least one assignable function",
+            ));
+        }
+        Ok(())
+    }
+}
+
+/// A pin's design truth: the mux function the design assigns to a [`Pin`]. See the module comment
+/// above.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PinAssignment {
+    pub id: EntityId,
+    /// The [`Pin`] being assigned. Must resolve to a committed pin (re-checked at the seam, P3).
+    pub pin: EntityId,
+    /// The function the design assigns (e.g. `"SPI1_MOSI"`). Non-empty; whether the pin's
+    /// [`PinCapability`] declares it is the capability rule's judgement at ERC time, not this
+    /// object's — a well-formed assignment must enter state so the rules can report the conflict.
+    pub function: String,
+}
+
+impl PinAssignment {
+    /// Domain invariants (reuses existing [`DomainError`] variants only): a non-null `pin` and a
+    /// non-empty `function`. Link integrity is re-checked at the capability seam (P3).
+    pub fn validate(&self) -> Result<(), DomainError> {
+        if self.pin.is_null() {
+            return Err(DomainError::Inconsistent("pin assignment must name a pin"));
+        }
+        if self.function.trim().is_empty() {
+            return Err(DomainError::EmptyField("pin assignment function"));
+        }
+        Ok(())
+    }
+}
+
+// ===================== Band B (Phase 5, increment 5): Signal Flow Map =====================
+//
+// The fifth logical-electrical Map (Map 16; `02 §Band B`). A [`Net`] says "these pins are
+// connected" (undirected copper); a [`Signal`] says "a named, *directional* logical flow goes from
+// this source to these sinks, and means this" (`02` Map 16 — the schematic's logical layer above
+// the copper). This is the master-prompt §32 object: the logical-electrical meaning ABOVE raw
+// connectivity — a signal is NOT a Net rename, it carries only the fields the architecture can
+// truthfully justify: a source pin, the sink pins, and the semantics. Direction is encoded by the
+// source→sinks pair; a redundant `direction` enum would over-encode (a signal with one source and
+// N sinks has one direction by construction).
+//
+// The seam keeps referential integrity (source and every sink must be committed pins; P3). Whether
+// the flow is *legal* — an Output/Bidirectional pin driving, every sink an Input/Bidirectional pin
+// (`engineering-science/electrical/circuit-theory.md` L134/L152: source/load legality is a
+// Thévenin/KCL question) — is the [`SignalDriverSinkRule`]'s judgement at ERC time, NOT a validation
+// error: a well-formed signal must enter state so the rule can report an illegal driver/sink
+// pairing (two outputs driving, an input source). `semantics` is a `String` because logical meaning
+// is open-ended ("SPI clock", "active-low reset"); an enum would fabricate a closed world (P7).
+//
+// `Signal` carries no `PhysicalQuantity`, so — like [`Pin`] / [`FunctionalBlock`] — it derives
+// `Eq`. `validate()` reuses existing [`DomainError`] variants only.
+
+/// A named, directional logical signal flow (Map 16): from a `source` pin to one or more `sink`
+/// pins, carrying a meaning. Distinct from the undirected copper of a [`Net`]. See the module
+/// comment above.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Signal {
+    pub id: EntityId,
+    /// The logical signal name (e.g. `"SYS_CLK"`, `"SPI_MOSI"`). Non-empty.
+    pub name: String,
+    /// The driving pin. Must resolve to a committed pin (re-checked at the seam, P3).
+    pub source: EntityId,
+    /// The receiving pins. Must be non-empty and resolve to committed pins (re-checked at the
+    /// seam, P3). Must not include `source` — a signal cannot drive itself.
+    pub sinks: Vec<EntityId>,
+    /// The logical meaning (e.g. `"SPI clock"`, `"active-low reset"`). Non-empty — a signal that
+    /// means nothing carries no engineering intent.
+    pub semantics: String,
+}
+
+impl Signal {
+    /// Domain invariants (reuses existing [`DomainError`] variants only): a non-empty `name`, a
+    /// non-empty `semantics`, a non-null `source`, at least one `sink`, and `source` not among the
+    /// `sinks` (a self-driving loop is nonsensical — KCL). Link integrity is re-checked at the
+    /// signal seam (P3); driver/sink *legality* is the rule's judgement at ERC time, not this
+    /// object's.
+    pub fn validate(&self) -> Result<(), DomainError> {
+        if self.name.trim().is_empty() {
+            return Err(DomainError::EmptyField("signal name"));
+        }
+        if self.semantics.trim().is_empty() {
+            return Err(DomainError::EmptyField("signal semantics"));
+        }
+        if self.source.is_null() {
+            return Err(DomainError::Inconsistent("signal must have a source pin"));
+        }
+        if self.sinks.is_empty() {
+            return Err(DomainError::Inconsistent(
+                "signal must drive at least one sink pin",
+            ));
+        }
+        if self.sinks.contains(&self.source) {
+            return Err(DomainError::Inconsistent(
+                "signal cannot drive itself (source is also a sink)",
+            ));
+        }
+        Ok(())
+    }
+}
+
+// ===================== Band B (Phase 5, increment 6): Interface / Contract Map =====================
+//
+// The sixth logical-electrical Map (unnumbered in `02`; sits between Signal Flow and Bus/Protocol;
+// `02 §Band B` lists `Interface` as a Band B object). An [`Interface`] is a named collection of
+// [`Signal`]s that forms a logical connection point between subsystems — the "port" of a
+// subsystem. A [`Contract`] is the protocol rule-set that governs an interface (e.g. "I²C", "SPI",
+// "USB 2.0"). They are deliberately two objects in one increment: an interface without a contract
+// has no rules to enforce, and a contract without an interface has nowhere to apply. This is a
+// documented exception to the one-object-per-increment discipline (mirrors PinCapability/PinAssignment).
+//
+// The seam keeps referential integrity (signals and contract must be committed). Whether the
+// interface's signals *satisfy* the contract (correct signal count, direction, protocol rules) is
+// the [`InterfaceContractRule`]'s judgement at ERC time — a well-formed interface must enter state
+// so the rule can report a contract violation (e.g. an I²C interface missing SDA, a SPI interface
+// with two MOSI signals). `Contract.protocol` is a `String` because protocol names are open-ended;
+// an enum would fabricate a closed world (P7).
+//
+// Neither object carries a `PhysicalQuantity`, so — like [`Pin`] / [`FunctionalBlock`] — they
+// derive `Eq`. `validate()` reuses existing [`DomainError`] variants only.
+
+/// A protocol contract: the rule-set governing an interface (e.g. "I²C" requires SDA+SCL, unique
+/// addresses, pull-ups; "SPI" requires SCLK+MOSI+MISO+CS). See the module comment above.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Contract {
+    pub id: EntityId,
+    /// The protocol name (e.g. `"I2C"`, `"SPI"`, `"USB2"`). Non-empty.
+    pub protocol: String,
+    /// Human-readable name (e.g. `"I2C bus 1"`). Non-empty.
+    pub name: String,
+    /// Additional protocol-specific constraints (free-form; structured rules live in the rule
+    /// engine, not here). Empty is valid (minimal contract = just the protocol name).
+    pub constraints: Vec<String>,
+}
+
+impl Contract {
+    /// Domain invariants (reuses existing [`DomainError`] variants only): non-empty `protocol` and
+    /// non-empty `name`. Link integrity (referenced by Interface) is re-checked at the seam (P3).
+    pub fn validate(&self) -> Result<(), DomainError> {
+        if self.protocol.trim().is_empty() {
+            return Err(DomainError::EmptyField("contract protocol"));
+        }
+        if self.name.trim().is_empty() {
+            return Err(DomainError::EmptyField("contract name"));
+        }
+        Ok(())
+    }
+}
+
+/// A logical interface: a named collection of [`Signal`]s governed by a [`Contract`]. See the
+/// module comment above.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Interface {
+    pub id: EntityId,
+    /// The interface name (e.g. `"I2C1"`, `"SPI_FLASH"`, `"USB_HOST"`). Non-empty.
+    pub name: String,
+    /// The member signals forming this interface. Non-empty — an interface with no signals is
+    /// vacuous.
+    pub signals: Vec<EntityId>,
+    /// The [`Contract`] governing this interface. Must resolve to a committed contract (re-checked
+    /// at the seam, P3).
+    pub contract: EntityId,
+}
+
+impl Interface {
+    /// Domain invariants (reuses existing [`DomainError`] variants only): non-empty `name`,
+    /// non-empty `signals`, non-null `contract`. Link integrity is re-checked at the seam (P3);
+    /// contract *satisfaction* is the rule's judgement at ERC time, not this object's.
+    pub fn validate(&self) -> Result<(), DomainError> {
+        if self.name.trim().is_empty() {
+            return Err(DomainError::EmptyField("interface name"));
+        }
+        if self.signals.is_empty() {
+            return Err(DomainError::Inconsistent(
+                "interface must contain at least one signal",
+            ));
+        }
+        if self.contract.is_null() {
+            return Err(DomainError::Inconsistent("interface must name a contract"));
+        }
+        Ok(())
+    }
+}
+
+// ===================== Band B (Phase 5, increment 7): Bus / Protocol Map =====================
+//
+// The seventh logical-electrical Map (Map 17; `02 §Band B`). An [`Interface`] (ADR-0027) is a
+// single connection point governed by a contract; a [`Bus`] is a **collection of interfaces (or
+// signals) that share a physical bus line** under one protocol contract, with topology rules
+// (addressing, termination, fan-out, stub length) — `02` Map 17: "bus topologies (I²C/SPI/USB/CAN…)
+// and their structural rules". The Bus is the architectural unit where protocol-level constraints
+// live: an I²C bus needs unique 7-bit addresses and pull-ups; a CAN bus needs termination at both
+// ends; a USB bus needs hub fan-out limits.
+//
+// The seam keeps referential integrity (contract and every member must be committed). Whether the
+// bus's topology satisfies the protocol's structural rules (unique addresses, correct termination,
+// fan-out limits) is the [`BusTopologyRule`]'s judgement at ERC time — a well-formed bus must
+// enter state so the rule can report a violation (e.g. two I²C devices with the same address, a
+// CAN bus missing termination). `BusTopology` is a `String` enum variant (open-ended; an enum
+// would fabricate a closed world of bus types (P7)).
+//
+// `Bus` carries no `PhysicalQuantity`, so — like [`Pin`] / [`FunctionalBlock`] — it derives `Eq`.
+// `validate()` reuses existing [`DomainError`] variants only.
+
+/// The topology type of a bus (open-ended; an enum would fabricate a closed world). Serialized as
+/// a string so new topologies can be added without schema changes. See the module comment above.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum BusTopology {
+    /// Linear/daisy-chain bus (e.g. CAN, RS-485). Requires termination at both ends.
+    Linear,
+    /// Star/hub topology (e.g. USB). Hub fan-out limits apply.
+    Star,
+    /// Multi-drop / shared bus (e.g. I²C, SPI). Address uniqueness and stub length limits apply.
+    MultiDrop,
+    /// Point-to-point (e.g. USB link, Ethernet link). No sharing.
+    PointToPoint,
+    /// An unrecognized topology name (passed through from the model without interpretation).
+    Other(String),
+}
+
+impl FromStr for BusTopology {
+    type Err = std::convert::Infallible;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s.trim().to_lowercase().as_str() {
+            "linear" | "daisy-chain" | "daisychain" => BusTopology::Linear,
+            "star" | "hub" => BusTopology::Star,
+            "multi-drop" | "multidrop" | "i2c" | "spi" => BusTopology::MultiDrop,
+            "point-to-point" | "pointtopoint" | "p2p" => BusTopology::PointToPoint,
+            other => BusTopology::Other(other.to_string()),
+        })
+    }
+}
+
+impl BusTopology {
+    /// Convert back to a string (for serialization).
+    pub fn as_str(&self) -> &str {
+        match self {
+            BusTopology::Linear => "Linear",
+            BusTopology::Star => "Star",
+            BusTopology::MultiDrop => "MultiDrop",
+            BusTopology::PointToPoint => "PointToPoint",
+            BusTopology::Other(s) => s,
+        }
+    }
+}
+
+/// A bus: a collection of interfaces (or signals) sharing a physical bus line under one protocol
+/// contract, with a declared topology. See the module comment above.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Bus {
+    pub id: EntityId,
+    /// The bus name (e.g. `"I2C_BUS_1"`, `"CAN_HIGH"`, `"USB_ROOT_HUB"`). Non-empty.
+    pub name: String,
+    /// The [`Contract`] governing this bus (the protocol). Must resolve to a committed contract
+    /// (re-checked at the seam, P3).
+    pub contract: EntityId,
+    /// The member interfaces (or signals) on this bus. Non-empty — a bus with no members is
+    /// vacuous.
+    pub members: Vec<EntityId>,
+    /// The physical topology of this bus. Determines which structural rules apply.
+    pub topology: BusTopology,
+}
+
+impl Bus {
+    /// Domain invariants (reuses existing [`DomainError`] variants only): non-empty `name`,
+    /// non-null `contract`, non-empty `members`. Link integrity is re-checked at the seam (P3);
+    /// topology *satisfaction* is the rule's judgement at ERC time, not this object's.
+    pub fn validate(&self) -> Result<(), DomainError> {
+        if self.name.trim().is_empty() {
+            return Err(DomainError::EmptyField("bus name"));
+        }
+        if self.contract.is_null() {
+            return Err(DomainError::Inconsistent("bus must name a contract"));
+        }
+        if self.members.is_empty() {
+            return Err(DomainError::Inconsistent(
+                "bus must contain at least one member interface or signal",
+            ));
+        }
+        Ok(())
+    }
+}
+
+// ===================== Band B (Phase 5, increment 8): Subsystem Map =====================
+//
+// The eighth logical-electrical Map (Map 14; `02 §Band B`). A [`Subsystem`] is a hierarchical
+// grouping of [`FunctionalBlock`]s that exposes a set of [`Interface`]s as its boundary — the
+// unit of reuse and reasoning at scale (`02` Map 14). The flat block list becomes a hierarchy:
+// a subsystem contains blocks (and possibly nested subsystems) and exposes interfaces as its
+// "pins". This is the master-prompt §40 "Subsystem" object: the architectural unit where
+// integration boundaries are explicit.
+//
+// The seam keeps referential integrity (blocks and interfaces must be committed). Whether the
+// subsystem's boundary is *complete* — every block pin crossing the boundary is accounted for in
+// an exposed interface — is the [`SubsystemBoundaryRule`]'s judgement at ERC time: a well-formed
+// subsystem must enter state so the rule can report a missing boundary interface (e.g. a block
+// inside the subsystem has a pin connected to a net outside, but that net is not exposed via an
+// interface). `boundary` is a `String` for future structured boundary definitions (e.g. netlist
+// region, physical outline); an enum would fabricate a closed world (P7).
+//
+// `Subsystem` carries no `PhysicalQuantity`, so — like [`Pin`] / [`FunctionalBlock`] — it derives
+// `Eq`. `validate()` reuses existing [`DomainError`] variants only.
+
+/// A hierarchical grouping of blocks exposing interfaces as its boundary (Map 14): the unit of
+// reuse and reasoning at scale. See the module comment above.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Subsystem {
+    pub id: EntityId,
+    /// The subsystem name (e.g. `"MCU_SUBSYSTEM"`, `"POWER_TREE"`, `"USB_CONTROLLER"`). Non-empty.
+    pub name: String,
+    /// The [`FunctionalBlock`]s contained in this subsystem. Non-empty — a subsystem with no
+    /// blocks is vacuous.
+    pub blocks: Vec<EntityId>,
+    /// The [`Interface`]s exposed at this subsystem's boundary. Non-empty — a subsystem with no
+    /// exposed interfaces has no boundary (but a leaf subsystem with only internal nets could have
+    /// zero; we require ≥1 for v0 honesty).
+    pub interfaces: Vec<EntityId>,
+    /// The subsystem boundary description (e.g. `"netlist region: MCU + peripherals"`, future:
+    /// structured polygon). Non-empty — a subsystem must declare its boundary scope.
+    pub boundary: String,
+}
+
+impl Subsystem {
+    /// Domain invariants (reuses existing [`DomainError`] variants only): non-empty `name`,
+    /// non-empty `blocks`, non-empty `interfaces`, non-empty `boundary`. Link integrity is
+    /// re-checked at the seam (P3); boundary *completeness* is the rule's judgement at ERC time.
+    pub fn validate(&self) -> Result<(), DomainError> {
+        if self.name.trim().is_empty() {
+            return Err(DomainError::EmptyField("subsystem name"));
+        }
+        if self.blocks.is_empty() {
+            return Err(DomainError::Inconsistent(
+                "subsystem must contain at least one block",
+            ));
+        }
+        if self.interfaces.is_empty() {
+            return Err(DomainError::Inconsistent(
+                "subsystem must expose at least one interface",
+            ));
+        }
+        if self.boundary.trim().is_empty() {
+            return Err(DomainError::EmptyField("subsystem boundary"));
+        }
+        Ok(())
+    }
+}
+
 /// A violated domain invariant.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DomainError {
@@ -2160,5 +2682,506 @@ mod tests {
         // The rail is well-formed; whether it is overloaded is the rule's judgement, not
         // validate()'s (a power-balance violation is a design finding, not a malformed object).
         assert!(well_formed_power_domain().validate().is_ok());
+    }
+
+    // ----------------- Band B (increment 2): ClockDomain -----------------
+    // The clock-domain invariants mirror the power domain's: a non-empty name, a finite positive
+    // frequency, at least one member net — and a well-formed domain whose members conflict with
+    // another domain's membership is the RULE's judgement (clock-domain conflict), not validate()'s.
+
+    fn well_formed_clock_domain() -> ClockDomain {
+        ClockDomain {
+            id: EntityId(40),
+            name: "SYS".into(),
+            frequency: PhysicalQuantity::new(48.0, Unit::Megahertz),
+            source_component: EntityId(4),
+            members: vec![EntityId(41), EntityId(42)],
+        }
+    }
+
+    #[test]
+    fn clock_domain_rejects_blank_name() {
+        let mut d = well_formed_clock_domain();
+        d.name = "  ".into();
+        assert_eq!(
+            d.validate(),
+            Err(DomainError::EmptyField("clock domain name"))
+        );
+    }
+
+    #[test]
+    fn clock_domain_rejects_non_positive_frequency() {
+        let mut d = well_formed_clock_domain();
+        d.frequency = PhysicalQuantity::new(0.0, Unit::Megahertz);
+        assert!(matches!(d.validate(), Err(DomainError::Inconsistent(_))));
+    }
+
+    #[test]
+    fn clock_domain_rejects_non_finite_frequency() {
+        let mut d = well_formed_clock_domain();
+        d.frequency = PhysicalQuantity::new(f64::NAN, Unit::Megahertz);
+        assert!(matches!(d.validate(), Err(DomainError::Inconsistent(_))));
+    }
+
+    #[test]
+    fn clock_domain_rejects_empty_members() {
+        let mut d = well_formed_clock_domain();
+        d.members = vec![];
+        assert!(matches!(d.validate(), Err(DomainError::Inconsistent(_))));
+    }
+
+    #[test]
+    fn well_formed_clock_domain_validates() {
+        assert!(well_formed_clock_domain().validate().is_ok());
+    }
+
+    // ----------------- Band B (increment 3): ReturnPath -----------------
+    // The return-path invariants: a non-empty name, a non-null net, a non-null reference plane,
+    // and net != reference_plane (a signal cannot be its own return conductor — KCL requires a
+    // distinct return). Whether the controlled net is otherwise well-specified is the rule's
+    // judgement at ERC time, not validate()'s.
+
+    fn well_formed_return_path() -> ReturnPath {
+        ReturnPath {
+            id: EntityId(50),
+            name: "SYS_CLK ret on GND".into(),
+            net: EntityId(41),
+            reference_plane: EntityId(60),
+        }
+    }
+
+    #[test]
+    fn return_path_rejects_blank_name() {
+        let mut p = well_formed_return_path();
+        p.name = "  ".into();
+        assert_eq!(
+            p.validate(),
+            Err(DomainError::EmptyField("return path name"))
+        );
+    }
+
+    #[test]
+    fn return_path_rejects_null_net() {
+        let mut p = well_formed_return_path();
+        p.net = EntityId::NULL;
+        assert!(matches!(p.validate(), Err(DomainError::Inconsistent(_))));
+    }
+
+    #[test]
+    fn return_path_rejects_null_reference_plane() {
+        let mut p = well_formed_return_path();
+        p.reference_plane = EntityId::NULL;
+        assert!(matches!(p.validate(), Err(DomainError::Inconsistent(_))));
+    }
+
+    #[test]
+    fn return_path_rejects_self_return() {
+        // A net returning on itself would violate KCL (the return must be a distinct conductor).
+        let mut p = well_formed_return_path();
+        p.reference_plane = p.net;
+        assert!(matches!(p.validate(), Err(DomainError::Inconsistent(_))));
+    }
+
+    #[test]
+    fn well_formed_return_path_validates() {
+        assert!(well_formed_return_path().validate().is_ok());
+    }
+
+    // ========== Band B (inc 4): PinCapability / PinAssignment ==========
+
+    fn well_formed_capability() -> PinCapability {
+        PinCapability {
+            id: EntityId(10),
+            pin: EntityId(20),
+            functions: vec!["SPI1_MOSI".into(), "UART1_TX".into()],
+        }
+    }
+
+    #[test]
+    fn well_formed_capability_validates() {
+        assert!(well_formed_capability().validate().is_ok());
+    }
+
+    #[test]
+    fn capability_rejects_null_pin() {
+        let c = PinCapability {
+            pin: EntityId::NULL,
+            ..well_formed_capability()
+        };
+        assert_eq!(
+            c.validate(),
+            Err(DomainError::Inconsistent("pin capability must name a pin"))
+        );
+    }
+
+    #[test]
+    fn capability_rejects_no_functions() {
+        let c = PinCapability {
+            functions: vec![],
+            ..well_formed_capability()
+        };
+        assert_eq!(
+            c.validate(),
+            Err(DomainError::Inconsistent(
+                "pin capability must declare at least one assignable function"
+            ))
+        );
+    }
+
+    fn well_formed_assignment() -> PinAssignment {
+        PinAssignment {
+            id: EntityId(11),
+            pin: EntityId(20),
+            function: "SPI1_MOSI".into(),
+        }
+    }
+
+    #[test]
+    fn well_formed_assignment_validates() {
+        assert!(well_formed_assignment().validate().is_ok());
+    }
+
+    #[test]
+    fn assignment_rejects_null_pin() {
+        let a = PinAssignment {
+            pin: EntityId::NULL,
+            ..well_formed_assignment()
+        };
+        assert_eq!(
+            a.validate(),
+            Err(DomainError::Inconsistent("pin assignment must name a pin"))
+        );
+    }
+
+    #[test]
+    fn assignment_rejects_blank_function() {
+        let a = PinAssignment {
+            function: "   ".into(),
+            ..well_formed_assignment()
+        };
+        assert_eq!(
+            a.validate(),
+            Err(DomainError::EmptyField("pin assignment function"))
+        );
+    }
+
+    // ========== Band B (inc 5): Signal ==========
+
+    fn well_formed_signal() -> Signal {
+        Signal {
+            id: EntityId(12),
+            name: "SYS_CLK".into(),
+            source: EntityId(30),
+            sinks: vec![EntityId(31), EntityId(32)],
+            semantics: "system clock".into(),
+        }
+    }
+
+    #[test]
+    fn well_formed_signal_validates() {
+        assert!(well_formed_signal().validate().is_ok());
+    }
+
+    #[test]
+    fn signal_rejects_blank_name() {
+        let s = Signal {
+            name: "   ".into(),
+            ..well_formed_signal()
+        };
+        assert_eq!(s.validate(), Err(DomainError::EmptyField("signal name")));
+    }
+
+    #[test]
+    fn signal_rejects_blank_semantics() {
+        let s = Signal {
+            semantics: "   ".into(),
+            ..well_formed_signal()
+        };
+        assert_eq!(
+            s.validate(),
+            Err(DomainError::EmptyField("signal semantics"))
+        );
+    }
+
+    #[test]
+    fn signal_rejects_null_source() {
+        let s = Signal {
+            source: EntityId::NULL,
+            ..well_formed_signal()
+        };
+        assert_eq!(
+            s.validate(),
+            Err(DomainError::Inconsistent("signal must have a source pin"))
+        );
+    }
+
+    #[test]
+    fn signal_rejects_no_sinks() {
+        let s = Signal {
+            sinks: vec![],
+            ..well_formed_signal()
+        };
+        assert_eq!(
+            s.validate(),
+            Err(DomainError::Inconsistent(
+                "signal must drive at least one sink pin"
+            ))
+        );
+    }
+
+    #[test]
+    fn signal_rejects_self_drive() {
+        let s = Signal {
+            sinks: vec![EntityId(30)],
+            ..well_formed_signal()
+        };
+        assert_eq!(
+            s.validate(),
+            Err(DomainError::Inconsistent(
+                "signal cannot drive itself (source is also a sink)"
+            ))
+        );
+    }
+
+    // ========== Band B (inc 6): Contract / Interface ==========
+
+    fn well_formed_contract() -> Contract {
+        Contract {
+            id: EntityId(100),
+            protocol: "I2C".into(),
+            name: "I2C Bus 1".into(),
+            constraints: vec!["unique addresses".into(), "pull-ups required".into()],
+        }
+    }
+
+    #[test]
+    fn well_formed_contract_validates() {
+        assert!(well_formed_contract().validate().is_ok());
+    }
+
+    #[test]
+    fn contract_rejects_blank_protocol() {
+        let c = Contract {
+            protocol: "   ".into(),
+            ..well_formed_contract()
+        };
+        assert_eq!(
+            c.validate(),
+            Err(DomainError::EmptyField("contract protocol"))
+        );
+    }
+
+    #[test]
+    fn contract_rejects_blank_name() {
+        let c = Contract {
+            name: "   ".into(),
+            ..well_formed_contract()
+        };
+        assert_eq!(c.validate(), Err(DomainError::EmptyField("contract name")));
+    }
+
+    fn well_formed_interface() -> Interface {
+        Interface {
+            id: EntityId(101),
+            name: "I2C1".into(),
+            signals: vec![EntityId(200), EntityId(201)],
+            contract: EntityId(100),
+        }
+    }
+
+    #[test]
+    fn well_formed_interface_validates() {
+        assert!(well_formed_interface().validate().is_ok());
+    }
+
+    #[test]
+    fn interface_rejects_blank_name() {
+        let i = Interface {
+            name: "   ".into(),
+            ..well_formed_interface()
+        };
+        assert_eq!(i.validate(), Err(DomainError::EmptyField("interface name")));
+    }
+
+    #[test]
+    fn interface_rejects_null_contract() {
+        let i = Interface {
+            contract: EntityId::NULL,
+            ..well_formed_interface()
+        };
+        assert_eq!(
+            i.validate(),
+            Err(DomainError::Inconsistent("interface must name a contract"))
+        );
+    }
+
+    // ========== Band B (inc 7): Bus / Protocol ==========
+
+    fn well_formed_bus() -> Bus {
+        Bus {
+            id: EntityId(200),
+            name: "I2C_BUS_1".into(),
+            contract: EntityId(100),
+            members: vec![EntityId(101), EntityId(102)],
+            topology: BusTopology::MultiDrop,
+        }
+    }
+
+    #[test]
+    fn well_formed_bus_validates() {
+        assert!(well_formed_bus().validate().is_ok());
+    }
+
+    #[test]
+    fn bus_rejects_blank_name() {
+        let b = Bus {
+            name: "   ".into(),
+            ..well_formed_bus()
+        };
+        assert_eq!(b.validate(), Err(DomainError::EmptyField("bus name")));
+    }
+
+    #[test]
+    fn bus_rejects_null_contract() {
+        let b = Bus {
+            contract: EntityId::NULL,
+            ..well_formed_bus()
+        };
+        assert_eq!(
+            b.validate(),
+            Err(DomainError::Inconsistent("bus must name a contract"))
+        );
+    }
+
+    #[test]
+    fn bus_rejects_no_members() {
+        let b = Bus {
+            members: vec![],
+            ..well_formed_bus()
+        };
+        assert_eq!(
+            b.validate(),
+            Err(DomainError::Inconsistent(
+                "bus must contain at least one member interface or signal"
+            ))
+        );
+    }
+
+    #[test]
+    fn bus_topology_from_str_parses_known_variants() {
+        assert!(matches!(
+            "linear".parse::<BusTopology>().unwrap(),
+            BusTopology::Linear
+        ));
+        assert!(matches!(
+            "daisy-chain".parse::<BusTopology>().unwrap(),
+            BusTopology::Linear
+        ));
+        assert!(matches!(
+            "star".parse::<BusTopology>().unwrap(),
+            BusTopology::Star
+        ));
+        assert!(matches!(
+            "hub".parse::<BusTopology>().unwrap(),
+            BusTopology::Star
+        ));
+        assert!(matches!(
+            "multi-drop".parse::<BusTopology>().unwrap(),
+            BusTopology::MultiDrop
+        ));
+        assert!(matches!(
+            "i2c".parse::<BusTopology>().unwrap(),
+            BusTopology::MultiDrop
+        ));
+        assert!(matches!(
+            "point-to-point".parse::<BusTopology>().unwrap(),
+            BusTopology::PointToPoint
+        ));
+    }
+
+    #[test]
+    fn bus_topology_from_str_unknown_becomes_other() {
+        let t = "custom-bus".parse::<BusTopology>().unwrap();
+        assert!(matches!(t, BusTopology::Other(s) if s == "custom-bus"));
+    }
+
+    #[test]
+    fn bus_topology_roundtrips_through_string() {
+        for t in [
+            BusTopology::Linear,
+            BusTopology::Star,
+            BusTopology::MultiDrop,
+            BusTopology::PointToPoint,
+        ] {
+            let s = t.as_str();
+            let parsed = s.parse::<BusTopology>().unwrap();
+            assert_eq!(t, parsed);
+        }
+    }
+
+    // ========== Band B (inc 8): Subsystem ==========
+
+    fn well_formed_subsystem() -> Subsystem {
+        Subsystem {
+            id: EntityId(200),
+            name: "MCU_SUBSYSTEM".into(),
+            blocks: vec![EntityId(10), EntityId(11)],
+            interfaces: vec![EntityId(30), EntityId(31)],
+            boundary: "MCU + peripherals".into(),
+        }
+    }
+
+    #[test]
+    fn well_formed_subsystem_validates() {
+        assert!(well_formed_subsystem().validate().is_ok());
+    }
+
+    #[test]
+    fn subsystem_rejects_blank_name() {
+        let s = Subsystem {
+            name: "   ".into(),
+            ..well_formed_subsystem()
+        };
+        assert_eq!(s.validate(), Err(DomainError::EmptyField("subsystem name")));
+    }
+
+    #[test]
+    fn subsystem_rejects_no_blocks() {
+        let s = Subsystem {
+            blocks: vec![],
+            ..well_formed_subsystem()
+        };
+        assert_eq!(
+            s.validate(),
+            Err(DomainError::Inconsistent(
+                "subsystem must contain at least one block"
+            ))
+        );
+    }
+
+    #[test]
+    fn subsystem_rejects_no_interfaces() {
+        let s = Subsystem {
+            interfaces: vec![],
+            ..well_formed_subsystem()
+        };
+        assert_eq!(
+            s.validate(),
+            Err(DomainError::Inconsistent(
+                "subsystem must expose at least one interface"
+            ))
+        );
+    }
+
+    #[test]
+    fn subsystem_rejects_blank_boundary() {
+        let s = Subsystem {
+            boundary: "   ".into(),
+            ..well_formed_subsystem()
+        };
+        assert_eq!(
+            s.validate(),
+            Err(DomainError::EmptyField("subsystem boundary"))
+        );
     }
 }

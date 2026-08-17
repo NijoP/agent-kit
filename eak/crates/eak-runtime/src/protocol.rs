@@ -5,9 +5,10 @@
 //! via a [`CapabilityRequest`] (P2). Agents never touch state or a model directly.
 
 use eak_domain::{
-    Assumption, Board, BomLineItem, Component, Constraint, Decision, DesignIntent, Discharge,
-    EntityId, Evidence, FunctionalBlock, Net, Objective, Part, Pin, Placement, PowerDomain,
-    ProvenanceLink, Requirement, Risk, Track, Tradeoff, Violation, Waiver,
+    Assumption, Board, BomLineItem, Bus, ClockDomain, Component, Constraint, Contract, Decision,
+    DesignIntent, Discharge, EntityId, Evidence, FunctionalBlock, Interface, Net, Objective, Part,
+    Pin, PinAssignment, PinCapability, Placement, PowerDomain, ProvenanceLink, Requirement,
+    ReturnPath, Risk, Signal, Subsystem, Track, Tradeoff, Violation, Waiver,
 };
 use eak_ports::{Event, ReasoningError, ReasoningRequest, ReasoningResponse, Seq, StoreError};
 
@@ -177,6 +178,96 @@ pub enum CapabilityRequest {
         domain: PowerDomain,
         links: Vec<ProvenanceLink>,
     },
+    /// Commit a first-class [`ClockDomain`] (a named clock region) with its provenance links (Band B,
+    /// increment 2; Map 21). The runtime re-validates the domain (non-empty name, positive finite
+    /// frequency, >=1 member net), checks its `source_component` resolves to a committed component,
+    /// and checks every member net resolves to a committed net before committing (P3). A well-formed
+    /// domain whose membership crosses another domain IS accepted — the ClockDomainMembershipRule at
+    /// ERC time reports the conflict as a design finding, so the domain must be able to enter state.
+    CreateClockDomain {
+        domain: ClockDomain,
+        links: Vec<ProvenanceLink>,
+    },
+    /// Commit a first-class [`ReturnPath`] (the declared return conductor for a controlled net) with
+    /// its provenance links (Band B, increment 3; Map 20). The runtime re-validates the path
+    /// (non-empty name, non-null net, non-null reference plane, net != reference plane), checks
+    /// `net` and `reference_plane` both resolve to committed nets before committing (P3). A
+    /// well-formed path whose controlled net also declares an impedance target IS accepted — the
+    /// ReturnPathRule at ERC time reports an under-specified return architecture as a design finding,
+    /// so the path must be able to enter state.
+    CreateReturnPath {
+        path: ReturnPath,
+        links: Vec<ProvenanceLink>,
+    },
+    /// Commit a first-class [`PinCapability`] (a pin's datasheet truth — its mux functions) with its
+    /// provenance links (Band B, increment 4; Map 22). The runtime re-validates the capability
+    /// (non-null pin, non-empty functions) and checks its `pin` resolves to a committed pin before
+    /// committing (P3).
+    CreatePinCapability {
+        capability: PinCapability,
+        links: Vec<ProvenanceLink>,
+    },
+    /// Commit a first-class [`PinAssignment`] (the design's chosen mux function for a pin) with its
+    /// provenance links (Band B, increment 4; Map 22). The runtime re-validates the assignment
+    /// (non-null pin, non-empty function) and checks its `pin` resolves to a committed pin before
+    /// committing (P3). A well-formed assignment that ignores its pin's capability or conflicts with
+    /// another on the same pin IS accepted — the PinCapabilityRule / PinMuxConflictRule at ERC time
+    /// report those as design findings, so the assignment must be able to enter state (§31).
+    CreatePinAssignment {
+        assignment: PinAssignment,
+        links: Vec<ProvenanceLink>,
+    },
+    /// Commit a first-class [`Signal`] (a named, directional logical signal flow) with its
+    /// provenance links (Band B, increment 5; Map 16). The runtime re-validates the signal
+    /// (non-empty name, non-empty semantics, non-null source, ≥1 sink, source not among sinks) and
+    /// checks its `source` and every `sink` resolve to committed pins before committing (P3). A
+    /// well-formed signal with an *illegal* driver/sink pairing (an input source, an output sink)
+    /// IS accepted — the SignalDriverSinkRule at ERC time reports the legality as a design finding,
+    /// so the signal must be able to enter state (circuit-theory.md L134/L152).
+    CreateSignal {
+        signal: Signal,
+        links: Vec<ProvenanceLink>,
+    },
+    /// Commit a first-class [`Contract`] (a protocol rule-set, e.g. "I²C", "SPI") with its
+    /// provenance links (Band B, increment 6). The runtime re-validates the contract (non-empty
+    /// protocol, non-empty name) before committing.
+    CreateContract {
+        contract: Contract,
+        links: Vec<ProvenanceLink>,
+    },
+    /// Commit a first-class [`Interface`] (a named collection of signals governed by a contract) with
+    /// its provenance links (Band B, increment 6). The runtime re-validates the interface
+    /// (non-empty name, ≥1 signal, non-null contract) and checks its `contract` and every
+    /// `signal` resolve to committed objects before committing (P3). A well-formed interface that
+    /// *violates* its contract (wrong signals, missing required signals) IS accepted — the
+    /// InterfaceContractRule at ERC time reports the violation as a design finding, so the
+    /// interface must be able to enter state.
+    CreateInterface {
+        interface: Interface,
+        links: Vec<ProvenanceLink>,
+    },
+    /// Commit a first-class [`Bus`] (a collection of interfaces sharing a physical bus line under
+    /// one protocol contract, with a declared topology) with its provenance links (Band B,
+    /// increment 7; Map 17). The runtime re-validates the bus (non-empty name, non-null contract,
+    /// ≥1 member) and checks its `contract` and every `member` resolve to committed objects before
+    /// committing (P3). A well-formed bus with a *violating* topology (duplicate addresses, missing
+    /// termination) IS accepted — the BusTopologyRule at ERC time reports the violation as a
+    /// design finding, so the bus must be able to enter state.
+    CreateBus {
+        bus: Bus,
+        links: Vec<ProvenanceLink>,
+    },
+    /// Commit a first-class [`Subsystem`] (a hierarchical grouping of blocks exposing interfaces
+    /// as its boundary) with its provenance links (Band B, increment 8; Map 14). The runtime
+    /// re-validates the subsystem (non-empty name, ≥1 block, ≥1 interface, non-empty boundary)
+    /// and checks its `blocks` and `interfaces` resolve to committed objects before committing
+    /// (P3). A well-formed subsystem with an *incomplete* boundary (missing cross-boundary pins)
+    /// IS accepted — the SubsystemBoundaryRule at ERC time reports the violation as a design
+    /// finding, so the subsystem must be able to enter state.
+    CreateSubsystem {
+        subsystem: Subsystem,
+        links: Vec<ProvenanceLink>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -247,6 +338,42 @@ pub trait AgentContext {
     /// Owned clones, like every other reader. The ERC phase reads these to run the
     /// [`PowerBalanceRule`](eak_engines::PowerBalanceRule).
     fn power_domains(&self) -> Vec<PowerDomain>;
+    /// Band B (increment 2): read the committed clock domains (the clock architecture; Map 21).
+    /// Owned clones, like every other reader. The ERC phase reads these to run the
+    /// [`ClockDomainMembershipRule`](eak_engines::ClockDomainMembershipRule).
+    fn clock_domains(&self) -> Vec<ClockDomain>;
+    /// Band B (increment 3): read the committed return paths (the return architecture; Map 20).
+    /// Owned clones, like every other reader. The ERC phase reads these to run the
+    /// [`ReturnPathRule`](eak_engines::ReturnPathRule).
+    fn return_paths(&self) -> Vec<ReturnPath>;
+    /// Band B (increment 4): read the committed pin capabilities (the pin-function architecture;
+    /// Map 22). Owned clones, like every other reader. The ERC phase reads these to run the
+    /// [`PinCapabilityRule`](eak_engines::PinCapabilityRule).
+    fn pin_capabilities(&self) -> Vec<PinCapability>;
+    /// Band B (increment 4): read the committed pin assignments (the pin-function architecture;
+    /// Map 22). Owned clones, like every other reader. The ERC phase reads these to run the
+    /// [`PinMuxConflictRule`](eak_engines::PinMuxConflictRule).
+    fn pin_assignments(&self) -> Vec<PinAssignment>;
+    /// Band B (increment 5): read the committed signals (the signal flow architecture; Map 16).
+    /// Owned clones, like every other reader. The ERC phase reads these to run the
+    /// [`SignalDriverSinkRule`](eak_engines::SignalDriverSinkRule).
+    fn signals(&self) -> Vec<Signal>;
+    /// Band B (increment 6): read the committed contracts (the interface / contract architecture).
+    /// Owned clones, like every other reader. The ERC phase reads these to run the
+    /// [`InterfaceContractRule`](eak_engines::InterfaceContractRule).
+    fn contracts(&self) -> Vec<Contract>;
+    /// Band B (increment 6): read the committed interfaces (the interface / contract architecture).
+    /// Owned clones, like every other reader. The ERC phase reads these to run the
+    /// [`InterfaceContractRule`](eak_engines::InterfaceContractRule).
+    fn interfaces(&self) -> Vec<Interface>;
+    /// Band B (increment 7): read the committed buses (the bus / protocol architecture; Map 17).
+    /// Owned clones, like every other reader. The ERC phase reads these to run the
+    /// [`BusTopologyRule`](eak_engines::BusTopologyRule).
+    fn buses(&self) -> Vec<Bus>;
+    /// Band B (increment 8): read the committed subsystems (the subsystem architecture; Map 14).
+    /// Owned clones, like every other reader. The ERC phase reads these to run the
+    /// [`SubsystemBoundaryRule`](eak_engines::SubsystemBoundaryRule).
+    fn subsystems(&self) -> Vec<Subsystem>;
     /// Call the reasoning engine, record the call (returning its event [`Seq`]), and
     /// return the judgement. Recording here is what makes replay deterministic (P4).
     fn reason(&mut self, req: ReasoningRequest)

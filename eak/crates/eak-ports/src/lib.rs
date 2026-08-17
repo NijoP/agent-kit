@@ -10,10 +10,11 @@
 //! the "a contract lives with the ring that needs it" rule they belong to the kernel.
 
 use eak_domain::{
-    Assumption, Board, BomLineItem, Component, Constraint, Decision, DesignIntent, Discharge,
-    Evidence, FunctionalBlock, ModelFidelity, Net, Objective, Part, Pin, Placement, PowerDomain,
-    Priority, ProvenanceLink, Requirement, RequirementCategory, Risk, Track, Tradeoff, Violation,
-    Waiver,
+    Assumption, Board, BomLineItem, Bus, ClockDomain, Component, Constraint, Contract, Decision,
+    DesignIntent, Discharge, Evidence, FunctionalBlock, Interface, ModelFidelity, Net, Objective,
+    Part, Pin, PinAssignment, PinCapability, Placement, PowerDomain, Priority, ProvenanceLink,
+    Requirement, RequirementCategory, ReturnPath, Risk, Signal, Subsystem, Track, Tradeoff,
+    Violation, Waiver,
 };
 use eak_units::PhysicalQuantity;
 use serde::{Deserialize, Serialize};
@@ -264,6 +265,77 @@ pub enum Event {
     /// rule can say so).
     PowerDomainCommitted {
         domain: PowerDomain,
+    },
+    // ---- Band B (Phase 5, increment 2): clock architecture — state delta (Map 21) ----
+    /// A first-class [`ClockDomain`] (a named clock region) was committed (Band B). A state delta:
+    /// the fold pushes the domain into `EngineeringState::clock_domains`. The domain names the
+    /// [`Net`]s synchronous to a `frequency` sourced by a component; whether a net belongs to two
+    /// domains is the [`ClockDomainMembershipRule`]'s judgement at ERC time, not this commit's (a
+    /// well-formed domain must enter state so the rule can reason over the crossing).
+    ClockDomainCommitted {
+        domain: ClockDomain,
+    },
+    // ---- Band B (Phase 5, increment 3): return-path architecture — state delta (Map 20) ----
+    /// A first-class [`ReturnPath`] (the declared return conductor for a controlled net) was
+    /// committed (Band B). A state delta: the fold pushes the path into
+    /// `EngineeringState::return_paths`. The path names the reference net a controlled net's return
+    /// current flows on; whether the controlled net is under-specified (declares an impedance but no
+    /// return) is the [`ReturnPathRule`]'s judgement at ERC time, not this commit's — a well-formed
+    /// path must enter state so the rule can reason over the return architecture.
+    ReturnPathCommitted {
+        path: ReturnPath,
+    },
+    /// A [`PinCapability`] was committed (Band B inc 4): a physical pin's datasheet truth — the set
+    /// of mux functions it can carry. Owned, never fabricated (P7). The capability's link to a real
+    /// pin was re-checked at the seam; whether an *assignment* honors it is the
+    /// [`PinCapabilityRule`]'s judgement at ERC time.
+    PinCapabilityCommitted {
+        capability: PinCapability,
+    },
+    /// A [`PinAssignment`] was committed (Band B inc 4): the mux function the design assigns to a
+    /// physical pin. The pin link was re-checked at the seam; whether the assignment conflicts with
+    /// another on the same pin (`erc-pin-mux-conflict`) or honors the pin's capability
+    /// (`erc-pin-capability`) is the rules' judgement at ERC time — a well-formed assignment must
+    /// enter state so the conflicts are *reported*, not silently swallowed (master-prompt §31).
+    PinAssignmentCommitted {
+        assignment: PinAssignment,
+    },
+    /// A [`Signal`] was committed (Band B inc 5): a named, *directional* logical signal flow
+    /// (source → sinks) with a meaning — the schematic's logical layer above the undirected copper
+    /// of a [`Net`] (Map 16). The source and every sink were re-checked at the seam to be committed
+    /// pins; whether the flow is *legal* (an output/bidirectional source, every sink
+    /// input/bidirectional) is the [`SignalDriverSinkRule`]'s judgement at ERC time.
+    SignalCommitted {
+        signal: Signal,
+    },
+    /// A [`Contract`] was committed (Band B inc 6): a protocol rule-set (e.g. "I²C", "SPI") that
+    /// governs an interface. The protocol name is open-ended (String) — an enum would fabricate a
+    /// closed world (P7).
+    ContractCommitted {
+        contract: Contract,
+    },
+    /// An [`Interface`] was committed (Band B inc 6): a named collection of signals governed by a
+    /// contract. The signals and contract were re-checked at the seam to be committed; whether the
+    /// interface satisfies the contract (correct signals, directions, protocol rules) is the
+    /// [`InterfaceContractRule`]'s judgement at ERC time.
+    InterfaceCommitted {
+        interface: Interface,
+    },
+    /// A [`Bus`] was committed (Band B inc 7): a collection of interfaces (or signals) sharing a
+    /// physical bus line under one protocol contract, with a declared topology. The contract and
+    /// all members were re-checked at the seam to be committed; whether the bus's topology
+    /// satisfies the protocol's structural rules (unique addresses, termination, fan-out) is the
+    /// [`BusTopologyRule`]'s judgement at ERC time.
+    BusCommitted {
+        bus: Bus,
+    },
+    /// A [`Subsystem`] was committed (Band B inc 8): a hierarchical grouping of blocks exposing
+    /// interfaces as its boundary — the unit of reuse and reasoning at scale (Map 14). The blocks
+    /// and interfaces were re-checked at the seam to be committed; whether the subsystem's
+    /// boundary is *complete* (every cross-boundary pin is exposed) is the
+    /// [`SubsystemBoundaryRule`]'s judgement at ERC time.
+    SubsystemCommitted {
+        subsystem: Subsystem,
     },
 }
 
@@ -594,6 +666,188 @@ mod tests {
                 source_component: EntityId(4),
                 max_current: PhysicalQuantity::new(1.0, Unit::Ampere),
                 nets: vec![EntityId(31), EntityId(32)],
+            },
+        };
+        let s = serde_json::to_string(&ev).unwrap();
+        let back: Event = serde_json::from_str(&s).unwrap();
+        assert_eq!(ev, back);
+    }
+
+    // ===================== Band B (increment 2): ClockDomain event =====================
+    //
+    // TDD: every new state-delta Event variant carries a serde round-trip test so its on-disk
+    // form is pinned and replay-from-log is byte-stable (P4).
+
+    #[test]
+    fn clock_domain_committed_event_roundtrips_through_json() {
+        use eak_domain::{ClockDomain, EntityId};
+        use eak_units::{PhysicalQuantity, Unit};
+        let ev = Event::ClockDomainCommitted {
+            domain: ClockDomain {
+                id: EntityId(40),
+                name: "SYS".into(),
+                frequency: PhysicalQuantity::new(48.0, Unit::Megahertz),
+                source_component: EntityId(4),
+                members: vec![EntityId(41), EntityId(42)],
+            },
+        };
+        let s = serde_json::to_string(&ev).unwrap();
+        let back: Event = serde_json::from_str(&s).unwrap();
+        assert_eq!(ev, back);
+    }
+
+    // ===================== Band B (increment 3): ReturnPath event =====================
+    //
+    // TDD: every new state-delta Event variant carries a serde round-trip test so its on-disk
+    // form is pinned and replay-from-log is byte-stable (P4).
+
+    #[test]
+    fn return_path_committed_event_roundtrips_through_json() {
+        use eak_domain::{EntityId, ReturnPath};
+        let ev = Event::ReturnPathCommitted {
+            path: ReturnPath {
+                id: EntityId(50),
+                name: "SYS_CLK ret on GND".into(),
+                net: EntityId(41),
+                reference_plane: EntityId(60),
+            },
+        };
+        let s = serde_json::to_string(&ev).unwrap();
+        let back: Event = serde_json::from_str(&s).unwrap();
+        assert_eq!(ev, back);
+    }
+
+    // ===================== Band B (increment 4): Pin-Function / Mux events =====================
+    //
+    // TDD: every new state-delta Event variant carries a serde round-trip test so its on-disk
+    // form is pinned and replay-from-log is byte-stable (P4).
+
+    #[test]
+    fn pin_capability_committed_event_roundtrips_through_json() {
+        use eak_domain::{EntityId, PinCapability};
+        let ev = Event::PinCapabilityCommitted {
+            capability: PinCapability {
+                id: EntityId(70),
+                pin: EntityId(71),
+                functions: vec!["SPI1_MOSI".into(), "UART1_TX".into()],
+            },
+        };
+        let s = serde_json::to_string(&ev).unwrap();
+        let back: Event = serde_json::from_str(&s).unwrap();
+        assert_eq!(ev, back);
+    }
+
+    #[test]
+    fn pin_assignment_committed_event_roundtrips_through_json() {
+        use eak_domain::{EntityId, PinAssignment};
+        let ev = Event::PinAssignmentCommitted {
+            assignment: PinAssignment {
+                id: EntityId(72),
+                pin: EntityId(71),
+                function: "SPI1_MOSI".into(),
+            },
+        };
+        let s = serde_json::to_string(&ev).unwrap();
+        let back: Event = serde_json::from_str(&s).unwrap();
+        assert_eq!(ev, back);
+    }
+
+    // ===================== Band B (increment 5): Signal event =====================
+    //
+    // TDD: every new state-delta Event variant carries a serde round-trip test so its on-disk
+    // form is pinned and replay-from-log is byte-stable (P4).
+
+    #[test]
+    fn signal_committed_event_roundtrips_through_json() {
+        use eak_domain::{EntityId, Signal};
+        let ev = Event::SignalCommitted {
+            signal: Signal {
+                id: EntityId(80),
+                name: "SYS_CLK".into(),
+                source: EntityId(81),
+                sinks: vec![EntityId(82), EntityId(83)],
+                semantics: "system clock".into(),
+            },
+        };
+        let s = serde_json::to_string(&ev).unwrap();
+        let back: Event = serde_json::from_str(&s).unwrap();
+        assert_eq!(ev, back);
+    }
+
+    // ===================== Band B (increment 6): Interface / Contract events =====================
+    //
+    // TDD: every new state-delta Event variant carries a serde round-trip test so its on-disk
+    // form is pinned and replay-from-log is byte-stable (P4).
+
+    #[test]
+    fn contract_committed_event_roundtrips_through_json() {
+        use eak_domain::{Contract, EntityId};
+        let ev = Event::ContractCommitted {
+            contract: Contract {
+                id: EntityId(90),
+                protocol: "I2C".into(),
+                name: "I2C Bus 1".into(),
+                constraints: vec!["unique addresses".into()],
+            },
+        };
+        let s = serde_json::to_string(&ev).unwrap();
+        let back: Event = serde_json::from_str(&s).unwrap();
+        assert_eq!(ev, back);
+    }
+
+    #[test]
+    fn interface_committed_event_roundtrips_through_json() {
+        use eak_domain::{EntityId, Interface};
+        let ev = Event::InterfaceCommitted {
+            interface: Interface {
+                id: EntityId(91),
+                name: "I2C1".into(),
+                signals: vec![EntityId(92), EntityId(93)],
+                contract: EntityId(90),
+            },
+        };
+        let s = serde_json::to_string(&ev).unwrap();
+        let back: Event = serde_json::from_str(&s).unwrap();
+        assert_eq!(ev, back);
+    }
+
+    // ===================== Band B (increment 7): Bus event =====================
+    //
+    // TDD: every new state-delta Event variant carries a serde round-trip test so its on-disk
+    // form is pinned and replay-from-log is byte-stable (P4).
+
+    #[test]
+    fn bus_committed_event_roundtrips_through_json() {
+        use eak_domain::{Bus, BusTopology, EntityId};
+        let ev = Event::BusCommitted {
+            bus: Bus {
+                id: EntityId(110),
+                name: "I2C_BUS_1".into(),
+                contract: EntityId(100),
+                members: vec![EntityId(101), EntityId(102)],
+                topology: BusTopology::MultiDrop,
+            },
+        };
+        let s = serde_json::to_string(&ev).unwrap();
+        let back: Event = serde_json::from_str(&s).unwrap();
+        assert_eq!(ev, back);
+    }
+
+    // ===================== Band B (increment 8): Subsystem event =====================
+    //
+    // TDD: every new state-delta Event variant carries a serde round-trip test so its on-disk
+    // form is pinned and replay-from-log is byte-stable (P4).
+
+    #[test]
+    fn subsystem_committed_event_roundtrips_through_json() {
+        use eak_domain::{EntityId, Subsystem};
+        let ev = Event::SubsystemCommitted {
+            subsystem: Subsystem {
+                id: EntityId(120),
+                name: "MCU_SUBSYSTEM".into(),
+                blocks: vec![EntityId(121), EntityId(122)],
+                interfaces: vec![EntityId(123), EntityId(124)],
+                boundary: "MCU + peripherals".into(),
             },
         };
         let s = serde_json::to_string(&ev).unwrap();

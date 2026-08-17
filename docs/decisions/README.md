@@ -39,6 +39,14 @@ Phase 1 (implementation start) records the technology and scoping decisions Phas
 | [0020](0020-band-a-risk.md) | `Risk`: an auditable risk posture the human owns (tracked truth) | Accepted |
 | [0021](0021-band-a-tradeoff.md) | `Objective`/`Tradeoff`: the weighed-and-rejected space, preserved | Accepted |
 | [0022](0022-band-b-power-domain.md) | `PowerDomain`: the power architecture as a verifiable, traceable rail | Accepted |
+| [0023](0023-band-b-clock-domain.md) | `ClockDomain`: the clock architecture as a verifiable, traceable clock region | Accepted |
+| [0024](0024-band-b-return-path.md) | `ReturnPath`: the return half of the signal loop, named and verified | Accepted |
+| [0025](0025-band-b-pin-function-mux.md) | `PinCapability` + `PinAssignment`: a pin's datasheet truth, separated from the design's chosen function | Accepted |
+| [0026](0026-band-b-signal-flow.md) | `Signal`: the logical electrical meaning above raw connectivity | Accepted |
+| [0027](0027-band-b-interface-contract.md) | `Contract` + `Interface`: a protocol rule-set and its governed signal collection | Accepted |
+| [0028](0028-band-b-bus-protocol.md) | `Bus`: a collection of interfaces sharing a physical bus line under one protocol contract, with a declared topology | Accepted |
+| [0029](0029-band-b-subsystem.md) | `Subsystem`: the unit of reuse and reasoning at scale | Accepted |
+| [0030](0030-band-b-logical-electrical-ir.md) | `LogicalElectricalIr`: the logical electrical architecture as a first-class IR between Engineering IR and Schematic IR | Accepted |
 
 ## The ADR lifecycle
 

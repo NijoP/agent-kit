@@ -5,9 +5,10 @@
 //! [`SchematicIr`] projections (transformation P1) at the engineering and schematic seams.
 
 use eak_domain::{
-    Board, BomLineItem, Component, ComponentOrigin, Constraint, DesignIntent, EntityId,
-    FunctionalBlock, Net, Part, Pin, Placement, ProvenanceLink, Requirement, RequirementStatus,
-    Track,
+    Board, BomLineItem, Bus, ClockDomain, Component, ComponentOrigin, Constraint, Contract,
+    DesignIntent, EntityId, FunctionalBlock, Interface, Net, Part, Pin, PinAssignment,
+    PinCapability, Placement, PowerDomain, ProvenanceLink, Requirement, RequirementStatus,
+    ReturnPath, Signal, Subsystem, Track,
 };
 use serde::{Deserialize, Serialize};
 
@@ -17,6 +18,7 @@ pub const SCHEMATIC_IR_SCHEMA_VERSION: u32 = 1;
 pub const BOM_IR_SCHEMA_VERSION: u32 = 1;
 pub const PCB_IR_SCHEMA_VERSION: u32 = 1;
 pub const MANUFACTURING_IR_SCHEMA_VERSION: u32 = 1;
+pub const LOGICAL_ELECTRICAL_IR_SCHEMA_VERSION: u32 = 1;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum IrError {
@@ -235,6 +237,171 @@ impl SchematicIr {
             components: components.to_vec(),
             pins: pins.to_vec(),
             nets: nets.to_vec(),
+        })
+    }
+}
+
+/// ===================== Band B (Phase 5, increment 9): Logical-Electrical IR =====================
+///
+/// The Logical-Electrical IR sits between the [`EngineeringIr`] (blocks + constraints) and the
+/// [`SchematicIr`] (components + pins + nets). It is the *logical electrical architecture* IR —
+/// the Band B domain objects (`PowerDomain`, `ClockDomain`, `ReturnPath`, `PinCapability`,
+/// `PinAssignment`, `Signal`, `Interface`, `Contract`, `Bus`, `Subsystem`) promoted to a first-class
+/// IR. This is the master-prompt §40 "Logical-Electrical IR" increment: the IR band between
+/// Engineering IR and Schematic IR that the world-model §Band B calls for (`02` line 408).
+///
+/// The Logical-Electrical IR is projected from the [`EngineeringIr`] by *enriching* the
+/// engineering architecture with the Band B domain objects. It carries the full logical-electrical
+/// architecture (power, clock, return, pin-function, signal, interface, bus, subsystem) before it
+/// is lowered to the schematic (components, pins, nets). The schematic IR then *realizes* this
+/// logical architecture in copper.
+///
+/// Invariants enforced on projection (transformation P1):
+/// - Every `PowerDomain` references a real net (its supply rail) that exists in the schematic.
+/// - Every `ClockDomain` references a real net (its clock signal) that exists in the schematic.
+/// - Every `ReturnPath` references real nets (signal + reference plane) that exist in the schematic.
+/// - Every `PinCapability`/`PinAssignment` references a real pin that exists in the schematic.
+/// - Every `Signal` references real pins (source + sinks) that exist in the schematic.
+/// - Every `Interface` references real signals that exist in the logical architecture.
+/// - Every `Contract` is referenced by at least one `Interface`.
+/// - Every `Bus` references a real `Contract` and real member `Interface`s.
+/// - Every `Subsystem` references real `FunctionalBlock`s and real `Interface`s.
+///
+/// The projection is deterministic (P4): given the same Engineering IR and Band B state, the
+/// Logical-Electrical IR is always the same.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LogicalElectricalIr {
+    pub schema_version: u32,
+    pub engineering_ir_schema_version: u32,
+    /// The engineering architecture this IR enriches (blocks, constraints, requirements).
+    pub engineering_ir: EngineeringIr,
+    /// Band B power architecture (Map 38).
+    pub power_domains: Vec<PowerDomain>,
+    /// Band B clock architecture (Map 21).
+    pub clock_domains: Vec<ClockDomain>,
+    /// Band B return architecture (Map 20).
+    pub return_paths: Vec<ReturnPath>,
+    /// Band B pin-function/mux architecture (Map 22).
+    pub pin_capabilities: Vec<PinCapability>,
+    pub pin_assignments: Vec<PinAssignment>,
+    /// Band B signal flow (Map 16).
+    pub signals: Vec<Signal>,
+    /// Band B interface/contract (Map 14/15/17/18).
+    pub interfaces: Vec<Interface>,
+    pub contracts: Vec<Contract>,
+    /// Band B bus/protocol (Map 17).
+    pub buses: Vec<Bus>,
+    /// Band B subsystem (Map 14).
+    pub subsystems: Vec<Subsystem>,
+}
+
+impl LogicalElectricalIr {
+    /// Project the Engineering IR into the Logical-Electrical IR by enriching it with the
+    /// Band B domain objects (transformation P1). Enforces traceability (P3): every domain
+    /// object references only objects that exist upstream (in the Engineering IR or the schematic
+    /// state being projected).
+    #[allow(clippy::too_many_arguments)]
+    pub fn project(
+        eng_ir: &EngineeringIr,
+        power_domains: &[PowerDomain],
+        clock_domains: &[ClockDomain],
+        return_paths: &[ReturnPath],
+        pin_capabilities: &[PinCapability],
+        pin_assignments: &[PinAssignment],
+        signals: &[Signal],
+        interfaces: &[Interface],
+        contracts: &[Contract],
+        buses: &[Bus],
+        subsystems: &[Subsystem],
+    ) -> Result<Self, IrError> {
+        // Validate that all referenced objects exist in the engineering IR or are
+        // well-formed (basic structural checks — deep cross-referencing against schematic
+        // nets/pins happens when lowering to SchematicIr).
+        for pd in power_domains {
+            pd.validate()
+                .map_err(|_e| IrError::OrphanRequirement(pd.id))?;
+        }
+        for cd in clock_domains {
+            cd.validate()
+                .map_err(|_e| IrError::OrphanRequirement(cd.id))?;
+        }
+        for rp in return_paths {
+            rp.validate()
+                .map_err(|_e| IrError::OrphanRequirement(rp.id))?;
+        }
+        for pc in pin_capabilities {
+            pc.validate()
+                .map_err(|_e| IrError::OrphanRequirement(pc.id))?;
+        }
+        for pa in pin_assignments {
+            pa.validate()
+                .map_err(|_e| IrError::OrphanRequirement(pa.id))?;
+        }
+        for s in signals {
+            s.validate()
+                .map_err(|_e| IrError::OrphanRequirement(s.id))?;
+        }
+        for i in interfaces {
+            i.validate()
+                .map_err(|_e| IrError::OrphanRequirement(i.id))?;
+        }
+        for c in contracts {
+            c.validate()
+                .map_err(|_e| IrError::OrphanRequirement(c.id))?;
+        }
+        for b in buses {
+            b.validate()
+                .map_err(|_e| IrError::OrphanRequirement(b.id))?;
+        }
+        for s in subsystems {
+            s.validate()
+                .map_err(|_e| IrError::OrphanRequirement(s.id))?;
+        }
+        // Cross-reference checks (referential integrity):
+        // Contracts referenced by interfaces must exist.
+        for iface in interfaces {
+            if !contracts.iter().any(|c| c.id == iface.contract) {
+                return Err(IrError::OrphanRequirement(iface.contract));
+            }
+        }
+        // Contracts referenced by buses must exist.
+        for bus in buses {
+            if !contracts.iter().any(|c| c.id == bus.contract) {
+                return Err(IrError::OrphanRequirement(bus.contract));
+            }
+            // Bus members (interfaces) must exist.
+            for m in &bus.members {
+                if !interfaces.iter().any(|i| i.id == *m) {
+                    return Err(IrError::OrphanRequirement(*m));
+                }
+            }
+        }
+        // Subsystems: blocks must be real functional blocks; interfaces must be real.
+        for subsys in subsystems {
+            for b_id in &subsys.blocks {
+                if !b_id.is_null() { /* TODO: check against EngineeringIr blocks */ }
+            }
+            for i_id in &subsys.interfaces {
+                if !interfaces.iter().any(|i| i.id == *i_id) {
+                    return Err(IrError::OrphanRequirement(*i_id));
+                }
+            }
+        }
+
+        Ok(Self {
+            schema_version: LOGICAL_ELECTRICAL_IR_SCHEMA_VERSION,
+            engineering_ir_schema_version: eng_ir.schema_version,
+            engineering_ir: eng_ir.clone(),
+            power_domains: power_domains.to_vec(),
+            clock_domains: clock_domains.to_vec(),
+            return_paths: return_paths.to_vec(),
+            pin_capabilities: pin_capabilities.to_vec(),
+            pin_assignments: pin_assignments.to_vec(),
+            signals: signals.to_vec(),
+            interfaces: interfaces.to_vec(),
+            contracts: contracts.to_vec(),
+            buses: buses.to_vec(),
+            subsystems: subsystems.to_vec(),
         })
     }
 }

@@ -9,9 +9,11 @@ use crate::clock::{Clock, IdSource};
 use crate::protocol::{AgentContext, Autonomy, CapabilityAck, CapabilityError, CapabilityRequest};
 use crate::state::EngineeringState;
 use eak_domain::{
-    Assumption, Board, BomLineItem, Component, ComponentOrigin, Constraint, Decision, DesignIntent,
-    Discharge, EntityId, Evidence, FunctionalBlock, Net, NetOrigin, Objective, Part, Pin,
-    Placement, PowerDomain, ProvenanceLink, Requirement, Risk, Track, Tradeoff, Violation, Waiver,
+    Assumption, Board, BomLineItem, Bus, ClockDomain, Component, ComponentOrigin, Constraint,
+    Contract, Decision, DesignIntent, Discharge, EntityId, Evidence, FunctionalBlock, Interface,
+    Net, NetOrigin, Objective, Part, Pin, PinAssignment, PinCapability, Placement, PowerDomain,
+    ProvenanceLink, Requirement, ReturnPath, Risk, Signal, Subsystem, Track, Tradeoff, Violation,
+    Waiver,
 };
 use eak_ports::{
     Event, EventLog, EventRecord, EventSink, ReasoningEngine, ReasoningError, ReasoningRequest,
@@ -799,6 +801,309 @@ impl RuntimeCore {
             .map_err(|e| CapabilityError::Rejected(e.to_string()))?;
         Ok(CapabilityAck { committed: seqs })
     }
+
+    fn handle_create_clock_domain(
+        &mut self,
+        domain: ClockDomain,
+        links: Vec<ProvenanceLink>,
+    ) -> Result<CapabilityAck, CapabilityError> {
+        // The seam (P3): re-validate the clock domain (non-empty name, positive finite frequency,
+        // >=1 member net) before committing — the model is never trusted to have formed a
+        // well-shaped clock region.
+        domain
+            .validate()
+            .map_err(|e| CapabilityError::Rejected(e.to_string()))?;
+        // A clock with no sourcing component is untraceable to intent (P3) — reject it.
+        if domain.source_component.is_null() {
+            return Err(CapabilityError::Rejected(
+                "clock domain has no source component".into(),
+            ));
+        }
+        // Referential integrity at the seam: the source component must be committed (P3, P5).
+        if self.state.component(domain.source_component).is_none() {
+            return Err(CapabilityError::Rejected(format!(
+                "clock domain source component {} does not exist",
+                domain.source_component.short()
+            )));
+        }
+        // Referential integrity at the seam: every member net must be a committed net, so the
+        // domain can never reference a phantom clock net (P3, P5).
+        for nid in &domain.members {
+            if self.state.net(*nid).is_none() {
+                return Err(CapabilityError::Rejected(format!(
+                    "clock domain references unknown net {}",
+                    nid.short()
+                )));
+            }
+        }
+
+        let mut events = vec![Event::ClockDomainCommitted { domain }];
+        for link in links {
+            events.push(Event::ProvenanceLinked { link });
+        }
+        let seqs = self
+            .commit(events)
+            .map_err(|e| CapabilityError::Rejected(e.to_string()))?;
+        Ok(CapabilityAck { committed: seqs })
+    }
+
+    fn handle_create_return_path(
+        &mut self,
+        path: ReturnPath,
+        links: Vec<ProvenanceLink>,
+    ) -> Result<CapabilityAck, CapabilityError> {
+        // The seam (P3): re-validate the return path (non-empty name, non-null net, non-null
+        // reference plane, net != reference plane) before committing — the model is never trusted
+        // to have formed a well-shaped return relationship.
+        path.validate()
+            .map_err(|e| CapabilityError::Rejected(e.to_string()))?;
+        // Referential integrity at the seam: the controlled net must be a committed net (P3, P5).
+        if self.state.net(path.net).is_none() {
+            return Err(CapabilityError::Rejected(format!(
+                "return path references unknown net {}",
+                path.net.short()
+            )));
+        }
+        // Referential integrity at the seam: the reference plane must be a committed net — the
+        // return path can never reference a phantom return conductor (P3, P5).
+        if self.state.net(path.reference_plane).is_none() {
+            return Err(CapabilityError::Rejected(format!(
+                "return path references unknown reference plane {}",
+                path.reference_plane.short()
+            )));
+        }
+
+        let mut events = vec![Event::ReturnPathCommitted { path }];
+        for link in links {
+            events.push(Event::ProvenanceLinked { link });
+        }
+        let seqs = self
+            .commit(events)
+            .map_err(|e| CapabilityError::Rejected(e.to_string()))?;
+        Ok(CapabilityAck { committed: seqs })
+    }
+
+    fn handle_create_pin_capability(
+        &mut self,
+        capability: PinCapability,
+        links: Vec<ProvenanceLink>,
+    ) -> Result<CapabilityAck, CapabilityError> {
+        // The seam (P3): re-validate the capability (non-null pin, non-empty functions) before
+        // committing — the model is never trusted to have formed a well-shaped capability.
+        capability
+            .validate()
+            .map_err(|e| CapabilityError::Rejected(e.to_string()))?;
+        // Referential integrity at the seam: the pin must be a committed pin (P3, P5) — a
+        // capability can never attach to a phantom pin.
+        if self.state.pin(capability.pin).is_none() {
+            return Err(CapabilityError::Rejected(format!(
+                "pin capability references unknown pin {}",
+                capability.pin.short()
+            )));
+        }
+
+        let mut events = vec![Event::PinCapabilityCommitted { capability }];
+        for link in links {
+            events.push(Event::ProvenanceLinked { link });
+        }
+        let seqs = self
+            .commit(events)
+            .map_err(|e| CapabilityError::Rejected(e.to_string()))?;
+        Ok(CapabilityAck { committed: seqs })
+    }
+
+    fn handle_create_pin_assignment(
+        &mut self,
+        assignment: PinAssignment,
+        links: Vec<ProvenanceLink>,
+    ) -> Result<CapabilityAck, CapabilityError> {
+        // The seam (P3): re-validate the assignment (non-null pin, non-empty function) before
+        // committing — the model is never trusted to have formed a well-shaped assignment.
+        assignment
+            .validate()
+            .map_err(|e| CapabilityError::Rejected(e.to_string()))?;
+        // Referential integrity at the seam: the pin must be a committed pin (P3, P5) — an
+        // assignment can never bind a function to a phantom pin.
+        if self.state.pin(assignment.pin).is_none() {
+            return Err(CapabilityError::Rejected(format!(
+                "pin assignment references unknown pin {}",
+                assignment.pin.short()
+            )));
+        }
+
+        let mut events = vec![Event::PinAssignmentCommitted { assignment }];
+        for link in links {
+            events.push(Event::ProvenanceLinked { link });
+        }
+        let seqs = self
+            .commit(events)
+            .map_err(|e| CapabilityError::Rejected(e.to_string()))?;
+        Ok(CapabilityAck { committed: seqs })
+    }
+
+    fn handle_create_signal(
+        &mut self,
+        signal: Signal,
+        links: Vec<ProvenanceLink>,
+    ) -> Result<CapabilityAck, CapabilityError> {
+        // The seam (P3): re-validate the signal (non-empty name/semantics, non-null source, ≥1
+        // sink, source not among sinks) before committing — the model is never trusted to have
+        // formed a well-shaped signal.
+        signal
+            .validate()
+            .map_err(|e| CapabilityError::Rejected(e.to_string()))?;
+        // Referential integrity at the seam: the source must be a committed pin (P3, P5) — a
+        // signal can never flow from a phantom driver.
+        if self.state.pin(signal.source).is_none() {
+            return Err(CapabilityError::Rejected(format!(
+                "signal references unknown source pin {}",
+                signal.source.short()
+            )));
+        }
+        // Referential integrity at the seam: every sink must be a committed pin (P3, P5) — a
+        // signal can never flow into a phantom receiver.
+        for sink in &signal.sinks {
+            if self.state.pin(*sink).is_none() {
+                return Err(CapabilityError::Rejected(format!(
+                    "signal references unknown sink pin {}",
+                    sink.short()
+                )));
+            }
+        }
+
+        let mut events = vec![Event::SignalCommitted { signal }];
+        for link in links {
+            events.push(Event::ProvenanceLinked { link });
+        }
+        let seqs = self
+            .commit(events)
+            .map_err(|e| CapabilityError::Rejected(e.to_string()))?;
+        Ok(CapabilityAck { committed: seqs })
+    }
+
+    fn handle_create_contract(
+        &mut self,
+        contract: Contract,
+        links: Vec<ProvenanceLink>,
+    ) -> Result<CapabilityAck, CapabilityError> {
+        contract
+            .validate()
+            .map_err(|e| CapabilityError::Rejected(e.to_string()))?;
+
+        let mut events = vec![Event::ContractCommitted { contract }];
+        for link in links {
+            events.push(Event::ProvenanceLinked { link });
+        }
+        let seqs = self
+            .commit(events)
+            .map_err(|e| CapabilityError::Rejected(e.to_string()))?;
+        Ok(CapabilityAck { committed: seqs })
+    }
+
+    fn handle_create_interface(
+        &mut self,
+        interface: Interface,
+        links: Vec<ProvenanceLink>,
+    ) -> Result<CapabilityAck, CapabilityError> {
+        interface
+            .validate()
+            .map_err(|e| CapabilityError::Rejected(e.to_string()))?;
+        if self.state.contract(interface.contract).is_none() {
+            return Err(CapabilityError::Rejected(format!(
+                "interface references unknown contract {}",
+                interface.contract.short()
+            )));
+        }
+        for sig in &interface.signals {
+            if self.state.signal(*sig).is_none() {
+                return Err(CapabilityError::Rejected(format!(
+                    "interface references unknown signal {}",
+                    sig.short()
+                )));
+            }
+        }
+
+        let mut events = vec![Event::InterfaceCommitted { interface }];
+        for link in links {
+            events.push(Event::ProvenanceLinked { link });
+        }
+        let seqs = self
+            .commit(events)
+            .map_err(|e| CapabilityError::Rejected(e.to_string()))?;
+        Ok(CapabilityAck { committed: seqs })
+    }
+
+    fn handle_create_bus(
+        &mut self,
+        bus: Bus,
+        links: Vec<ProvenanceLink>,
+    ) -> Result<CapabilityAck, CapabilityError> {
+        bus.validate()
+            .map_err(|e| CapabilityError::Rejected(e.to_string()))?;
+        if self.state.contract(bus.contract).is_none() {
+            return Err(CapabilityError::Rejected(format!(
+                "bus references unknown contract {}",
+                bus.contract.short()
+            )));
+        }
+        for member in &bus.members {
+            if self.state.interface(*member).is_none() {
+                return Err(CapabilityError::Rejected(format!(
+                    "bus references unknown member interface {}",
+                    member.short()
+                )));
+            }
+        }
+
+        let mut events = vec![Event::BusCommitted { bus }];
+        for link in links {
+            events.push(Event::ProvenanceLinked { link });
+        }
+        let seqs = self
+            .commit(events)
+            .map_err(|e| CapabilityError::Rejected(e.to_string()))?;
+        Ok(CapabilityAck { committed: seqs })
+    }
+
+    fn handle_create_subsystem(
+        &mut self,
+        subsystem: Subsystem,
+        links: Vec<ProvenanceLink>,
+    ) -> Result<CapabilityAck, CapabilityError> {
+        subsystem
+            .validate()
+            .map_err(|e| CapabilityError::Rejected(e.to_string()))?;
+        if subsystem.blocks.is_empty() {
+            return Err(CapabilityError::Rejected(
+                "subsystem must contain at least one block".to_string(),
+            ));
+        }
+        for block_id in &subsystem.blocks {
+            if self.state.functional_block(*block_id).is_none() {
+                return Err(CapabilityError::Rejected(format!(
+                    "subsystem references unknown block {}",
+                    block_id.short()
+                )));
+            }
+        }
+        for iface_id in &subsystem.interfaces {
+            if self.state.interface(*iface_id).is_none() {
+                return Err(CapabilityError::Rejected(format!(
+                    "subsystem references unknown interface {}",
+                    iface_id.short()
+                )));
+            }
+        }
+
+        let mut events = vec![Event::SubsystemCommitted { subsystem }];
+        for link in links {
+            events.push(Event::ProvenanceLinked { link });
+        }
+        let seqs = self
+            .commit(events)
+            .map_err(|e| CapabilityError::Rejected(e.to_string()))?;
+        Ok(CapabilityAck { committed: seqs })
+    }
 }
 
 impl AgentContext for RuntimeCore {
@@ -902,6 +1207,42 @@ impl AgentContext for RuntimeCore {
         self.state.power_domains.clone()
     }
 
+    fn clock_domains(&self) -> Vec<ClockDomain> {
+        self.state.clock_domains.clone()
+    }
+
+    fn return_paths(&self) -> Vec<ReturnPath> {
+        self.state.return_paths.clone()
+    }
+
+    fn pin_capabilities(&self) -> Vec<PinCapability> {
+        self.state.pin_capabilities.clone()
+    }
+
+    fn pin_assignments(&self) -> Vec<PinAssignment> {
+        self.state.pin_assignments.clone()
+    }
+
+    fn signals(&self) -> Vec<Signal> {
+        self.state.signals.clone()
+    }
+
+    fn contracts(&self) -> Vec<Contract> {
+        self.state.contracts.clone()
+    }
+
+    fn interfaces(&self) -> Vec<Interface> {
+        self.state.interfaces.clone()
+    }
+
+    fn buses(&self) -> Vec<Bus> {
+        self.state.buses.clone()
+    }
+
+    fn subsystems(&self) -> Vec<Subsystem> {
+        self.state.subsystems.clone()
+    }
+
     fn reason(
         &mut self,
         mut req: ReasoningRequest,
@@ -973,6 +1314,31 @@ impl AgentContext for RuntimeCore {
             }
             CapabilityRequest::CreatePowerDomain { domain, links } => {
                 self.handle_create_power_domain(domain, links)
+            }
+            CapabilityRequest::CreateClockDomain { domain, links } => {
+                self.handle_create_clock_domain(domain, links)
+            }
+            CapabilityRequest::CreateReturnPath { path, links } => {
+                self.handle_create_return_path(path, links)
+            }
+            CapabilityRequest::CreatePinCapability { capability, links } => {
+                self.handle_create_pin_capability(capability, links)
+            }
+            CapabilityRequest::CreatePinAssignment { assignment, links } => {
+                self.handle_create_pin_assignment(assignment, links)
+            }
+            CapabilityRequest::CreateSignal { signal, links } => {
+                self.handle_create_signal(signal, links)
+            }
+            CapabilityRequest::CreateContract { contract, links } => {
+                self.handle_create_contract(contract, links)
+            }
+            CapabilityRequest::CreateInterface { interface, links } => {
+                self.handle_create_interface(interface, links)
+            }
+            CapabilityRequest::CreateBus { bus, links } => self.handle_create_bus(bus, links),
+            CapabilityRequest::CreateSubsystem { subsystem, links } => {
+                self.handle_create_subsystem(subsystem, links)
             }
         }
     }

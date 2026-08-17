@@ -4,6 +4,7 @@ import { HonestyBadge } from "../Badge";
 import { Explorer } from "./Explorer";
 import { DesignTree } from "./DesignTree";
 import { AgentPanel } from "./AgentPanel";
+import { LibraryPanel } from "./LibraryPanel";
 
 function SearchPanel() {
   return (
@@ -84,6 +85,7 @@ export function PrimarySidebar() {
     case "search": return <SearchPanel />;
     case "agent": return <AgentPanel />;
     case "design": return <DesignTree />;
+    case "library": return <LibraryPanel />;
     case "verify": return <VerifyPanel />;
     case "revisions": return <RevisionsPanel />;
     case "settings": return <SettingsPanel />;

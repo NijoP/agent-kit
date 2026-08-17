@@ -82,6 +82,15 @@ impl Machine for EmcAnalysisMachine {
                 let placements = ctx.placements();
                 let tracks = ctx.tracks();
                 let power_domains = ctx.power_domains();
+                let clock_domains = ctx.clock_domains();
+                let return_paths = ctx.return_paths();
+                let pin_capabilities = ctx.pin_capabilities();
+                let pin_assignments = ctx.pin_assignments();
+                let signals = ctx.signals();
+                let contracts = ctx.contracts();
+                let interfaces = ctx.interfaces();
+                let buses = ctx.buses();
+                let subsystems = ctx.subsystems();
                 let findings = engine.run(&VerificationContext {
                     requirements: &requirements,
                     constraints: &constraints,
@@ -94,6 +103,15 @@ impl Machine for EmcAnalysisMachine {
                     placements: &placements,
                     tracks: &tracks,
                     power_domains: &power_domains,
+                    clock_domains: &clock_domains,
+                    return_paths: &return_paths,
+                    pin_capabilities: &pin_capabilities,
+                    pin_assignments: &pin_assignments,
+                    signals: &signals,
+                    contracts: &contracts,
+                    interfaces: &interfaces,
+                    buses: &buses,
+                    subsystems: &subsystems,
                 });
 
                 let existing = ctx.violations();

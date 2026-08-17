@@ -131,9 +131,10 @@ mod tests {
     use crate::fsm::{MachineError, StepResult};
     use crate::protocol::{Autonomy, CapabilityAck, CapabilityError, CapabilityRequest};
     use eak_domain::{
-        Assumption, Board, BomLineItem, Component, Constraint, DesignIntent, EntityId,
-        FunctionalBlock, Net, Objective, Part, Pin, Placement, PowerDomain, ProvenanceLink,
-        Requirement, Risk, Track, Tradeoff, Violation,
+        Assumption, Board, BomLineItem, Bus, ClockDomain, Component, Constraint, Contract,
+        DesignIntent, EntityId, FunctionalBlock, Interface, Net, Objective, Part, Pin,
+        PinAssignment, PinCapability, Placement, PowerDomain, ProvenanceLink, Requirement,
+        ReturnPath, Risk, Signal, Subsystem, Track, Tradeoff, Violation,
     };
     use eak_ports::{Event, ReasoningError, ReasoningRequest, ReasoningResponse, Seq, StoreError};
 
@@ -196,6 +197,33 @@ mod tests {
             vec![]
         }
         fn power_domains(&self) -> Vec<PowerDomain> {
+            vec![]
+        }
+        fn clock_domains(&self) -> Vec<ClockDomain> {
+            vec![]
+        }
+        fn return_paths(&self) -> Vec<ReturnPath> {
+            vec![]
+        }
+        fn pin_capabilities(&self) -> Vec<PinCapability> {
+            vec![]
+        }
+        fn pin_assignments(&self) -> Vec<PinAssignment> {
+            vec![]
+        }
+        fn signals(&self) -> Vec<Signal> {
+            vec![]
+        }
+        fn contracts(&self) -> Vec<Contract> {
+            vec![]
+        }
+        fn interfaces(&self) -> Vec<Interface> {
+            vec![]
+        }
+        fn buses(&self) -> Vec<Bus> {
+            vec![]
+        }
+        fn subsystems(&self) -> Vec<Subsystem> {
             vec![]
         }
         fn assumptions(&self) -> Vec<Assumption> {

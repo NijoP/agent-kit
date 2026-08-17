@@ -5,10 +5,11 @@
 //! run and during [`crate::replay`], guaranteeing identical reconstruction.
 
 use eak_domain::{
-    Assumption, AssumptionStatus, Board, BomLineItem, Component, Constraint, Decision,
-    DesignIntent, EntityId, Evidence, FunctionalBlock, ModelFidelity, Net, Objective, Part, Pin,
-    Placement, PowerDomain, ProvenanceLink, Requirement, Risk, RiskSeverity, RiskStatus, Track,
-    Tradeoff, Violation, ViolationStatus, Waiver,
+    Assumption, AssumptionStatus, Board, BomLineItem, Bus, ClockDomain, Component, Constraint,
+    Contract, Decision, DesignIntent, EntityId, Evidence, FunctionalBlock, Interface,
+    ModelFidelity, Net, Objective, Part, Pin, PinAssignment, PinCapability, Placement, PowerDomain,
+    ProvenanceLink, Requirement, ReturnPath, Risk, RiskSeverity, RiskStatus, Signal, Subsystem,
+    Track, Tradeoff, Violation, ViolationStatus, Waiver,
 };
 use eak_ports::{Event, Seq};
 use serde::{Deserialize, Serialize};
@@ -95,6 +96,57 @@ pub struct EngineeringState {
     // PowerBalanceRule's judgement at ERC time — a well-formed but overloaded rail still belongs
     // in state so the rule can report it.
     pub power_domains: Vec<PowerDomain>,
+    // Band B (Phase 5, increment 2): the clock architecture (Map 21). A clock domain is a named
+    // clock region sourced by one component at a `frequency`, driving a set of synchronous nets.
+    // Kept in insertion (event) order so a run and its replay serialize byte-identically. Whether
+    // a net belongs to two domains is the ClockDomainMembershipRule's judgement at ERC time — a
+    // well-formed domain still belongs in state so the rule can reason over the crossing.
+    pub clock_domains: Vec<ClockDomain>,
+    // Band B (Phase 5, increment 3): the return-path architecture (Map 20). A return path names the
+    // reference net a controlled net's return current flows on — the return half of the signal loop
+    // (`engineering-science/pcb/return-path.md`). Kept in insertion (event) order so a run and its
+    // replay serialize byte-identically. Whether a controlled net declares an impedance but no
+    // return path is the ReturnPathRule's judgement at ERC time — a well-formed path still belongs
+    // in state so the rule can reason over the return architecture.
+    pub return_paths: Vec<ReturnPath>,
+    // Band B (Phase 5, increment 4): the pin-function / mux architecture (Map 22). A capability is a
+    // pin's datasheet truth — the set of mux functions it can carry; an assignment is the design
+    // truth — the function assigned to a pin. Kept in insertion (event) order so a run and its
+    // replay serialize byte-identically. Whether two assignments conflict on one pin
+    // (`erc-pin-mux-conflict`) or an assignment ignores its pin's capability (`erc-pin-capability`)
+    // is the rules' judgement at ERC time — a well-formed assignment still belongs in state so the
+    // rules can report the conflicts (master-prompt §31).
+    pub pin_capabilities: Vec<PinCapability>,
+    pub pin_assignments: Vec<PinAssignment>,
+    // Band B (Phase 5, increment 5): the signal flow architecture (Map 16). A signal is a named,
+    // directional logical flow (source → sinks) with a meaning — the schematic's logical layer
+    // above the undirected copper of a net. Kept in insertion (event) order so a run and its
+    // replay serialize byte-identically. Whether the flow is legal (output/bidirectional source,
+    // input/bidirectional sinks) is the SignalDriverSinkRule's judgement at ERC time — a
+    // well-formed signal still belongs in state so the rule can report an illegal pairing.
+    pub signals: Vec<Signal>,
+    // Band B (Phase 5, increment 6): the interface / contract architecture. An interface is a
+    // named collection of signals governed by a contract. Kept in insertion (event) order so a
+    // run and its replay serialize byte-identically. Whether an interface satisfies its contract
+    // is the InterfaceContractRule's judgement at ERC time — a well-formed interface still belongs
+    // in state so the rule can report a violation.
+    pub contracts: Vec<Contract>,
+    pub interfaces: Vec<Interface>,
+    // Band B (Phase 5, increment 7): the bus / protocol architecture (Map 17). A bus is a
+    // collection of interfaces (or signals) sharing a physical bus line under one protocol
+    // contract, with a declared topology. Kept in insertion (event) order so a run and its
+    // replay serialize byte-identically. Whether the bus's topology satisfies the protocol's
+    // structural rules (unique addresses, termination, fan-out) is the BusTopologyRule's
+    // judgement at ERC time — a well-formed bus still belongs in state so the rule can report a
+    // violation.
+    pub buses: Vec<Bus>,
+    // Band B (Phase 5, increment 8): the subsystem architecture (Map 14). A subsystem is a
+    // hierarchical grouping of blocks exposing interfaces as its boundary — the unit of reuse
+    // and reasoning at scale. Kept in insertion (event) order so a run and its replay serialize
+    // byte-identically. Whether the subsystem's boundary is *complete* (every cross-boundary pin
+    /// is exposed) is the SubsystemBoundaryRule's judgement at ERC time — a well-formed
+    // subsystem still belongs in state so the rule can report a missing boundary interface.
+    pub subsystems: Vec<Subsystem>,
 }
 
 impl EngineeringState {
@@ -194,6 +246,35 @@ impl EngineeringState {
             // Band B (Phase 5, increment 1): the power architecture. Committing a power domain
             // pushes it into its own store (insertion order, so replay is byte-identical, P4).
             Event::PowerDomainCommitted { domain } => self.power_domains.push(domain.clone()),
+            // Band B (Phase 5, increment 2): the clock architecture. Committing a clock domain
+            // pushes it into its own store (insertion order, so replay is byte-identical, P4).
+            Event::ClockDomainCommitted { domain } => self.clock_domains.push(domain.clone()),
+            // Band B (Phase 5, increment 3): the return-path architecture. Committing a return path
+            // pushes it into its own store (insertion order, so replay is byte-identical, P4).
+            Event::ReturnPathCommitted { path } => self.return_paths.push(path.clone()),
+            // Band B (Phase 5, increment 4): the pin-function / mux architecture. Committing a
+            // capability or an assignment pushes it into its own store (insertion order, so replay
+            // is byte-identical, P4).
+            Event::PinCapabilityCommitted { capability } => {
+                self.pin_capabilities.push(capability.clone())
+            }
+            Event::PinAssignmentCommitted { assignment } => {
+                self.pin_assignments.push(assignment.clone())
+            }
+            // Band B (Phase 5, increment 5): the signal flow architecture. Committing a signal
+            // pushes it into its own store (insertion order, so replay is byte-identical, P4).
+            Event::SignalCommitted { signal } => self.signals.push(signal.clone()),
+            // Band B (Phase 5, increment 6): the interface / contract architecture. Committing a
+            // contract or an interface pushes it into its own store (insertion order, so replay is
+            // byte-identical, P4).
+            Event::ContractCommitted { contract } => self.contracts.push(contract.clone()),
+            Event::InterfaceCommitted { interface } => self.interfaces.push(interface.clone()),
+            // Band B (Phase 5, increment 7): the bus / protocol architecture. Committing a bus
+            // pushes it into its own store (insertion order, so replay is byte-identical, P4).
+            Event::BusCommitted { bus } => self.buses.push(bus.clone()),
+            // Band B (Phase 5, increment 8): the subsystem architecture. Committing a subsystem
+            // pushes it into its own store (insertion order, so replay is byte-identical, P4).
+            Event::SubsystemCommitted { subsystem } => self.subsystems.push(subsystem.clone()),
             // Audit-only events (phase lifecycle, reasoning calls, IR-boundary milestones)
             // carry no state and are intentionally not folded. AUDIT: any NEW state-bearing
             // event variant MUST get an explicit arm above, or replay will silently diverge.
@@ -320,6 +401,42 @@ impl EngineeringState {
 
     pub fn power_domain(&self, id: EntityId) -> Option<&PowerDomain> {
         self.power_domains.iter().find(|d| d.id == id)
+    }
+
+    pub fn clock_domain(&self, id: EntityId) -> Option<&ClockDomain> {
+        self.clock_domains.iter().find(|d| d.id == id)
+    }
+
+    pub fn return_path(&self, id: EntityId) -> Option<&ReturnPath> {
+        self.return_paths.iter().find(|p| p.id == id)
+    }
+
+    pub fn pin_capability(&self, id: EntityId) -> Option<&PinCapability> {
+        self.pin_capabilities.iter().find(|c| c.id == id)
+    }
+
+    pub fn pin_assignment(&self, id: EntityId) -> Option<&PinAssignment> {
+        self.pin_assignments.iter().find(|a| a.id == id)
+    }
+
+    pub fn signal(&self, id: EntityId) -> Option<&Signal> {
+        self.signals.iter().find(|s| s.id == id)
+    }
+
+    pub fn contract(&self, id: EntityId) -> Option<&Contract> {
+        self.contracts.iter().find(|c| c.id == id)
+    }
+
+    pub fn interface(&self, id: EntityId) -> Option<&Interface> {
+        self.interfaces.iter().find(|i| i.id == id)
+    }
+
+    pub fn bus(&self, id: EntityId) -> Option<&Bus> {
+        self.buses.iter().find(|b| b.id == id)
+    }
+
+    pub fn subsystem(&self, id: EntityId) -> Option<&Subsystem> {
+        self.subsystems.iter().find(|s| s.id == id)
     }
 
     /// Deterministic serialization used to assert byte-identity between a run and its

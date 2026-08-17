@@ -1,7 +1,10 @@
 //! ERC Verification state machine (instance) — the gate of the schematic correctness loop.
 //!
 //! Structurally a sibling of `ConstraintVerificationMachine`, but its [`VerificationEngine`]
-//! is loaded with the ERC rules ([`ErcPowerNetUndrivenRule`], [`ErcMultipleDriversRule`]) and
+//! is loaded with the ERC rules ([`ErcPowerNetUndrivenRule`], [`ErcMultipleDriversRule`],
+//! [`PowerBalanceRule`], [`ClockDomainMembershipRule`], [`ReturnPathRule`],
+//! [`PinMuxConflictRule`], [`PinCapabilityRule`], [`SignalDriverSinkRule`],
+//! [`InterfaceContractRule`], [`BusTopologyRule`], [`SubsystemBoundaryRule`]) and
 //! it runs them over the realized schematic (components, pins, nets). Each *new* finding
 //! becomes a first-class [`Violation`] linked back to the net(s) it implicates so it is fully
 //! traceable to its cause (P3), and the [`Event::VerificationCompleted`] milestone is
@@ -13,8 +16,9 @@
 
 use eak_domain::{ProvenanceLink, RelationType, Violation, ViolationStatus};
 use eak_engines::{
-    ErcMultipleDriversRule, ErcPowerNetUndrivenRule, PowerBalanceRule, VerificationContext,
-    VerificationEngine,
+    BusTopologyRule, ClockDomainMembershipRule, ErcMultipleDriversRule, ErcPowerNetUndrivenRule,
+    InterfaceContractRule, PinCapabilityRule, PinMuxConflictRule, PowerBalanceRule, ReturnPathRule,
+    SignalDriverSinkRule, SubsystemBoundaryRule, VerificationContext, VerificationEngine,
 };
 use eak_ports::Event;
 use eak_runtime::{AgentContext, CapabilityRequest, Machine, MachineError, StepResult};
@@ -27,13 +31,23 @@ impl ErcVerificationMachine {
     }
 
     /// The verification engine for this phase: the Phase-3 ERC rules (undriven power net, multiple
-    /// drivers) plus the Band B power-balance rule, registered against the same generic framework
-    /// that Constraint Verification uses (reuse: one framework, many checks).
+    /// drivers) plus the Band B power-balance, clock-domain, return-path, pin-function,
+    /// signal-flow, interface-contract, bus-topology and subsystem-boundary rules, registered
+    /// against the same generic framework that Constraint Verification uses (reuse: one framework,
+    /// many checks).
     fn engine() -> VerificationEngine {
         VerificationEngine::new()
             .with_rule(Box::new(ErcPowerNetUndrivenRule::new()))
             .with_rule(Box::new(ErcMultipleDriversRule::new()))
             .with_rule(Box::new(PowerBalanceRule::new()))
+            .with_rule(Box::new(ClockDomainMembershipRule::new()))
+            .with_rule(Box::new(ReturnPathRule::new()))
+            .with_rule(Box::new(PinMuxConflictRule::new()))
+            .with_rule(Box::new(PinCapabilityRule::new()))
+            .with_rule(Box::new(SignalDriverSinkRule::new()))
+            .with_rule(Box::new(InterfaceContractRule::new()))
+            .with_rule(Box::new(BusTopologyRule::new()))
+            .with_rule(Box::new(SubsystemBoundaryRule::new()))
     }
 }
 impl Default for ErcVerificationMachine {
@@ -75,6 +89,15 @@ impl Machine for ErcVerificationMachine {
                 let placements = ctx.placements();
                 let tracks = ctx.tracks();
                 let power_domains = ctx.power_domains();
+                let clock_domains = ctx.clock_domains();
+                let return_paths = ctx.return_paths();
+                let pin_capabilities = ctx.pin_capabilities();
+                let pin_assignments = ctx.pin_assignments();
+                let signals = ctx.signals();
+                let contracts = ctx.contracts();
+                let interfaces = ctx.interfaces();
+                let buses = ctx.buses();
+                let subsystems = ctx.subsystems();
                 let findings = engine.run(&VerificationContext {
                     requirements: &requirements,
                     constraints: &constraints,
@@ -87,6 +110,15 @@ impl Machine for ErcVerificationMachine {
                     placements: &placements,
                     tracks: &tracks,
                     power_domains: &power_domains,
+                    clock_domains: &clock_domains,
+                    return_paths: &return_paths,
+                    pin_capabilities: &pin_capabilities,
+                    pin_assignments: &pin_assignments,
+                    signals: &signals,
+                    contracts: &contracts,
+                    interfaces: &interfaces,
+                    buses: &buses,
+                    subsystems: &subsystems,
                 });
 
                 let existing = ctx.violations();

@@ -97,7 +97,7 @@ export function MenuBar() {
     Help: [
       { label: "User Manual", planned: true },
       { label: "Honesty Legend", planned: true },
-      { label: "About EAK", planned: true },
+      { label: "About TUSK", run: () => store.setPanel("settings") },
     ],
   };
 
@@ -107,7 +107,7 @@ export function MenuBar() {
         <span className="mark">
           <Zap size={16} strokeWidth={2} fill="currentColor" />
         </span>
-        EAK
+        TUSK
       </span>
 
       {Object.entries(menus).map(([name, items]) => (

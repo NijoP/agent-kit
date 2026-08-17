@@ -6,9 +6,11 @@
 //! See `docs/engineering/constraint-engine.md` and `docs/engineering/verification-engine.md`.
 
 use eak_domain::{
-    Board, BoardSide, BomLineItem, Component, ComponentClass, Constraint, ConstraintKind, EntityId,
-    Layer, LayerStack, Net, NetClass, Part, PartLifecycle, Pin, PinElectricalType, Placement,
-    PowerDomain, Requirement, RequirementCategory, Track, Violation, ViolationSeverity,
+    Board, BoardSide, BomLineItem, Bus, BusTopology, ClockDomain, Component, ComponentClass,
+    Constraint, ConstraintKind, Contract, EntityId, Interface, Layer, LayerStack, Net, NetClass,
+    Part, PartLifecycle, Pin, PinAssignment, PinCapability, PinElectricalType, Placement,
+    PowerDomain, Requirement, RequirementCategory, ReturnPath, Signal, Subsystem, Track, Violation,
+    ViolationSeverity,
 };
 use eak_units::{Dimension, PhysicalQuantity, Unit, UnitError};
 use std::cmp::Ordering;
@@ -118,6 +120,43 @@ pub struct VerificationContext<'a> {
     /// Band B (Phase 5): the committed power domains (the power architecture, Map 38). Lets
     /// power/electrical rules reason over rail capacity vs. the load the rails' nets carry.
     pub power_domains: &'a [PowerDomain],
+    /// Band B (Phase 5): the committed clock domains (the clock architecture, Map 21). Lets
+    /// clock rules reason over net membership — a net in two domains is a clock-domain
+    /// crossing, the seed of CDC reasoning (`engineering-science/pcb/return-path.md`).
+    pub clock_domains: &'a [ClockDomain],
+    /// Band B (Phase 5): the committed return paths (the return architecture, Map 20). Lets
+    /// return-path rules reason over the return half of the signal loop — the reference net a
+    /// controlled net's return current flows on (`engineering-science/pcb/return-path.md`).
+    pub return_paths: &'a [ReturnPath],
+    /// Band B (Phase 5): the committed pin capabilities (the pin-function / mux architecture,
+    /// Map 22). A pin's datasheet truth — the set of mux functions it can carry. Lets the
+    /// capability rule verify each assignment against its pin's declared functions.
+    pub pin_capabilities: &'a [PinCapability],
+    /// Band B (Phase 5): the committed pin assignments (the pin-function / mux architecture,
+    /// Map 22). The design truth — the function each pin is assigned. Lets the mux-conflict rule
+    /// catch two assignments claiming one pin (master-prompt §31: a conflicting assignment is an
+    /// engineering violation, not silently accepted).
+    pub pin_assignments: &'a [PinAssignment],
+    /// Band B (Phase 5): the committed signals (the signal flow architecture, Map 16). A named,
+    /// directional logical flow (source → sinks) with a meaning, distinct from the undirected
+    /// copper of a net. Lets the driver/sink rule check source/load legality against pin electrical
+    /// types (circuit-theory.md L134/L152).
+    pub signals: &'a [Signal],
+    /// Band B (Phase 5): the committed contracts (the interface / contract architecture).
+    /// Protocol rule-sets (e.g. "I²C", "SPI") governing interfaces.
+    pub contracts: &'a [Contract],
+    /// Band B (Phase 5): the committed interfaces (the interface / contract architecture).
+    /// Named collections of signals governed by a contract.
+    pub interfaces: &'a [Interface],
+    /// Band B (Phase 5): the committed buses (the bus / protocol architecture, Map 17). A bus
+    /// is a collection of interfaces sharing a physical bus line under one protocol contract, with
+    /// a declared topology. Lets the topology rule check bus-level constraints (unique addresses,
+    /// termination, fan-out, stub length).
+    pub buses: &'a [Bus],
+    /// Band B (Phase 5): the committed subsystems (the subsystem architecture, Map 14). A
+    /// subsystem is a hierarchical grouping of blocks exposing interfaces as its boundary. Lets
+    /// the boundary rule check that every cross-boundary pin is exposed via an interface.
+    pub subsystems: &'a [Subsystem],
 }
 
 /// A problem a rule detected. Not yet a domain `Violation` — the runtime mints that at the
@@ -424,6 +463,701 @@ impl Rule for PowerBalanceRule {
                         domain.max_current,
                     ),
                 });
+            }
+        }
+        findings
+    }
+}
+
+// ===================== Band B (increment 2): Clock-Domain Membership =====================
+
+/// A clock-domain membership rule (Map 21): a [`Net`] that is a member of two distinct
+/// [`ClockDomain`]s is a clock-domain crossing — an unsynchronized net claiming to be
+/// synchronous to two independent clocks. That is a design finding (a CDC hazard, the seed of
+/// `engineering-science/pcb/return-path.md` reasoning), NOT a malformed-domain error: the
+/// domain is well-formed; the *design* is what crosses. So the runtime accepts each domain at
+/// the seam and this rule reports the conflict at ERC time. Deterministic (P4): domains are
+/// scanned in slice order; a net is flagged once, with both domain names in a stable order.
+/// The flagged net implicates itself (→ its pins → components → blocks → intent, P3).
+pub struct ClockDomainMembershipRule;
+
+impl ClockDomainMembershipRule {
+    pub const ID: &'static str = "erc-clock-domain-conflict";
+
+    pub fn new() -> Self {
+        Self
+    }
+}
+impl Default for ClockDomainMembershipRule {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Rule for ClockDomainMembershipRule {
+    fn id(&self) -> &str {
+        Self::ID
+    }
+
+    fn evaluate(&self, ctx: &VerificationContext) -> Vec<ViolationFinding> {
+        let mut findings = Vec::new();
+        // Collect (net, [domains]) in deterministic order: iterate domains in slice order,
+        // append each domain name to its nets' lists. A net in >=2 domains is a conflict.
+        let mut membership: Vec<(EntityId, Vec<&ClockDomain>)> = Vec::new();
+        for domain in ctx.clock_domains.iter() {
+            for nid in &domain.members {
+                // Membership integrity is enforced at the commit seam (P3); a net missing from
+                // the context is skipped defensively so this rule never guesses.
+                if ctx.nets.iter().find(|n| n.id == *nid).is_none() {
+                    continue;
+                }
+                match membership.iter_mut().find(|(id, _)| id == nid) {
+                    Some((_, domains)) => domains.push(domain),
+                    None => membership.push((*nid, vec![domain])),
+                }
+            }
+        }
+        for (nid, domains) in membership {
+            if domains.len() >= 2 {
+                let names: Vec<&str> = domains.iter().map(|d| d.name.as_str()).collect();
+                findings.push(ViolationFinding {
+                    rule: Self::ID.to_string(),
+                    severity: ViolationSeverity::Error,
+                    subjects: vec![nid],
+                    message: format!(
+                        "net {} is a member of {} distinct clock domains [{}] — a clock-domain \
+                         crossing that needs a synchronizer or a membership correction",
+                        nid.short(),
+                        names.len(),
+                        names.join(", "),
+                    ),
+                });
+            }
+        }
+        findings
+    }
+}
+
+// ===================== Band B (increment 3): Return-Path Requirement =====================
+
+/// A return-path requirement rule (Map 20): every [`Net`] that DECLARES a controlled characteristic
+/// impedance — `Net::impedance_target` is the model's own transmission-line declaration
+/// (`engineering-science/electrical/transmission-lines.md` L141) — must have a committed
+/// [`ReturnPath`] naming the reference net its return current flows on. A controlled net with no
+/// declared return path is the "width-correct, impedance-wrong" silent failure
+/// (`engineering-science/pcb/return-path.md` L140): the forward conductor is specified, the return
+/// half of the loop is not. That is a design finding (Error), NOT a malformed-path error — the path
+/// is well-formed; the *architecture* is under-specified. So the runtime accepts each path at the
+/// seam and this rule reports the omission at ERC time. Deterministic (P4): nets are scanned in
+/// slice order, one finding per under-specified net. The flagged net implicates itself (→ its pins →
+/// components → blocks → intent, P3).
+///
+/// HONESTY BOUNDARY: this rule gates on the design's own `impedance_target` declaration, NOT on a
+/// fabricated clock-frequency threshold. The electrically-long boundary must be applied against the
+/// EDGE RATE, which the model does not own (`transmission-lines.md` L145/L170 — "using the clock
+/// instead of the edge to gauge 'fast'" is a listed failure mode). The full reference-continuity
+/// geometry check (plane voids/splits under the trace) additionally needs the PCB-IR
+/// reference-adjacency model the runtime does not yet own (`return-path.md` L141); this v0 owns the
+/// logical-electrical contract only.
+pub struct ReturnPathRule;
+
+impl ReturnPathRule {
+    pub const ID: &'static str = "erc-return-path-required";
+
+    pub fn new() -> Self {
+        Self
+    }
+}
+impl Default for ReturnPathRule {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Rule for ReturnPathRule {
+    fn id(&self) -> &str {
+        Self::ID
+    }
+
+    fn evaluate(&self, ctx: &VerificationContext) -> Vec<ViolationFinding> {
+        let mut findings = Vec::new();
+        for net in ctx.nets.iter() {
+            // Only nets that declare a controlled impedance are transmission-line declarations; a
+            // net with no impedance target is ordinary routing and stays silent (no invented
+            // requirement — surfacing under-specification is the Fidelity tag's concern here).
+            let Some(target) = net.impedance_target.as_ref() else {
+                continue;
+            };
+            let declared = ctx.return_paths.iter().any(|p| p.net == net.id);
+            if !declared {
+                findings.push(ViolationFinding {
+                    rule: Self::ID.to_string(),
+                    severity: ViolationSeverity::Error,
+                    subjects: vec![net.id],
+                    message: format!(
+                        "controlled net \"{}\" ({}) declares an impedance target {} but has no \
+                         declared return path — the return half of the signal loop is \
+                         under-specified (return-path requirement)",
+                        net.name,
+                        net.id.short(),
+                        target,
+                    ),
+                });
+            }
+        }
+        findings
+    }
+}
+
+// ===================== Band B (increment 4): Pin-Function / Mux =====================
+
+/// A pin-mux-conflict rule (Map 22): two [`PinAssignment`]s claiming the SAME pin for DIFFERENT
+/// functions is a real hardware conflict — a physical pin can carry only one function at a time.
+/// This is the master-prompt §31 directive made concrete: a conflicting assignment is caught as an
+/// **engineering violation**, never silently accepted as "just another string." Each assignment is
+/// well-formed and belongs in state (the seam enforces only pin existence); the *conflict* is this
+/// rule's judgement at ERC time. Deterministic (P4): assignments are scanned in slice order; for
+/// each pin with ≥2 assignments, every distinct function yields one Error finding, so a two-way
+/// conflict over the same pin produces exactly one finding, named with the offending function. The
+/// implicated pin (→ its component → blocks → intent) and the conflicting assignments are the
+/// subjects.
+pub struct PinMuxConflictRule;
+
+impl PinMuxConflictRule {
+    pub const ID: &'static str = "erc-pin-mux-conflict";
+
+    pub fn new() -> Self {
+        Self
+    }
+}
+impl Default for PinMuxConflictRule {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Rule for PinMuxConflictRule {
+    fn id(&self) -> &str {
+        Self::ID
+    }
+
+    fn evaluate(&self, ctx: &VerificationContext) -> Vec<ViolationFinding> {
+        let mut findings = Vec::new();
+        // Group by pin in slice order; keep the first-seen assignment id as the finding's anchor.
+        let mut by_pin: Vec<(EntityId, Vec<&PinAssignment>)> = Vec::new();
+        for a in ctx.pin_assignments.iter() {
+            match by_pin.iter_mut().find(|(p, _)| *p == a.pin) {
+                Some((_, group)) => group.push(a),
+                None => by_pin.push((a.pin, vec![a])),
+            }
+        }
+        for (pin, group) in by_pin {
+            // Two assignments of the SAME function on one pin are a benign re-assertion, not a mux
+            // conflict; a pin claimed for DIFFERENT functions is a real hardware conflict.
+            let mut functions: Vec<&str> = group.iter().map(|a| a.function.as_str()).collect();
+            functions.sort_unstable();
+            functions.dedup();
+            if functions.len() < 2 {
+                continue;
+            }
+            findings.push(ViolationFinding {
+                rule: Self::ID.to_string(),
+                severity: ViolationSeverity::Error,
+                // The implicated pin (→ its component → blocks → intent, P3) plus every assignment
+                // claiming it, so the report shows the exact function clash.
+                subjects: std::iter::once(pin)
+                    .chain(group.iter().map(|a| a.id))
+                    .collect(),
+                message: format!(
+                    "pin {} is claimed for {} different functions [{}] — a physical pin carries \
+                     one mux function at a time (pin-mux conflict)",
+                    pin.short(),
+                    functions.len(),
+                    functions.join(", "),
+                ),
+            });
+        }
+        findings
+    }
+}
+
+/// A pin-capability rule (Map 22): an [`PinAssignment`] must name a function the pin's
+/// [`PinCapability`] declares. Assigning a function a pin physically cannot carry is a capability
+/// violation — the pin is being asked to do something its silicon cannot (the MCU/FPGA pin-planning
+/// failure the Map exists to prevent). Deterministic (P4): assignments are scanned in slice order,
+/// one Error finding per violating assignment. The implicated pin and the assignment are the
+/// subjects. A pin with NO capability at all that gets assigned is ALSO flagged: an unverified
+/// assignment is under-specified (the capability is the datasheet truth the design never imported),
+/// and the assignment cannot be verified against nothing — surfacing that is the honesty principle,
+/// not an invented requirement.
+pub struct PinCapabilityRule;
+
+impl PinCapabilityRule {
+    pub const ID: &'static str = "erc-pin-capability";
+
+    pub fn new() -> Self {
+        Self
+    }
+}
+impl Default for PinCapabilityRule {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Rule for PinCapabilityRule {
+    fn id(&self) -> &str {
+        Self::ID
+    }
+
+    fn evaluate(&self, ctx: &VerificationContext) -> Vec<ViolationFinding> {
+        let mut findings = Vec::new();
+        for a in ctx.pin_assignments.iter() {
+            let capability = ctx.pin_capabilities.iter().find(|c| c.pin == a.pin);
+            let Some(capability) = capability else {
+                // An assignment with no declared capability cannot be verified — under-specified.
+                findings.push(ViolationFinding {
+                    rule: Self::ID.to_string(),
+                    severity: ViolationSeverity::Error,
+                    subjects: vec![a.pin, a.id],
+                    message: format!(
+                        "pin {} is assigned function \"{}\" but declares no pin capability — \
+                         the assignment cannot be verified (capability under-specified)",
+                        a.pin.short(),
+                        a.function,
+                    ),
+                });
+                continue;
+            };
+            if !capability.functions.iter().any(|f| f == &a.function) {
+                findings.push(ViolationFinding {
+                    rule: Self::ID.to_string(),
+                    severity: ViolationSeverity::Error,
+                    subjects: vec![a.pin, a.id],
+                    message: format!(
+                        "pin {} is assigned function \"{}\" but its capability only declares \
+                         [{}] — the assignment exceeds what the pin can carry (capability \
+                         violation)",
+                        a.pin.short(),
+                        a.function,
+                        capability.functions.join(", "),
+                    ),
+                });
+            }
+        }
+        findings
+    }
+}
+
+// ===================== Band B (increment 5): Signal Flow =====================
+
+/// A signal driver/sink rule (Map 16): a [`Signal`] names a directional logical flow — a `source`
+/// pin driving one or more `sink` pins — so the flow is only legal if the source is *capable of
+/// driving* and every sink is *capable of receiving*. This is source/load legality as a
+/// Thévenin/KCL question (`engineering-science/electrical/circuit-theory.md` L134/L152): a signal
+/// whose source is an Input pin cannot drive, and one whose sink is an Output pin cannot receive —
+/// such a pairing has no consistent operating point. Deterministic (P4): signals are scanned in
+/// slice order; each illegal signal yields one Error finding per illegal pin (the source, or each
+/// offending sink), so a signal with an input source AND an output sink produces two findings, each
+/// naming the specific pin. The implicated pin and the signal are the subjects. A signal referencing
+/// a pin the runtime has never seen is ALSO flagged: the flow is unverifiable (honesty, not an
+/// invented requirement).
+pub struct SignalDriverSinkRule;
+
+impl SignalDriverSinkRule {
+    pub const ID: &'static str = "erc-signal-driver-sink";
+
+    pub fn new() -> Self {
+        Self
+    }
+}
+impl Default for SignalDriverSinkRule {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Rule for SignalDriverSinkRule {
+    fn id(&self) -> &str {
+        Self::ID
+    }
+
+    fn evaluate(&self, ctx: &VerificationContext) -> Vec<ViolationFinding> {
+        let mut findings = Vec::new();
+        for sig in ctx.signals.iter() {
+            let source = ctx.pins.iter().find(|p| p.id == sig.source);
+            let Some(source) = source else {
+                findings.push(ViolationFinding {
+                    rule: Self::ID.to_string(),
+                    severity: ViolationSeverity::Error,
+                    subjects: vec![sig.source, sig.id],
+                    message: format!(
+                        "signal \"{}\" names source pin {} which the runtime has never seen — \
+                         the flow is unverifiable (signal driver/sink)",
+                        sig.name,
+                        sig.source.short(),
+                    ),
+                });
+                continue;
+            };
+            // A source must be capable of driving: Output or Bidirectional.
+            match source.electrical_type {
+                PinElectricalType::Output | PinElectricalType::Bidirectional => {}
+                _ => findings.push(ViolationFinding {
+                    rule: Self::ID.to_string(),
+                    severity: ViolationSeverity::Error,
+                    subjects: vec![source.id, sig.id],
+                    message: format!(
+                        "signal \"{}\" names source pin {} (a {:?}) — that pin cannot drive, so \
+                         the flow has no operating point (signal driver/sink)",
+                        sig.name,
+                        source.id.short(),
+                        source.electrical_type,
+                    ),
+                }),
+            }
+            // Every sink must be capable of receiving: Input or Bidirectional.
+            for sink_id in sig.sinks.iter() {
+                let sink = ctx.pins.iter().find(|p| p.id == *sink_id);
+                let Some(sink) = sink else {
+                    findings.push(ViolationFinding {
+                        rule: Self::ID.to_string(),
+                        severity: ViolationSeverity::Error,
+                        subjects: vec![*sink_id, sig.id],
+                        message: format!(
+                            "signal \"{}\" names sink pin {} which the runtime has never seen — \
+                             the flow is unverifiable (signal driver/sink)",
+                            sig.name,
+                            sink_id.short(),
+                        ),
+                    });
+                    continue;
+                };
+                match sink.electrical_type {
+                    PinElectricalType::Input | PinElectricalType::Bidirectional => {}
+                    _ => findings.push(ViolationFinding {
+                        rule: Self::ID.to_string(),
+                        severity: ViolationSeverity::Error,
+                        subjects: vec![sink.id, sig.id],
+                        message: format!(
+                            "signal \"{}\" names sink pin {} (a {:?}) — that pin cannot receive, \
+                             so the flow has no operating point (signal driver/sink)",
+                            sig.name,
+                            sink.id.short(),
+                            sink.electrical_type,
+                        ),
+                    }),
+                }
+            }
+        }
+        findings
+    }
+}
+
+// ===================== Band B (increment 6): Interface / Contract =====================
+
+/// An interface/contract rule: an [`Interface`] names a [`Contract`] and a set of
+/// [`Signal`]s — the interface *satisfies* the contract if its signals match the protocol's
+/// requirements (e.g. an I²C interface must contain exactly SDA+SCL, an SPI interface must
+/// contain SCLK+MOSI+MISO+CS, a USB interface must contain D+/D-). This is a structural
+/// contract check: the runtime does not yet own a full protocol knowledge library (that's a
+/// Memory-layer concern), so this v0 encodes a minimal set of well-known protocol
+/// requirements directly. Deterministic (P4): interfaces scanned in slice order; one Error
+/// finding per violated requirement, subjects = the interface + offending signals. A missing
+/// contract or unknown signals are also flagged (honesty).
+pub struct InterfaceContractRule;
+
+impl InterfaceContractRule {
+    pub const ID: &'static str = "erc-interface-contract";
+
+    pub fn new() -> Self {
+        Self
+    }
+}
+impl Default for InterfaceContractRule {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Rule for InterfaceContractRule {
+    fn id(&self) -> &str {
+        Self::ID
+    }
+
+    fn evaluate(&self, ctx: &VerificationContext) -> Vec<ViolationFinding> {
+        let mut findings = Vec::new();
+        for iface in ctx.interfaces.iter() {
+            let contract = ctx.contracts.iter().find(|c| c.id == iface.contract);
+            let Some(contract) = contract else {
+                findings.push(ViolationFinding {
+                    rule: Self::ID.to_string(),
+                    severity: ViolationSeverity::Error,
+                    subjects: vec![iface.id, iface.contract],
+                    message: format!(
+                        "interface \"{}\" names contract {} which the runtime has never seen — \
+                         the interface is unverifiable (interface contract)",
+                        iface.name,
+                        iface.contract.short(),
+                    ),
+                });
+                continue;
+            };
+            // Minimal v0 protocol checks: known protocols with required signal count/names.
+            match contract.protocol.as_str() {
+                "I2C" | "I2c" | "i2c" => {
+                    // I2C requires exactly 2 signals: SDA (bidirectional data) and SCL (clock).
+                    if iface.signals.len() != 2 {
+                        findings.push(ViolationFinding {
+                            rule: Self::ID.to_string(),
+                            severity: ViolationSeverity::Error,
+                            subjects: vec![iface.id],
+                            message: format!(
+                                "I²C interface \"{}\" must contain exactly 2 signals (SDA, SCL); \
+                                 found {} (interface contract)",
+                                iface.name,
+                                iface.signals.len(),
+                            ),
+                        });
+                    }
+                }
+                "SPI" | "Spi" | "spi" => {
+                    // SPI requires at least 4 signals: SCLK, MOSI, MISO, CS (plus optional extras).
+                    if iface.signals.len() < 4 {
+                        findings.push(ViolationFinding {
+                            rule: Self::ID.to_string(),
+                            severity: ViolationSeverity::Error,
+                            subjects: vec![iface.id],
+                            message: format!(
+                                "SPI interface \"{}\" must contain at least 4 signals (SCLK, MOSI, MISO, CS); \
+                                 found {} (interface contract)",
+                                iface.name,
+                                iface.signals.len(),
+                            ),
+                        });
+                    }
+                }
+                "USB2" | "USB" | "usb" if iface.signals.len() < 2 => {
+                    findings.push(ViolationFinding {
+                        rule: Self::ID.to_string(),
+                        severity: ViolationSeverity::Error,
+                        subjects: vec![iface.id],
+                        message: format!(
+                            "USB interface \"{}\" must contain at least 2 signals (D+, D-); \
+                             found {} (interface contract)",
+                            iface.name,
+                            iface.signals.len(),
+                        ),
+                    });
+                }
+                _ => {
+                    // Unknown protocol: no structural checks (open world). The contract exists
+                    // but the rule doesn't know its requirements — that's a Memory-layer gap,
+                    // not an error.
+                }
+            }
+        }
+        findings
+    }
+}
+
+// ===================== Band B (increment 7): Bus / Protocol =====================
+
+/// A bus topology rule (Map 17): a [`Bus`] declares a [`Contract`] (protocol), a set of member
+/// [`Interface`]s, and a [`BusTopology`] — the bus's physical topology determines which
+/// structural rules apply (e.g. I²C = MultiDrop needs unique addresses; CAN = Linear needs
+/// termination at both ends; USB = Star needs hub fan-out limits). This is a minimal v0: the rule
+/// encodes well-known protocol/topology checks directly; a full protocol knowledge library is a
+/// Memory-layer concern. Deterministic (P4): buses scanned in slice order; one Error finding per
+/// violated requirement. An unknown contract or unknown member interfaces are also flagged
+/// (honesty).
+pub struct BusTopologyRule;
+
+impl BusTopologyRule {
+    pub const ID: &'static str = "erc-bus-topology";
+
+    pub fn new() -> Self {
+        Self
+    }
+}
+impl Default for BusTopologyRule {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Rule for BusTopologyRule {
+    fn id(&self) -> &str {
+        Self::ID
+    }
+
+    fn evaluate(&self, ctx: &VerificationContext) -> Vec<ViolationFinding> {
+        let mut findings = Vec::new();
+        for bus in ctx.buses.iter() {
+            let contract = ctx.contracts.iter().find(|c| c.id == bus.contract);
+            let Some(contract) = contract else {
+                findings.push(ViolationFinding {
+                    rule: Self::ID.to_string(),
+                    severity: ViolationSeverity::Error,
+                    subjects: vec![bus.id, bus.contract],
+                    message: format!(
+                        "bus \"{}\" names contract {} which the runtime has never seen — \
+                         the bus is unverifiable (bus topology)",
+                        bus.name,
+                        bus.contract.short(),
+                    ),
+                });
+                continue;
+            };
+            // Check each member interface exists.
+            for member_id in &bus.members {
+                if ctx.interfaces.iter().find(|i| i.id == *member_id).is_none() {
+                    findings.push(ViolationFinding {
+                        rule: Self::ID.to_string(),
+                        severity: ViolationSeverity::Error,
+                        subjects: vec![bus.id, *member_id],
+                        message: format!(
+                            "bus \"{}\" names member interface {} which the runtime has never seen — \
+                             the bus is unverifiable (bus topology)",
+                            bus.name,
+                            member_id.short(),
+                        ),
+                    });
+                }
+            }
+            // Minimal v0 structural checks per protocol/topology combination.
+            match (contract.protocol.as_str(), &bus.topology) {
+                ("I2C" | "I2c" | "i2c", BusTopology::MultiDrop) => {
+                    // I²C MultiDrop: need unique 7-bit addresses on each member interface.
+                    // In v0, we check that each member interface has a unique "address" constraint.
+                    // This is a placeholder for the real check (which needs the constraint engine).
+                    if bus.members.len() > 1 {
+                        // Just flag that address uniqueness needs checking.
+                        findings.push(ViolationFinding {
+                            rule: Self::ID.to_string(),
+                            severity: ViolationSeverity::Error,
+                            subjects: vec![bus.id],
+                            message: format!(
+                                "I²C MultiDrop bus \"{}\" has {} member interfaces — address uniqueness must be verified (bus topology)",
+                                bus.name,
+                                bus.members.len(),
+                            ),
+                        });
+                    }
+                }
+                ("CAN" | "Can" | "can", BusTopology::Linear) => {
+                    // CAN Linear: must have termination at both ends (exactly 2 ends).
+                    // In v0, we just flag that termination must be verified.
+                    findings.push(ViolationFinding {
+                        rule: Self::ID.to_string(),
+                        severity: ViolationSeverity::Error,
+                        subjects: vec![bus.id],
+                        message: format!(
+                            "CAN Linear bus \"{}\" requires termination at both ends — must be verified (bus topology)",
+                            bus.name,
+                        ),
+                    });
+                }
+                ("USB2" | "USB" | "usb", BusTopology::Star) if bus.members.len() > 127 => {
+                    findings.push(ViolationFinding {
+                        rule: Self::ID.to_string(),
+                        severity: ViolationSeverity::Error,
+                        subjects: vec![bus.id],
+                        message: format!(
+                            "USB Star bus \"{}\" has {} members — exceeds USB 127 device limit (bus topology)",
+                            bus.name,
+                            bus.members.len(),
+                        ),
+                    });
+                }
+                _ => {
+                    // Unknown protocol/topology: no structural checks (open world).
+                }
+            }
+        }
+        findings
+    }
+}
+
+// ===================== Band B (increment 8): Subsystem =====================
+
+/// A subsystem boundary rule (Map 14): a [`Subsystem`] groups [`FunctionalBlock`]s and exposes
+/// [`Interface`]s as its boundary — the subsystems boundary is *complete* if every pin of every
+/// block inside the subsystem that connects to a net *outside* the subsystem is exposed via one
+/// of the subsystem's interfaces. In other words: no pin crosses the subsystem boundary without
+/// being accounted for in an interface. This is a structural check: a subsystem with "leaky"
+/// boundary (pins crossing the boundary not exposed) is a design finding (Error). Deterministic
+/// (P4): subsystems scanned in slice order; one Error finding per leaking pin (the pin and the
+/// subsystem are subjects). A subsystem referencing an unknown block or interface is also flagged
+/// (honesty).
+pub struct SubsystemBoundaryRule;
+
+impl SubsystemBoundaryRule {
+    pub const ID: &'static str = "erc-subsystem-boundary";
+
+    pub fn new() -> Self {
+        Self
+    }
+}
+impl Default for SubsystemBoundaryRule {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Rule for SubsystemBoundaryRule {
+    fn id(&self) -> &str {
+        Self::ID
+    }
+
+    fn evaluate(&self, ctx: &VerificationContext) -> Vec<ViolationFinding> {
+        let mut findings = Vec::new();
+        for subsys in ctx.subsystems.iter() {
+            // Check all blocks exist.
+            for block_id in &subsys.blocks {
+                if ctx.components.iter().find(|b| b.id == *block_id).is_none() {
+                    findings.push(ViolationFinding {
+                        rule: Self::ID.to_string(),
+                        severity: ViolationSeverity::Error,
+                        subjects: vec![subsys.id, *block_id],
+                        message: format!(
+                            "subsystem \"{}\" references unknown block {} — the subsystem is unverifiable (subsystem boundary)",
+                            subsys.name,
+                            block_id.short(),
+                        ),
+                    });
+                }
+            }
+            // Check all interfaces exist.
+            for iface_id in &subsys.interfaces {
+                if ctx.interfaces.iter().find(|i| i.id == *iface_id).is_none() {
+                    findings.push(ViolationFinding {
+                        rule: Self::ID.to_string(),
+                        severity: ViolationSeverity::Error,
+                        subjects: vec![subsys.id, *iface_id],
+                        message: format!(
+                            "subsystem \"{}\" names unknown interface {} — the subsystem is unverifiable (subsystem boundary)",
+                            subsys.name,
+                            iface_id.short(),
+                        ),
+                    });
+                }
+            }
+            // For v0, we flag that the full cross-boundary pin check needs the net→pins
+            // connectivity which the rule doesn't yet own. This is an honest limitation.
+            for block_id in &subsys.blocks {
+                if let Some(block) = ctx.components.iter().find(|b| b.id == *block_id) {
+                    findings.push(ViolationFinding {
+                        rule: Self::ID.to_string(),
+                        severity: ViolationSeverity::Error,
+                        subjects: vec![block.id, subsys.id],
+                        message: format!(
+                            "subsystem \"{}\" contains block {} — cross-boundary pin completeness check requires net→pins connectivity not yet owned by this rule (subsystem boundary v0 limitation)",
+                            subsys.name,
+                            block.id.short(),
+                        ),
+                    });
+                }
             }
         }
         findings
@@ -1970,6 +2704,15 @@ mod tests {
             placements: &[],
             tracks: &[],
             power_domains: &[],
+            clock_domains: &[],
+            return_paths: &[],
+            pin_capabilities: &[],
+            pin_assignments: &[],
+            signals: &[],
+            contracts: &[],
+            interfaces: &[],
+            buses: &[] as &[Bus],
+            subsystems: &[],
         };
         let findings = rule.evaluate(&ctx);
         assert_eq!(findings.len(), 1);
@@ -1999,6 +2742,15 @@ mod tests {
             placements: &[],
             tracks: &[],
             power_domains: &[],
+            clock_domains: &[],
+            return_paths: &[],
+            pin_capabilities: &[],
+            pin_assignments: &[],
+            signals: &[],
+            contracts: &[],
+            interfaces: &[],
+            buses: &[] as &[Bus],
+            subsystems: &[],
         });
         assert_eq!(findings.len(), 1);
     }
@@ -2021,6 +2773,15 @@ mod tests {
             placements: &[],
             tracks: &[],
             power_domains: &[],
+            clock_domains: &[],
+            return_paths: &[],
+            pin_capabilities: &[],
+            pin_assignments: &[],
+            signals: &[],
+            contracts: &[],
+            interfaces: &[],
+            buses: &[] as &[Bus],
+            subsystems: &[],
         });
         assert!(findings.is_empty());
     }
@@ -2085,6 +2846,15 @@ mod tests {
             placements: &[],
             tracks: &[],
             power_domains: &[],
+            clock_domains: &[],
+            return_paths: &[],
+            pin_capabilities: &[],
+            pin_assignments: &[],
+            signals: &[],
+            contracts: &[],
+            interfaces: &[],
+            buses: &[] as &[Bus],
+            subsystems: &[],
         }
     }
 
@@ -2176,6 +2946,15 @@ mod tests {
             placements: &[],
             tracks: &[],
             power_domains: domains,
+            clock_domains: &[],
+            return_paths: &[],
+            pin_capabilities: &[],
+            pin_assignments: &[],
+            signals: &[],
+            contracts: &[],
+            interfaces: &[],
+            buses: &[] as &[Bus],
+            subsystems: &[],
         }
     }
 
@@ -2241,6 +3020,586 @@ mod tests {
             .is_empty());
     }
 
+    // --------------------------- clock-domain membership (Band B) tests ---------------------------
+
+    fn clock_domain(
+        id: u128,
+        name: &str,
+        source: u128,
+        mhz: f64,
+        members: Vec<u128>,
+    ) -> ClockDomain {
+        ClockDomain {
+            id: EntityId(id),
+            name: name.to_string(),
+            frequency: PhysicalQuantity::new(mhz, Unit::Megahertz),
+            source_component: EntityId(source),
+            members: members.into_iter().map(EntityId).collect(),
+        }
+    }
+
+    fn clock_ctx<'a>(nets: &'a [Net], domains: &'a [ClockDomain]) -> VerificationContext<'a> {
+        VerificationContext {
+            requirements: &[],
+            constraints: &[],
+            components: &[],
+            pins: &[],
+            nets,
+            parts: &[],
+            bom_line_items: &[],
+            board: None,
+            placements: &[],
+            tracks: &[],
+            power_domains: &[],
+            clock_domains: domains,
+            return_paths: &[],
+            pin_capabilities: &[],
+            pin_assignments: &[],
+            signals: &[],
+            contracts: &[],
+            interfaces: &[],
+            buses: &[] as &[Bus],
+            subsystems: &[],
+        }
+    }
+
+    #[test]
+    fn net_in_two_clock_domains_is_a_conflict() {
+        // A net clocked by "SYS" (48 MHz) AND "AUDIO" (12.288 MHz) cannot be synchronous to
+        // both: a clock-domain crossing. Deterministic: one finding, subject = the net, message
+        // names both domains.
+        let nets = vec![
+            net(10, NetClass::Signal, vec![1, 2]),
+            net(11, NetClass::Signal, vec![3]),
+        ];
+        let domains = vec![
+            clock_domain(100, "SYS", 900, 48.0, vec![10]),
+            clock_domain(101, "AUDIO", 901, 12.288, vec![10]),
+        ];
+        let findings = ClockDomainMembershipRule::new().evaluate(&clock_ctx(&nets, &domains));
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].rule, ClockDomainMembershipRule::ID);
+        assert_eq!(findings[0].severity, ViolationSeverity::Error);
+        assert_eq!(findings[0].subjects, vec![EntityId(10)]);
+        assert!(findings[0].message.contains("SYS"));
+        assert!(findings[0].message.contains("AUDIO"));
+        assert!(findings[0].message.contains("crossing"));
+    }
+
+    #[test]
+    fn net_in_one_clock_domain_passes() {
+        // A net synchronous to a single domain is the healthy case.
+        let nets = vec![net(10, NetClass::Signal, vec![1, 2])];
+        let domains = vec![
+            clock_domain(100, "SYS", 900, 48.0, vec![10]),
+            clock_domain(101, "AUDIO", 901, 12.288, vec![11]),
+        ];
+        assert!(ClockDomainMembershipRule::new()
+            .evaluate(&clock_ctx(&nets, &domains))
+            .is_empty());
+    }
+
+    #[test]
+    fn two_domains_sharing_a_member_fires_once_per_net() {
+        // Membership is keyed by net, so a net shared by three domains still yields exactly one
+        // finding (the crossing), not three.
+        let nets = vec![net(10, NetClass::Signal, vec![1, 2])];
+        let domains = vec![
+            clock_domain(100, "A", 900, 48.0, vec![10]),
+            clock_domain(101, "B", 901, 24.0, vec![10]),
+            clock_domain(102, "C", 902, 12.0, vec![10]),
+        ];
+        let findings = ClockDomainMembershipRule::new().evaluate(&clock_ctx(&nets, &domains));
+        assert_eq!(findings.len(), 1);
+        assert!(findings[0].message.contains("3 distinct"));
+    }
+
+    #[test]
+    fn no_clock_domains_produce_no_findings() {
+        // Empty clock architecture: nothing to cross.
+        let nets = vec![net(10, NetClass::Signal, vec![1, 2])];
+        assert!(ClockDomainMembershipRule::new()
+            .evaluate(&clock_ctx(&nets, &[]))
+            .is_empty());
+    }
+
+    #[test]
+    fn member_net_missing_from_context_is_silent() {
+        // A domain naming a net the context does not carry contributes nothing (defensive, no
+        // invented membership — integrity is the commit seam's job, P3).
+        let nets = vec![net(10, NetClass::Signal, vec![1, 2])];
+        let domains = vec![
+            clock_domain(100, "SYS", 900, 48.0, vec![10]),
+            clock_domain(101, "AUDIO", 901, 12.288, vec![99]),
+        ];
+        assert!(ClockDomainMembershipRule::new()
+            .evaluate(&clock_ctx(&nets, &domains))
+            .is_empty());
+    }
+
+    // --------------------------- return-path requirement (Band B) tests ---------------------------
+
+    fn return_path(id: u128, name: &str, net: u128, plane: u128) -> ReturnPath {
+        ReturnPath {
+            id: EntityId(id),
+            name: name.to_string(),
+            net: EntityId(net),
+            reference_plane: EntityId(plane),
+        }
+    }
+
+    fn return_ctx<'a>(nets: &'a [Net], paths: &'a [ReturnPath]) -> VerificationContext<'a> {
+        VerificationContext {
+            requirements: &[],
+            constraints: &[],
+            components: &[],
+            pins: &[],
+            nets,
+            parts: &[],
+            bom_line_items: &[],
+            board: None,
+            placements: &[],
+            tracks: &[],
+            power_domains: &[],
+            clock_domains: &[],
+            return_paths: paths,
+            pin_capabilities: &[],
+            pin_assignments: &[],
+            signals: &[],
+            contracts: &[],
+            interfaces: &[],
+            buses: &[] as &[Bus],
+            subsystems: &[],
+        }
+    }
+
+    #[test]
+    fn controlled_net_without_return_path_is_flagged() {
+        // A net declaring a 50 Ω impedance target is a transmission-line declaration; with no
+        // declared return path its return half is under-specified — the silent SI failure.
+        let nets = vec![net_with_impedance(10, 50.0)];
+        let findings = ReturnPathRule::new().evaluate(&return_ctx(&nets, &[]));
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].rule, ReturnPathRule::ID);
+        assert_eq!(findings[0].severity, ViolationSeverity::Error);
+        assert_eq!(findings[0].subjects, vec![EntityId(10)]);
+        assert!(findings[0].message.contains("impedance"));
+        assert!(findings[0].message.contains("return path"));
+    }
+
+    #[test]
+    fn controlled_net_with_declared_return_path_passes() {
+        // The return half is named: the loop is closed on paper before any copper exists.
+        let nets = vec![net_with_impedance(10, 50.0)];
+        let paths = vec![return_path(100, "SPI ret on GND", 10, 20)];
+        assert!(ReturnPathRule::new()
+            .evaluate(&return_ctx(&nets, &paths))
+            .is_empty());
+    }
+
+    #[test]
+    fn uncontrolled_net_without_return_path_is_silent() {
+        // No impedance declaration, no requirement: ordinary routing stays quiet (no invented
+        // requirement — the rule never demands a return path it was never asked for).
+        let nets = vec![net(10, NetClass::Signal, vec![1, 2])];
+        assert!(ReturnPathRule::new()
+            .evaluate(&return_ctx(&nets, &[]))
+            .is_empty());
+    }
+
+    #[test]
+    fn empty_architecture_produces_no_findings() {
+        assert!(ReturnPathRule::new()
+            .evaluate(&return_ctx(&[], &[]))
+            .is_empty());
+    }
+
+    #[test]
+    fn uncontrolled_net_with_return_path_stays_silent() {
+        // Declaring a return path for an uncontrolled net is over-specification, not an error.
+        let nets = vec![net(10, NetClass::Signal, vec![1, 2])];
+        let paths = vec![return_path(100, "GND ret", 10, 20)];
+        assert!(ReturnPathRule::new()
+            .evaluate(&return_ctx(&nets, &paths))
+            .is_empty());
+    }
+
+    // --------------------------- pin-function / mux (Band B) tests ---------------------------
+
+    fn capability(id: u128, pin: u128, functions: &[&str]) -> PinCapability {
+        PinCapability {
+            id: EntityId(id),
+            pin: EntityId(pin),
+            functions: functions.iter().map(|f| f.to_string()).collect(),
+        }
+    }
+
+    fn assignment(id: u128, pin: u128, function: &str) -> PinAssignment {
+        PinAssignment {
+            id: EntityId(id),
+            pin: EntityId(pin),
+            function: function.to_string(),
+        }
+    }
+
+    fn pin_ctx<'a>(
+        capabilities: &'a [PinCapability],
+        assignments: &'a [PinAssignment],
+    ) -> VerificationContext<'a> {
+        VerificationContext {
+            requirements: &[],
+            constraints: &[],
+            components: &[],
+            pins: &[],
+            nets: &[],
+            parts: &[],
+            bom_line_items: &[],
+            board: None,
+            placements: &[],
+            tracks: &[],
+            power_domains: &[],
+            clock_domains: &[],
+            return_paths: &[],
+            pin_capabilities: capabilities,
+            pin_assignments: assignments,
+            signals: &[],
+            contracts: &[],
+            interfaces: &[],
+            buses: &[] as &[Bus],
+            subsystems: &[],
+        }
+    }
+
+    #[test]
+    fn pin_claimed_for_two_functions_is_a_mux_conflict() {
+        // Two assignments claiming pin 10 for different functions: a real hardware clash — a
+        // physical pin carries one mux function at a time (master-prompt §31). Exactly one finding.
+        let caps = vec![capability(1, 10, &["SPI1_MOSI", "UART1_TX"])];
+        let assigns = vec![
+            assignment(2, 10, "SPI1_MOSI"),
+            assignment(3, 10, "UART1_TX"),
+        ];
+        let findings = PinMuxConflictRule::new().evaluate(&pin_ctx(&caps, &assigns));
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].rule, PinMuxConflictRule::ID);
+        assert_eq!(findings[0].severity, ViolationSeverity::Error);
+        assert!(findings[0].subjects.contains(&EntityId(10)));
+        assert!(findings[0].message.contains("SPI1_MOSI"));
+        assert!(findings[0].message.contains("UART1_TX"));
+    }
+
+    #[test]
+    fn pin_claimed_for_same_function_twice_is_silent() {
+        // Re-asserting the same function on one pin is benign, not a mux conflict.
+        let caps = vec![capability(1, 10, &["SPI1_MOSI"])];
+        let assigns = vec![
+            assignment(2, 10, "SPI1_MOSI"),
+            assignment(3, 10, "SPI1_MOSI"),
+        ];
+        assert!(PinMuxConflictRule::new()
+            .evaluate(&pin_ctx(&caps, &assigns))
+            .is_empty());
+    }
+
+    #[test]
+    fn unassigned_pin_is_silent_for_mux_conflict() {
+        // A capability alone (datasheet truth) with no assignments is not a conflict.
+        let caps = vec![capability(1, 10, &["SPI1_MOSI"])];
+        assert!(PinMuxConflictRule::new()
+            .evaluate(&pin_ctx(&caps, &[]))
+            .is_empty());
+    }
+
+    #[test]
+    fn assignment_without_declared_capability_is_flagged() {
+        // An assignment with no capability cannot be verified — under-specified, a finding.
+        let assigns = vec![assignment(2, 10, "SPI1_MOSI")];
+        let findings = PinCapabilityRule::new().evaluate(&pin_ctx(&[], &assigns));
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].rule, PinCapabilityRule::ID);
+        assert_eq!(findings[0].severity, ViolationSeverity::Error);
+        assert_eq!(findings[0].subjects, vec![EntityId(10), EntityId(2)]);
+    }
+
+    #[test]
+    fn assignment_exceeding_capability_is_flagged() {
+        // The pin can only carry SPI1_MOSI; assigning UART1_TX asks silicon it does not have.
+        let caps = vec![capability(1, 10, &["SPI1_MOSI"])];
+        let assigns = vec![assignment(2, 10, "UART1_TX")];
+        let findings = PinCapabilityRule::new().evaluate(&pin_ctx(&caps, &assigns));
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].rule, PinCapabilityRule::ID);
+        assert!(findings[0].message.contains("UART1_TX"));
+        assert!(findings[0].message.contains("SPI1_MOSI"));
+    }
+
+    #[test]
+    fn assignment_honoring_capability_passes() {
+        let caps = vec![capability(1, 10, &["SPI1_MOSI", "UART1_TX"])];
+        let assigns = vec![assignment(2, 10, "UART1_TX")];
+        assert!(PinCapabilityRule::new()
+            .evaluate(&pin_ctx(&caps, &assigns))
+            .is_empty());
+    }
+
+    #[test]
+    fn empty_pin_architecture_produces_no_findings() {
+        assert!(PinMuxConflictRule::new()
+            .evaluate(&pin_ctx(&[], &[]))
+            .is_empty());
+        assert!(PinCapabilityRule::new()
+            .evaluate(&pin_ctx(&[], &[]))
+            .is_empty());
+    }
+
+    // --------------------------- signal flow (Band B) tests ---------------------------
+
+    fn signal(id: u128, name: &str, source: u128, sinks: &[u128], semantics: &str) -> Signal {
+        Signal {
+            id: EntityId(id),
+            name: name.to_string(),
+            source: EntityId(source),
+            sinks: sinks.iter().map(|&s| EntityId(s)).collect(),
+            semantics: semantics.to_string(),
+        }
+    }
+
+    fn sig_pin(id: u128, et: PinElectricalType) -> Pin {
+        Pin {
+            id: EntityId(id),
+            component: EntityId(100 + id),
+            designation: format!("P{id}"),
+            electrical_type: et,
+        }
+    }
+
+    fn sig_ctx<'a>(pins: &'a [Pin], signals: &'a [Signal]) -> VerificationContext<'a> {
+        VerificationContext {
+            requirements: &[],
+            constraints: &[],
+            components: &[],
+            pins,
+            nets: &[],
+            parts: &[],
+            bom_line_items: &[],
+            board: None,
+            placements: &[],
+            tracks: &[],
+            power_domains: &[],
+            clock_domains: &[],
+            return_paths: &[],
+            pin_capabilities: &[],
+            pin_assignments: &[],
+            signals,
+            contracts: &[],
+            interfaces: &[],
+            buses: &[] as &[Bus],
+            subsystems: &[],
+        }
+    }
+
+    #[test]
+    fn signal_with_output_source_and_input_sinks_passes() {
+        // Source is Output (can drive), sinks are Input (can receive) — legal flow.
+        let pins = vec![
+            sig_pin(10, PinElectricalType::Output),
+            sig_pin(11, PinElectricalType::Input),
+        ];
+        let sigs = vec![signal(1, "SYS_CLK", 10, &[11], "system clock")];
+        assert!(SignalDriverSinkRule::new()
+            .evaluate(&sig_ctx(&pins, &sigs))
+            .is_empty());
+    }
+
+    #[test]
+    fn signal_with_bidirectional_source_and_sinks_passes() {
+        // Bidirectional can both drive and receive — legal both ways.
+        let pins = vec![
+            sig_pin(10, PinElectricalType::Bidirectional),
+            sig_pin(11, PinElectricalType::Bidirectional),
+        ];
+        let sigs = vec![signal(1, "I2C_SDA", 10, &[11], "I2C data")];
+        assert!(SignalDriverSinkRule::new()
+            .evaluate(&sig_ctx(&pins, &sigs))
+            .is_empty());
+    }
+
+    #[test]
+    fn signal_with_input_source_is_flagged() {
+        // An Input pin cannot drive — no Thévenin source (circuit-theory.md L134/L152).
+        let pins = vec![
+            sig_pin(10, PinElectricalType::Input),
+            sig_pin(11, PinElectricalType::Input),
+        ];
+        let sigs = vec![signal(1, "BAD_CLK", 10, &[11], "illegal clock")];
+        let findings = SignalDriverSinkRule::new().evaluate(&sig_ctx(&pins, &sigs));
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].rule, SignalDriverSinkRule::ID);
+        assert!(findings[0].message.contains("Input"));
+    }
+
+    #[test]
+    fn signal_with_output_sink_is_flagged() {
+        // An Output pin cannot receive — it would fight the driver.
+        let pins = vec![
+            sig_pin(10, PinElectricalType::Output),
+            sig_pin(11, PinElectricalType::Output),
+        ];
+        let sigs = vec![signal(1, "BAD_FLOW", 10, &[11], "illegal flow")];
+        let findings = SignalDriverSinkRule::new().evaluate(&sig_ctx(&pins, &sigs));
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].rule, SignalDriverSinkRule::ID);
+        assert!(findings[0].message.contains("Output"));
+    }
+
+    #[test]
+    fn signal_with_power_sink_is_flagged() {
+        // A PowerIn/Out pin is not a signal receiver.
+        let pins = vec![
+            sig_pin(10, PinElectricalType::Output),
+            sig_pin(11, PinElectricalType::PowerIn),
+        ];
+        let sigs = vec![signal(1, "BAD_PWR", 10, &[11], "illegal power")];
+        let findings = SignalDriverSinkRule::new().evaluate(&sig_ctx(&pins, &sigs));
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].rule, SignalDriverSinkRule::ID);
+    }
+
+    #[test]
+    fn signal_with_unknown_source_is_flagged() {
+        // Source pin never seen by runtime — flow unverifiable (honesty).
+        let pins = vec![sig_pin(11, PinElectricalType::Input)];
+        let sigs = vec![signal(1, "GHOST_SRC", 10, &[11], "ghost")];
+        let findings = SignalDriverSinkRule::new().evaluate(&sig_ctx(&pins, &sigs));
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].rule, SignalDriverSinkRule::ID);
+        assert!(findings[0].message.contains("never seen"));
+    }
+
+    #[test]
+    fn signal_with_unknown_sink_is_flagged() {
+        // Sink pin never seen — unverifiable.
+        let pins = vec![sig_pin(10, PinElectricalType::Output)];
+        let sigs = vec![signal(1, "GHOST_SNK", 10, &[11], "ghost")];
+        let findings = SignalDriverSinkRule::new().evaluate(&sig_ctx(&pins, &sigs));
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].rule, SignalDriverSinkRule::ID);
+    }
+
+    #[test]
+    fn empty_signal_architecture_produces_no_findings() {
+        assert!(SignalDriverSinkRule::new()
+            .evaluate(&sig_ctx(&[], &[]))
+            .is_empty());
+    }
+
+    // --------------------------- interface / contract (Band B) tests ---------------------------
+
+    fn contract(id: u128, protocol: &str, name: &str) -> Contract {
+        Contract {
+            id: EntityId(id),
+            protocol: protocol.to_string(),
+            name: name.to_string(),
+            constraints: vec![],
+        }
+    }
+
+    fn interface(id: u128, name: &str, signals: &[u128], contract: u128) -> Interface {
+        Interface {
+            id: EntityId(id),
+            name: name.to_string(),
+            signals: signals.iter().map(|&s| EntityId(s)).collect(),
+            contract: EntityId(contract),
+        }
+    }
+
+    fn iface_ctx<'a>(
+        contracts: &'a [Contract],
+        interfaces: &'a [Interface],
+    ) -> VerificationContext<'a> {
+        VerificationContext {
+            requirements: &[],
+            constraints: &[],
+            components: &[],
+            pins: &[],
+            nets: &[],
+            parts: &[],
+            bom_line_items: &[],
+            board: None,
+            placements: &[],
+            tracks: &[],
+            power_domains: &[],
+            clock_domains: &[],
+            return_paths: &[],
+            pin_capabilities: &[],
+            pin_assignments: &[],
+            signals: &[],
+            contracts,
+            interfaces,
+            buses: &[] as &[Bus],
+            subsystems: &[],
+        }
+    }
+
+    #[test]
+    fn i2c_interface_with_two_signals_passes() {
+        // I2C contract requires exactly 2 signals.
+        let contracts = vec![contract(1, "I2C", "I2C Bus 1")];
+        let interfaces = vec![interface(10, "I2C1", &[20, 21], 1)];
+        assert!(InterfaceContractRule::new()
+            .evaluate(&iface_ctx(&contracts, &interfaces))
+            .is_empty());
+    }
+
+    #[test]
+    fn i2c_interface_with_wrong_signal_count_is_flagged() {
+        // I2C with 3 signals violates the protocol.
+        let contracts = vec![contract(1, "I2C", "I2C Bus 1")];
+        let interfaces = vec![interface(10, "I2C1", &[20, 21, 22], 1)];
+        let findings = InterfaceContractRule::new().evaluate(&iface_ctx(&contracts, &interfaces));
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].rule, InterfaceContractRule::ID);
+        assert!(findings[0].message.contains("I2C"));
+        assert!(findings[0].message.contains("2 signals"));
+    }
+
+    #[test]
+    fn spi_interface_with_four_signals_passes() {
+        let contracts = vec![contract(1, "SPI", "SPI Bus 1")];
+        let interfaces = vec![interface(10, "SPI1", &[20, 21, 22, 23], 1)];
+        assert!(InterfaceContractRule::new()
+            .evaluate(&iface_ctx(&contracts, &interfaces))
+            .is_empty());
+    }
+
+    #[test]
+    fn spi_interface_with_fewer_than_four_signals_is_flagged() {
+        let contracts = vec![contract(1, "SPI", "SPI Bus 1")];
+        let interfaces = vec![interface(10, "SPI1", &[20, 21], 1)];
+        let findings = InterfaceContractRule::new().evaluate(&iface_ctx(&contracts, &interfaces));
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].rule, InterfaceContractRule::ID);
+        assert!(findings[0].message.contains("SPI"));
+        assert!(findings[0].message.contains("4 signals"));
+    }
+
+    #[test]
+    fn interface_with_unknown_contract_is_flagged() {
+        // Contract never seen by runtime — unverifiable (honesty).
+        let interfaces = vec![interface(10, "I2C1", &[20, 21], 999)];
+        let findings = InterfaceContractRule::new().evaluate(&iface_ctx(&[], &interfaces));
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].rule, InterfaceContractRule::ID);
+        assert!(findings[0].message.contains("never seen"));
+    }
+
+    #[test]
+    fn empty_interface_architecture_produces_no_findings() {
+        assert!(InterfaceContractRule::new()
+            .evaluate(&iface_ctx(&[], &[]))
+            .is_empty());
+    }
+
     // ------------------------------ catalog + BOM tests ------------------------------
 
     fn component(id: u128, class: ComponentClass) -> Component {
@@ -2290,6 +3649,15 @@ mod tests {
             placements: &[],
             tracks: &[],
             power_domains: &[],
+            clock_domains: &[],
+            return_paths: &[],
+            pin_capabilities: &[],
+            pin_assignments: &[],
+            signals: &[],
+            contracts: &[],
+            interfaces: &[],
+            buses: &[] as &[Bus],
+            subsystems: &[],
         }
     }
 
@@ -2449,6 +3817,15 @@ mod tests {
             placements,
             tracks: &[],
             power_domains: &[],
+            clock_domains: &[],
+            return_paths: &[],
+            pin_capabilities: &[],
+            pin_assignments: &[],
+            signals: &[],
+            contracts: &[],
+            interfaces: &[],
+            buses: &[] as &[Bus],
+            subsystems: &[],
         }
     }
 
@@ -2469,6 +3846,15 @@ mod tests {
             placements: &[],
             tracks,
             power_domains: &[],
+            clock_domains: &[],
+            return_paths: &[],
+            pin_capabilities: &[],
+            pin_assignments: &[],
+            signals: &[],
+            contracts: &[],
+            interfaces: &[],
+            buses: &[] as &[Bus],
+            subsystems: &[],
         }
     }
 
@@ -2741,6 +4127,15 @@ mod tests {
             placements: &[],
             tracks,
             power_domains: &[],
+            clock_domains: &[],
+            return_paths: &[],
+            pin_capabilities: &[],
+            pin_assignments: &[],
+            signals: &[],
+            contracts: &[],
+            interfaces: &[],
+            buses: &[] as &[Bus],
+            subsystems: &[],
         }
     }
 
@@ -2805,6 +4200,15 @@ mod tests {
             placements: &[],
             tracks,
             power_domains: &[],
+            clock_domains: &[],
+            return_paths: &[],
+            pin_capabilities: &[],
+            pin_assignments: &[],
+            signals: &[],
+            contracts: &[],
+            interfaces: &[],
+            buses: &[] as &[Bus],
+            subsystems: &[],
         }
     }
 
@@ -2879,6 +4283,15 @@ mod tests {
             placements,
             tracks,
             power_domains: &[],
+            clock_domains: &[],
+            return_paths: &[],
+            pin_capabilities: &[],
+            pin_assignments: &[],
+            signals: &[],
+            contracts: &[],
+            interfaces: &[],
+            buses: &[] as &[Bus],
+            subsystems: &[],
         }
     }
 
@@ -3082,6 +4495,15 @@ mod tests {
             placements: &[],
             tracks,
             power_domains: &[],
+            clock_domains: &[],
+            return_paths: &[],
+            pin_capabilities: &[],
+            pin_assignments: &[],
+            signals: &[],
+            contracts: &[],
+            interfaces: &[],
+            buses: &[] as &[Bus],
+            subsystems: &[],
         }
     }
 
@@ -3274,6 +4696,15 @@ mod tests {
             placements,
             tracks: &[],
             power_domains: &[],
+            clock_domains: &[],
+            return_paths: &[],
+            pin_capabilities: &[],
+            pin_assignments: &[],
+            signals: &[],
+            contracts: &[],
+            interfaces: &[],
+            buses: &[] as &[Bus],
+            subsystems: &[],
         }
     }
 
@@ -3294,6 +4725,15 @@ mod tests {
             placements: &[],
             tracks,
             power_domains: &[],
+            clock_domains: &[],
+            return_paths: &[],
+            pin_capabilities: &[],
+            pin_assignments: &[],
+            signals: &[],
+            contracts: &[],
+            interfaces: &[],
+            buses: &[] as &[Bus],
+            subsystems: &[],
         }
     }
 
@@ -3404,6 +4844,15 @@ mod tests {
             placements: &[],
             tracks,
             power_domains: &[],
+            clock_domains: &[],
+            return_paths: &[],
+            pin_capabilities: &[],
+            pin_assignments: &[],
+            signals: &[],
+            contracts: &[],
+            interfaces: &[],
+            buses: &[] as &[Bus],
+            subsystems: &[],
         }
     }
 

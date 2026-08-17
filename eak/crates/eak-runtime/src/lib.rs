@@ -52,11 +52,12 @@ mod kernel_tests {
     use super::*;
     use eak_domain::{
         Alternative, Assumption, AssumptionCriticality, AssumptionStatus, Board, BoardSide,
-        BomLineItem, Component, ComponentClass, ComponentOrigin, Decision, Discharge,
-        DischargeResolution, EntityId, FidelityMethod, FunctionalBlock, LayerStack, ModelFidelity,
-        Net, NetClass, NetOrigin, Objective, Part, PartLifecycle, Pin, PinElectricalType,
-        Placement, PowerDomain, Priority, Requirement, RequirementCategory, RequirementStatus,
-        Risk, RiskLikelihood, RiskSeverity, RiskStatus, Track, Tradeoff,
+        BomLineItem, ClockDomain, Component, ComponentClass, ComponentOrigin, Contract, Decision,
+        Discharge, DischargeResolution, EntityId, FidelityMethod, FunctionalBlock, Interface,
+        LayerStack, ModelFidelity, Net, NetClass, NetOrigin, Objective, Part, PartLifecycle, Pin,
+        PinAssignment, PinCapability, PinElectricalType, Placement, PowerDomain, Priority,
+        Requirement, RequirementCategory, RequirementStatus, ReturnPath, Risk, RiskLikelihood,
+        RiskSeverity, RiskStatus, Signal, Track, Tradeoff,
     };
     use eak_ports::{
         Event, EventLog, EventRecord, ReasoningEngine, ReasoningError, ReasoningRequest,
@@ -2182,5 +2183,1065 @@ mod kernel_tests {
 
         // Nothing entered the log: every malformed/dangling proposal was rejected pre-commit.
         assert!(core.state.power_domains.is_empty());
+    }
+
+    // ===================== Band B (increment 2): ClockDomain seam =====================
+    //
+    // TDD (written before the seam handler exists): the clock-domain object flows through the same
+    // seam as every other object. CreateClockDomain re-validates (non-empty name, positive finite
+    // frequency, >=1 member net), rejects a null/unknown source component, and rejects any member
+    // net that was never committed (P3 referential integrity — a domain can never reference a
+    // phantom clock net). The fold pushes the committed domain into state; the log replays
+    // byte-identically (P4). This is the entry point for Band B's clock-domain membership rule.
+
+    /// Seed an oscillator Ic and a committed clock net, so a clock domain has real referential
+    /// anchors. Returns (component id, net id) — the resolvable seam targets.
+    fn seed_clock_source_and_net(core: &mut RuntimeCore) -> (EntityId, EntityId) {
+        let rid = seed_requirement(core);
+        let block_id = core.fresh_id();
+        core.invoke(CapabilityRequest::CreateFunctionalBlock {
+            block: FunctionalBlock {
+                id: block_id,
+                name: "48 MHz system clock".into(),
+                function: "source the SYS clock domain".into(),
+                requirements: vec![rid],
+            },
+            links: vec![],
+        })
+        .unwrap();
+        let comp_id = core.fresh_id();
+        let pin_id = core.fresh_id();
+        core.invoke(CapabilityRequest::RealizeComponent {
+            component: Component {
+                id: comp_id,
+                refdes: "Y1".into(),
+                class: ComponentClass::Ic,
+                value: None,
+                from_block: block_id,
+                origin: ComponentOrigin::Synthesized,
+            },
+            pins: vec![Pin {
+                id: pin_id,
+                component: comp_id,
+                designation: "OUT".into(),
+                electrical_type: PinElectricalType::Output,
+            }],
+            links: vec![],
+        })
+        .unwrap();
+        let net_id = core.fresh_id();
+        core.invoke(CapabilityRequest::CreateNet {
+            net: Net {
+                id: net_id,
+                name: "SYS_CLK".into(),
+                class: NetClass::Signal,
+                members: vec![pin_id],
+                current: None,
+                impedance_target: None,
+                origin: NetOrigin::Logical,
+            },
+            links: vec![],
+        })
+        .unwrap();
+        (comp_id, net_id)
+    }
+
+    #[test]
+    fn create_clock_domain_seam_accepts_valid_then_folds_and_replays_byte_identically() {
+        let mut core = new_core();
+        let (source, net_id) = seed_clock_source_and_net(&mut core);
+        let dom_id = core.fresh_id();
+
+        core.invoke(CapabilityRequest::CreateClockDomain {
+            domain: ClockDomain {
+                id: dom_id,
+                name: "SYS".into(),
+                frequency: PhysicalQuantity::new(48.0, Unit::Megahertz),
+                source_component: source,
+                members: vec![net_id],
+            },
+            links: vec![],
+        })
+        .expect("a well-formed clock domain on committed component + net is accepted at the seam");
+
+        // The fold pushed exactly one domain and the accessor reads it back by id.
+        assert_eq!(core.state.clock_domains.len(), 1);
+        let d = core
+            .state
+            .clock_domain(dom_id)
+            .expect("clock domain folded by id");
+        assert_eq!(d.name, "SYS");
+        assert_eq!(d.source_component, source);
+        assert_eq!(d.frequency, PhysicalQuantity::new(48.0, Unit::Megahertz));
+
+        // Byte-identical replay with the clock domain in the log (P4).
+        let replayed = replay(core.log()).unwrap();
+        assert_eq!(core.state, replayed);
+        assert_eq!(core.state.canonical_json(), replayed.canonical_json());
+    }
+
+    #[test]
+    fn create_clock_domain_seam_rejects_malformed_and_dangling_proposals() {
+        let mut core = new_core();
+        let (source, net_id) = seed_clock_source_and_net(&mut core);
+        let (d_blank, d_bad_freq, d_null_src, d_phantom_src, d_phantom_net, d_empty_members) = (
+            core.fresh_id(),
+            core.fresh_id(),
+            core.fresh_id(),
+            core.fresh_id(),
+            core.fresh_id(),
+            core.fresh_id(),
+        );
+
+        // (1) Blank domain name — domain validate() rejects.
+        let err = core
+            .invoke(CapabilityRequest::CreateClockDomain {
+                domain: ClockDomain {
+                    id: d_blank,
+                    name: "   ".into(),
+                    frequency: PhysicalQuantity::new(48.0, Unit::Megahertz),
+                    source_component: source,
+                    members: vec![net_id],
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // (2) Non-positive frequency — a clock must tick; domain validate() rejects.
+        let err = core
+            .invoke(CapabilityRequest::CreateClockDomain {
+                domain: ClockDomain {
+                    id: d_bad_freq,
+                    name: "DEAD".into(),
+                    frequency: PhysicalQuantity::new(0.0, Unit::Megahertz),
+                    source_component: source,
+                    members: vec![net_id],
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // (3) Null source — a clock with no sourcing component is untraceable (P3).
+        let err = core
+            .invoke(CapabilityRequest::CreateClockDomain {
+                domain: ClockDomain {
+                    id: d_null_src,
+                    name: "SYS_GHOST".into(),
+                    frequency: PhysicalQuantity::new(48.0, Unit::Megahertz),
+                    source_component: EntityId::NULL,
+                    members: vec![net_id],
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // (4) Dangling source — resolves to no committed component (P3).
+        let err = core
+            .invoke(CapabilityRequest::CreateClockDomain {
+                domain: ClockDomain {
+                    id: d_phantom_src,
+                    name: "SYS_PHANTOM".into(),
+                    frequency: PhysicalQuantity::new(48.0, Unit::Megahertz),
+                    source_component: EntityId(0xDEAD_BEEF),
+                    members: vec![net_id],
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // (5) Dangling member net — references a net never committed (P3): no phantom clock.
+        let err = core
+            .invoke(CapabilityRequest::CreateClockDomain {
+                domain: ClockDomain {
+                    id: d_phantom_net,
+                    name: "SYS_OK".into(),
+                    frequency: PhysicalQuantity::new(48.0, Unit::Megahertz),
+                    source_component: source,
+                    members: vec![EntityId(0xDEAD_BEEF)],
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // (6) Empty members — a clock that drives nothing is inert; domain validate() rejects.
+        let err = core
+            .invoke(CapabilityRequest::CreateClockDomain {
+                domain: ClockDomain {
+                    id: d_empty_members,
+                    name: "SYS_IDLE".into(),
+                    frequency: PhysicalQuantity::new(48.0, Unit::Megahertz),
+                    source_component: source,
+                    members: vec![],
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // Nothing entered the log: every malformed/dangling proposal was rejected pre-commit.
+        assert!(core.state.clock_domains.is_empty());
+    }
+
+    // ===================== Band B (increment 3): ReturnPath seam =====================
+    //
+    // TDD (written before the seam handler exists): the return-path object flows through the same
+    // seam as every other object. CreateReturnPath re-validates (non-empty name, non-null net,
+    // non-null reference plane, net != reference plane), rejects a net or reference plane that was
+    // never committed (P3 referential integrity — a path can never reference a phantom conductor).
+    // The fold pushes the committed path into state; the log replays byte-identically (P4). This is
+    // the entry point for Band B's return-path requirement rule.
+
+    /// Seed a controlled signal net (declares a 50 Ω impedance target) and a ground reference net,
+    /// so a return path has real referential anchors. Each net joins a pin so it carries real
+    /// connectivity (the seam rejects member-less nets). Returns (controlled net id, reference net id).
+    fn seed_controlled_and_reference_nets(core: &mut RuntimeCore) -> (EntityId, EntityId) {
+        // A controlled signal pin (a driver output) on one component.
+        let sig_comp = core.fresh_id();
+        let sig_pin = core.fresh_id();
+        core.invoke(CapabilityRequest::RealizeComponent {
+            component: Component {
+                id: sig_comp,
+                refdes: "U1".into(),
+                class: ComponentClass::Ic,
+                value: None,
+                from_block: EntityId::NULL,
+                origin: ComponentOrigin::Imported,
+            },
+            pins: vec![Pin {
+                id: sig_pin,
+                component: sig_comp,
+                designation: "OUT".into(),
+                electrical_type: PinElectricalType::Output,
+            }],
+            links: vec![],
+        })
+        .unwrap();
+        // A reference pin (a ground lug) on another component.
+        let ref_comp = core.fresh_id();
+        let ref_pin = core.fresh_id();
+        core.invoke(CapabilityRequest::RealizeComponent {
+            component: Component {
+                id: ref_comp,
+                refdes: "U2".into(),
+                class: ComponentClass::Connector,
+                value: None,
+                from_block: EntityId::NULL,
+                origin: ComponentOrigin::Imported,
+            },
+            pins: vec![Pin {
+                id: ref_pin,
+                component: ref_comp,
+                designation: "GND".into(),
+                electrical_type: PinElectricalType::PowerIn,
+            }],
+            links: vec![],
+        })
+        .unwrap();
+
+        let sig_net = core.fresh_id();
+        let ref_net = core.fresh_id();
+        core.invoke(CapabilityRequest::CreateNet {
+            net: Net {
+                id: sig_net,
+                name: "SYS_CLK".into(),
+                class: NetClass::Signal,
+                members: vec![sig_pin],
+                current: None,
+                impedance_target: Some(PhysicalQuantity::new(50.0, Unit::Ohm)),
+                origin: NetOrigin::Logical,
+            },
+            links: vec![],
+        })
+        .unwrap();
+        core.invoke(CapabilityRequest::CreateNet {
+            net: Net {
+                id: ref_net,
+                name: "GND".into(),
+                class: NetClass::Ground,
+                members: vec![ref_pin],
+                current: None,
+                impedance_target: None,
+                origin: NetOrigin::Logical,
+            },
+            links: vec![],
+        })
+        .unwrap();
+        (sig_net, ref_net)
+    }
+
+    #[test]
+    fn create_return_path_seam_accepts_valid_then_folds_and_replays_byte_identically() {
+        let mut core = new_core();
+        let (sig_net, ref_net) = seed_controlled_and_reference_nets(&mut core);
+        let path_id = core.fresh_id();
+
+        core.invoke(CapabilityRequest::CreateReturnPath {
+            path: ReturnPath {
+                id: path_id,
+                name: "SYS_CLK ret on GND".into(),
+                net: sig_net,
+                reference_plane: ref_net,
+            },
+            links: vec![],
+        })
+        .expect("a well-formed return path on committed nets is accepted at the seam");
+
+        // The fold pushed exactly one path and the accessor reads it back by id.
+        assert_eq!(core.state.return_paths.len(), 1);
+        let p = core
+            .state
+            .return_path(path_id)
+            .expect("return path folded by id");
+        assert_eq!(p.name, "SYS_CLK ret on GND");
+        assert_eq!(p.net, sig_net);
+        assert_eq!(p.reference_plane, ref_net);
+
+        // Byte-identical replay with the return path in the log (P4).
+        let replayed = replay(core.log()).unwrap();
+        assert_eq!(core.state, replayed);
+        assert_eq!(core.state.canonical_json(), replayed.canonical_json());
+    }
+
+    #[test]
+    fn create_return_path_seam_rejects_malformed_and_dangling_proposals() {
+        let mut core = new_core();
+        let (sig_net, ref_net) = seed_controlled_and_reference_nets(&mut core);
+        let (p_blank, p_null_net, p_null_plane, p_self, p_phantom_net, p_phantom_plane) = (
+            core.fresh_id(),
+            core.fresh_id(),
+            core.fresh_id(),
+            core.fresh_id(),
+            core.fresh_id(),
+            core.fresh_id(),
+        );
+
+        // (1) Blank path name — domain validate() rejects.
+        let err = core
+            .invoke(CapabilityRequest::CreateReturnPath {
+                path: ReturnPath {
+                    id: p_blank,
+                    name: "   ".into(),
+                    net: sig_net,
+                    reference_plane: ref_net,
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // (2) Null net — a return path for nothing is untraceable (P3).
+        let err = core
+            .invoke(CapabilityRequest::CreateReturnPath {
+                path: ReturnPath {
+                    id: p_null_net,
+                    name: "GHOST ret".into(),
+                    net: EntityId::NULL,
+                    reference_plane: ref_net,
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // (3) Null reference plane — a return path with no return conductor is meaningless.
+        let err = core
+            .invoke(CapabilityRequest::CreateReturnPath {
+                path: ReturnPath {
+                    id: p_null_plane,
+                    name: "SYS ret".into(),
+                    net: sig_net,
+                    reference_plane: EntityId::NULL,
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // (4) Self-return — a signal cannot be its own return conductor (KCL); validate() rejects.
+        let err = core
+            .invoke(CapabilityRequest::CreateReturnPath {
+                path: ReturnPath {
+                    id: p_self,
+                    name: "SELF ret".into(),
+                    net: sig_net,
+                    reference_plane: sig_net,
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // (5) Dangling net — references a net never committed (P3): no phantom signal conductor.
+        let err = core
+            .invoke(CapabilityRequest::CreateReturnPath {
+                path: ReturnPath {
+                    id: p_phantom_net,
+                    name: "SYS ret".into(),
+                    net: EntityId(0xDEAD_BEEF),
+                    reference_plane: ref_net,
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // (6) Dangling reference plane — references a net never committed (P3): no phantom plane.
+        let err = core
+            .invoke(CapabilityRequest::CreateReturnPath {
+                path: ReturnPath {
+                    id: p_phantom_plane,
+                    name: "SYS ret".into(),
+                    net: sig_net,
+                    reference_plane: EntityId(0xDEAD_BEEF),
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // Nothing entered the log: every malformed/dangling proposal was rejected pre-commit.
+        assert!(core.state.return_paths.is_empty());
+    }
+
+    // ===================== Band B (increment 4): Pin-Function / Mux seam =====================
+    //
+    // TDD (written before the seam handlers exist): PinCapability and PinAssignment flow through
+    // the same seam as every other object. CreatePinCapability / CreatePinAssignment re-validate
+    // (non-null pin; non-empty functions / non-empty function) and reject a pin that was never
+    // committed (P3 referential integrity — a capability or assignment can never attach to a
+    // phantom pin). The fold pushes the committed objects into state; the log replays
+    // byte-identically (P4). Whether an assignment conflicts or exceeds its pin's capability is the
+    // rules' judgement at ERC time, NOT the seam's — a well-formed assignment must enter state so
+    // the conflicts are reported (master-prompt §31).
+
+    /// Seed an MCU pin so a capability and an assignment have a real referential anchor. Returns the
+    /// pin id.
+    fn seed_mcu_pin(core: &mut RuntimeCore) -> EntityId {
+        let comp = core.fresh_id();
+        let pin = core.fresh_id();
+        core.invoke(CapabilityRequest::RealizeComponent {
+            component: Component {
+                id: comp,
+                refdes: "U1".into(),
+                class: ComponentClass::Ic,
+                value: None,
+                from_block: EntityId::NULL,
+                origin: ComponentOrigin::Imported,
+            },
+            pins: vec![Pin {
+                id: pin,
+                component: comp,
+                designation: "P1".into(),
+                electrical_type: PinElectricalType::Bidirectional,
+            }],
+            links: vec![],
+        })
+        .unwrap();
+        pin
+    }
+
+    #[test]
+    fn create_pin_capability_and_assignment_seam_folds_and_replays_byte_identically() {
+        let mut core = new_core();
+        let pin = seed_mcu_pin(&mut core);
+        let cap_id = core.fresh_id();
+        let assign_id = core.fresh_id();
+
+        core.invoke(CapabilityRequest::CreatePinCapability {
+            capability: PinCapability {
+                id: cap_id,
+                pin,
+                functions: vec!["SPI1_MOSI".into(), "UART1_TX".into()],
+            },
+            links: vec![],
+        })
+        .expect("a capability on a committed pin is accepted at the seam");
+        core.invoke(CapabilityRequest::CreatePinAssignment {
+            assignment: PinAssignment {
+                id: assign_id,
+                pin,
+                function: "SPI1_MOSI".into(),
+            },
+            links: vec![],
+        })
+        .expect("a well-formed assignment on a committed pin is accepted at the seam");
+
+        // The fold pushed both objects and the accessors read them back by id.
+        assert_eq!(core.state.pin_capabilities.len(), 1);
+        assert_eq!(core.state.pin_assignments.len(), 1);
+        let c = core
+            .state
+            .pin_capability(cap_id)
+            .expect("capability folded by id");
+        assert_eq!(c.pin, pin);
+        assert!(c.functions.contains(&"SPI1_MOSI".to_string()));
+        let a = core
+            .state
+            .pin_assignment(assign_id)
+            .expect("assignment folded by id");
+        assert_eq!(a.pin, pin);
+        assert_eq!(a.function, "SPI1_MOSI");
+
+        // Byte-identical replay with both objects in the log (P4).
+        let replayed = replay(core.log()).unwrap();
+        assert_eq!(core.state, replayed);
+        assert_eq!(core.state.canonical_json(), replayed.canonical_json());
+    }
+
+    #[test]
+    fn create_pin_capability_seam_rejects_malformed_and_dangling_proposals() {
+        let mut core = new_core();
+        let pin = seed_mcu_pin(&mut core);
+        let (c_null_pin, c_empty, c_phantom) = (core.fresh_id(), core.fresh_id(), core.fresh_id());
+
+        // (1) Null pin — a capability for nothing is untraceable (P3).
+        let err = core
+            .invoke(CapabilityRequest::CreatePinCapability {
+                capability: PinCapability {
+                    id: c_null_pin,
+                    pin: EntityId::NULL,
+                    functions: vec!["SPI1_MOSI".into()],
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // (2) Empty functions — declaring a capability with nothing assignable is inert.
+        let err = core
+            .invoke(CapabilityRequest::CreatePinCapability {
+                capability: PinCapability {
+                    id: c_empty,
+                    pin,
+                    functions: vec![],
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // (3) Dangling pin — references a pin never committed (P3): no phantom pin capabilities.
+        let err = core
+            .invoke(CapabilityRequest::CreatePinCapability {
+                capability: PinCapability {
+                    id: c_phantom,
+                    pin: EntityId(0xDEAD_BEEF),
+                    functions: vec!["SPI1_MOSI".into()],
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // Nothing entered the log.
+        assert!(core.state.pin_capabilities.is_empty());
+        assert!(core.state.pin_assignments.is_empty());
+    }
+
+    #[test]
+    fn create_pin_assignment_seam_rejects_malformed_and_dangling_proposals() {
+        let mut core = new_core();
+        let pin = seed_mcu_pin(&mut core);
+        let (a_null_pin, a_blank, a_phantom) = (core.fresh_id(), core.fresh_id(), core.fresh_id());
+
+        // (1) Null pin — an assignment binding a function to nothing is untraceable (P3).
+        let err = core
+            .invoke(CapabilityRequest::CreatePinAssignment {
+                assignment: PinAssignment {
+                    id: a_null_pin,
+                    pin: EntityId::NULL,
+                    function: "SPI1_MOSI".into(),
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // (2) Blank function — an assignment with no function declares nothing.
+        let err = core
+            .invoke(CapabilityRequest::CreatePinAssignment {
+                assignment: PinAssignment {
+                    id: a_blank,
+                    pin,
+                    function: "   ".into(),
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // (3) Dangling pin — references a pin never committed (P3): no phantom pin assignments.
+        let err = core
+            .invoke(CapabilityRequest::CreatePinAssignment {
+                assignment: PinAssignment {
+                    id: a_phantom,
+                    pin: EntityId(0xDEAD_BEEF),
+                    function: "SPI1_MOSI".into(),
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // Nothing entered the log.
+        assert!(core.state.pin_capabilities.is_empty());
+        assert!(core.state.pin_assignments.is_empty());
+    }
+
+    // ===================== Band B (increment 5): Signal seam =====================
+    //
+    // TDD (written before the seam handler exists): Signal flows through the same seam as every
+    // other object. CreateSignal re-validates (non-empty name/semantics, non-null source, ≥1 sink,
+    // source ∉ sinks) and rejects a source or sink that was never committed (P3 referential
+    // integrity — a signal can never flow from/to a phantom pin). The fold pushes the committed
+    // signal into state; the log replays byte-identically (P4). Whether the flow is *legal* (an
+    // output/bidirectional source, input/bidirectional sinks) is the SignalDriverSinkRule's
+    // judgement at ERC time — a well-formed signal must enter state so the illegal pairing is
+    // reported (master-prompt §32, circuit-theory.md L134/L152).
+
+    /// Seed a driver pin (Output) and a receiver pin (Input) so a signal has real referential
+    /// anchors. Returns (source pin id, sink pin id).
+    fn seed_driver_and_receiver_pins(core: &mut RuntimeCore) -> (EntityId, EntityId) {
+        let comp = core.fresh_id();
+        let source = core.fresh_id();
+        let sink = core.fresh_id();
+        core.invoke(CapabilityRequest::RealizeComponent {
+            component: Component {
+                id: comp,
+                refdes: "U1".into(),
+                class: ComponentClass::Ic,
+                value: None,
+                from_block: EntityId::NULL,
+                origin: ComponentOrigin::Imported,
+            },
+            pins: vec![
+                Pin {
+                    id: source,
+                    component: comp,
+                    designation: "TX".into(),
+                    electrical_type: PinElectricalType::Output,
+                },
+                Pin {
+                    id: sink,
+                    component: comp,
+                    designation: "RX".into(),
+                    electrical_type: PinElectricalType::Input,
+                },
+            ],
+            links: vec![],
+        })
+        .unwrap();
+        (source, sink)
+    }
+
+    #[test]
+    fn create_signal_seam_accepts_valid_then_folds_and_replays_byte_identically() {
+        let mut core = new_core();
+        let (source, sink) = seed_driver_and_receiver_pins(&mut core);
+        let sig_id = core.fresh_id();
+
+        core.invoke(CapabilityRequest::CreateSignal {
+            signal: Signal {
+                id: sig_id,
+                name: "SYS_CLK".into(),
+                source,
+                sinks: vec![sink],
+                semantics: "system clock".into(),
+            },
+            links: vec![],
+        })
+        .expect("a well-formed signal on committed pins is accepted at the seam");
+
+        // The fold pushed exactly one signal and the accessor reads it back by id.
+        assert_eq!(core.state.signals.len(), 1);
+        let s = core.state.signal(sig_id).expect("signal folded by id");
+        assert_eq!(s.name, "SYS_CLK");
+        assert_eq!(s.source, source);
+        assert_eq!(s.sinks, vec![sink]);
+        assert_eq!(s.semantics, "system clock");
+
+        // Byte-identical replay with the signal in the log (P4).
+        let replayed = replay(core.log()).unwrap();
+        assert_eq!(core.state, replayed);
+        assert_eq!(core.state.canonical_json(), replayed.canonical_json());
+    }
+
+    #[test]
+    fn create_signal_seam_rejects_malformed_and_dangling_proposals() {
+        let mut core = new_core();
+        let (source, sink) = seed_driver_and_receiver_pins(&mut core);
+        let (
+            s_blank_name,
+            s_blank_sem,
+            s_null_src,
+            s_no_sinks,
+            s_self,
+            s_phantom_src,
+            s_phantom_sink,
+        ) = (
+            core.fresh_id(),
+            core.fresh_id(),
+            core.fresh_id(),
+            core.fresh_id(),
+            core.fresh_id(),
+            core.fresh_id(),
+            core.fresh_id(),
+        );
+
+        // (1) Blank signal name — domain validate() rejects.
+        let err = core
+            .invoke(CapabilityRequest::CreateSignal {
+                signal: Signal {
+                    id: s_blank_name,
+                    name: "   ".into(),
+                    source,
+                    sinks: vec![sink],
+                    semantics: "system clock".into(),
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // (2) Blank semantics — a signal that means nothing carries no intent.
+        let err = core
+            .invoke(CapabilityRequest::CreateSignal {
+                signal: Signal {
+                    id: s_blank_sem,
+                    name: "SYS_CLK".into(),
+                    source,
+                    sinks: vec![sink],
+                    semantics: "   ".into(),
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // (3) Null source — a flow from nowhere is untraceable (P3).
+        let err = core
+            .invoke(CapabilityRequest::CreateSignal {
+                signal: Signal {
+                    id: s_null_src,
+                    name: "SYS_CLK".into(),
+                    source: EntityId::NULL,
+                    sinks: vec![sink],
+                    semantics: "system clock".into(),
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // (4) No sinks — a signal driving nothing is a dangling declaration.
+        let err = core
+            .invoke(CapabilityRequest::CreateSignal {
+                signal: Signal {
+                    id: s_no_sinks,
+                    name: "SYS_CLK".into(),
+                    source,
+                    sinks: vec![],
+                    semantics: "system clock".into(),
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // (5) Self-drive — source is also a sink (KCL nonsense).
+        let err = core
+            .invoke(CapabilityRequest::CreateSignal {
+                signal: Signal {
+                    id: s_self,
+                    name: "SELF_CLK".into(),
+                    source,
+                    sinks: vec![source],
+                    semantics: "self loop".into(),
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // (6) Dangling source — references a pin never committed (P3): no phantom driver.
+        let err = core
+            .invoke(CapabilityRequest::CreateSignal {
+                signal: Signal {
+                    id: s_phantom_src,
+                    name: "SYS_CLK".into(),
+                    source: EntityId(0xDEAD_BEEF),
+                    sinks: vec![sink],
+                    semantics: "system clock".into(),
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // (7) Dangling sink — references a pin never committed (P3): no phantom receiver.
+        let err = core
+            .invoke(CapabilityRequest::CreateSignal {
+                signal: Signal {
+                    id: s_phantom_sink,
+                    name: "SYS_CLK".into(),
+                    source,
+                    sinks: vec![EntityId(0xDEAD_BEEF)],
+                    semantics: "system clock".into(),
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // Nothing entered the log: every malformed/dangling proposal was rejected pre-commit.
+        assert!(core.state.signals.is_empty());
+    }
+
+    // ===================== Band B (increment 6): Interface / Contract seam =====================
+    //
+    // TDD (written before the seam handlers exist): Contract and Interface flow through the same
+    // seam. CreateContract re-validates (non-empty protocol, non-empty name). CreateInterface
+    // re-validates (non-empty name, ≥1 signal, non-null contract) and checks its contract and
+    // every signal resolve to committed objects (P3). Whether the interface *satisfies* the
+    // contract (correct signal count for the protocol) is the InterfaceContractRule's judgement
+    // at ERC time — a well-formed interface must enter state so the violation is reported.
+
+    #[test]
+    fn create_contract_seam_accepts_valid_then_folds_and_replays_byte_identically() {
+        let mut core = new_core();
+        let c_id = core.fresh_id();
+
+        core.invoke(CapabilityRequest::CreateContract {
+            contract: Contract {
+                id: c_id,
+                protocol: "I2C".into(),
+                name: "I2C Bus 1".into(),
+                constraints: vec!["unique addresses".into()],
+            },
+            links: vec![],
+        })
+        .expect("a well-formed contract is accepted at the seam");
+
+        assert_eq!(core.state.contracts.len(), 1);
+        let c = core.state.contract(c_id).expect("contract folded by id");
+        assert_eq!(c.protocol, "I2C");
+        assert_eq!(c.name, "I2C Bus 1");
+
+        let replayed = replay(core.log()).unwrap();
+        assert_eq!(core.state, replayed);
+        assert_eq!(core.state.canonical_json(), replayed.canonical_json());
+    }
+
+    #[test]
+    fn create_contract_seam_rejects_malformed_proposals() {
+        let mut core = new_core();
+        let (c_blank_proto, c_blank_name) = (core.fresh_id(), core.fresh_id());
+
+        // (1) Blank protocol.
+        let err = core
+            .invoke(CapabilityRequest::CreateContract {
+                contract: Contract {
+                    id: c_blank_proto,
+                    protocol: "   ".into(),
+                    name: "I2C Bus 1".into(),
+                    constraints: vec![],
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // (2) Blank name.
+        let err = core
+            .invoke(CapabilityRequest::CreateContract {
+                contract: Contract {
+                    id: c_blank_name,
+                    protocol: "I2C".into(),
+                    name: "   ".into(),
+                    constraints: vec![],
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        assert!(core.state.contracts.is_empty());
+        assert!(core.state.interfaces.is_empty());
+    }
+
+    fn seed_interface_anchors(core: &mut RuntimeCore) -> (EntityId, EntityId, EntityId) {
+        // Seed a contract and two signals so an interface has real referential anchors.
+        let c_id = core.fresh_id();
+        core.invoke(CapabilityRequest::CreateContract {
+            contract: Contract {
+                id: c_id,
+                protocol: "I2C".into(),
+                name: "I2C Bus 1".into(),
+                constraints: vec![],
+            },
+            links: vec![],
+        })
+        .unwrap();
+
+        let s1_id = core.fresh_id();
+        let s2_id = core.fresh_id();
+        // Need pins for signals — seed minimal pins
+        let comp = core.fresh_id();
+        let p1 = core.fresh_id();
+        let p2 = core.fresh_id();
+        core.invoke(CapabilityRequest::RealizeComponent {
+            component: Component {
+                id: comp,
+                refdes: "U1".into(),
+                class: ComponentClass::Ic,
+                value: None,
+                from_block: EntityId::NULL,
+                origin: ComponentOrigin::Imported,
+            },
+            pins: vec![
+                Pin {
+                    id: p1,
+                    component: comp,
+                    designation: "SDA".into(),
+                    electrical_type: PinElectricalType::Bidirectional,
+                },
+                Pin {
+                    id: p2,
+                    component: comp,
+                    designation: "SCL".into(),
+                    electrical_type: PinElectricalType::Bidirectional,
+                },
+            ],
+            links: vec![],
+        })
+        .unwrap();
+        core.invoke(CapabilityRequest::CreateSignal {
+            signal: Signal {
+                id: s1_id,
+                name: "I2C_SDA".into(),
+                source: p1,
+                sinks: vec![p2],
+                semantics: "I2C data".into(),
+            },
+            links: vec![],
+        })
+        .unwrap();
+        core.invoke(CapabilityRequest::CreateSignal {
+            signal: Signal {
+                id: s2_id,
+                name: "I2C_SCL".into(),
+                source: p2,
+                sinks: vec![p1],
+                semantics: "I2C clock".into(),
+            },
+            links: vec![],
+        })
+        .unwrap();
+
+        (c_id, s1_id, s2_id)
+    }
+
+    #[test]
+    fn create_interface_seam_accepts_valid_then_folds_and_replays_byte_identically() {
+        let mut core = new_core();
+        let (c_id, s1_id, s2_id) = seed_interface_anchors(&mut core);
+        let i_id = core.fresh_id();
+
+        core.invoke(CapabilityRequest::CreateInterface {
+            interface: Interface {
+                id: i_id,
+                name: "I2C1".into(),
+                signals: vec![s1_id, s2_id],
+                contract: c_id,
+            },
+            links: vec![],
+        })
+        .expect("a well-formed interface on committed contract+signals is accepted at the seam");
+
+        assert_eq!(core.state.interfaces.len(), 1);
+        let i = core.state.interface(i_id).expect("interface folded by id");
+        assert_eq!(i.name, "I2C1");
+        assert_eq!(i.contract, c_id);
+        assert_eq!(i.signals, vec![s1_id, s2_id]);
+
+        let replayed = replay(core.log()).unwrap();
+        assert_eq!(core.state, replayed);
+        assert_eq!(core.state.canonical_json(), replayed.canonical_json());
+    }
+
+    #[test]
+    fn create_interface_seam_rejects_malformed_and_dangling_proposals() {
+        let mut core = new_core();
+        let (c_id, s1_id, s2_id) = seed_interface_anchors(&mut core);
+        let (i_blank, i_no_sigs, i_bad_contract, i_bad_signal) = (
+            core.fresh_id(),
+            core.fresh_id(),
+            core.fresh_id(),
+            core.fresh_id(),
+        );
+
+        // (1) Blank name.
+        let err = core
+            .invoke(CapabilityRequest::CreateInterface {
+                interface: Interface {
+                    id: i_blank,
+                    name: "   ".into(),
+                    signals: vec![s1_id, s2_id],
+                    contract: c_id,
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // (2) No signals.
+        let err = core
+            .invoke(CapabilityRequest::CreateInterface {
+                interface: Interface {
+                    id: i_no_sigs,
+                    name: "I2C1".into(),
+                    signals: vec![],
+                    contract: c_id,
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // (3) Dangling contract.
+        let err = core
+            .invoke(CapabilityRequest::CreateInterface {
+                interface: Interface {
+                    id: i_bad_contract,
+                    name: "I2C1".into(),
+                    signals: vec![s1_id, s2_id],
+                    contract: EntityId(0xDEAD_BEEF),
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // (4) Dangling signal.
+        let err = core
+            .invoke(CapabilityRequest::CreateInterface {
+                interface: Interface {
+                    id: i_bad_signal,
+                    name: "I2C1".into(),
+                    signals: vec![s1_id, EntityId(0xDEAD_BEEF)],
+                    contract: c_id,
+                },
+                links: vec![],
+            })
+            .unwrap_err();
+        assert!(matches!(err, CapabilityError::Rejected(_)));
+
+        // Nothing entered the log (for interfaces; the contract from setup remains).
+        assert!(core.state.interfaces.is_empty());
     }
 }
