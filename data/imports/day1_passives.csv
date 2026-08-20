@@ -1,0 +1,501 @@
+lcsc_id,mpn,manufacturer,category,subcategory,package,voltage_v,capacitance_f,resistance_ohm,inductance_h,tolerance,temp_coeff,power_w,stock,price_cny,moq,description,keywords
+,RC0402FR-071RL,Yageo,Resistor,Thin Film,0402,,,1.0,,±1%,±100ppm/°C,0.0625,,,,1Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,RC0402FR-071R5L,Yageo,Resistor,Thin Film,0402,,,1.5,,±1%,±100ppm/°C,0.0625,,,,1.5Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,RC0402FR-072R2L,Yageo,Resistor,Thin Film,0402,,,2.2,,±1%,±100ppm/°C,0.0625,,,,2.2Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,RC0402FR-073R3L,Yageo,Resistor,Thin Film,0402,,,3.3,,±1%,±100ppm/°C,0.0625,,,,3.3Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,RC0402FR-074R7L,Yageo,Resistor,Thin Film,0402,,,4.7,,±1%,±100ppm/°C,0.0625,,,,4.7Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,RC0402FR-076R8L,Yageo,Resistor,Thin Film,0402,,,6.8,,±1%,±100ppm/°C,0.0625,,,,6.8Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,RC0402FR-0710RL,Yageo,Resistor,Thin Film,0402,,,10.0,,±1%,±100ppm/°C,0.0625,,,,10Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,RC0402FR-0715RL,Yageo,Resistor,Thin Film,0402,,,15.0,,±1%,±100ppm/°C,0.0625,,,,15Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,RC0402FR-0722RL,Yageo,Resistor,Thin Film,0402,,,22.0,,±1%,±100ppm/°C,0.0625,,,,22Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,RC0402FR-0733RL,Yageo,Resistor,Thin Film,0402,,,33.0,,±1%,±100ppm/°C,0.0625,,,,33Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,RC0402FR-0747RL,Yageo,Resistor,Thin Film,0402,,,47.0,,±1%,±100ppm/°C,0.0625,,,,47Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,RC0402FR-0768RL,Yageo,Resistor,Thin Film,0402,,,68.0,,±1%,±100ppm/°C,0.0625,,,,68Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,RC0402FR-07100L,Yageo,Resistor,Thin Film,0402,,,100.0,,±1%,±100ppm/°C,0.0625,,,,100Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,RC0402FR-07150L,Yageo,Resistor,Thin Film,0402,,,150.0,,±1%,±100ppm/°C,0.0625,,,,150Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,RC0402FR-07220L,Yageo,Resistor,Thin Film,0402,,,220.0,,±1%,±100ppm/°C,0.0625,,,,220Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,RC0402FR-07330L,Yageo,Resistor,Thin Film,0402,,,330.0,,±1%,±100ppm/°C,0.0625,,,,330Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,RC0402FR-07470L,Yageo,Resistor,Thin Film,0402,,,470.0,,±1%,±100ppm/°C,0.0625,,,,470Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,RC0402FR-07680L,Yageo,Resistor,Thin Film,0402,,,680.0,,±1%,±100ppm/°C,0.0625,,,,680Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,RC0402FR-071KL,Yageo,Resistor,Thin Film,0402,,,1000.0,,±1%,±100ppm/°C,0.0625,,,,1000Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,RC0402FR-071K5L,Yageo,Resistor,Thin Film,0402,,,1500.0,,±1%,±100ppm/°C,0.0625,,,,1500Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,RC0402FR-072K2L,Yageo,Resistor,Thin Film,0402,,,2200.0,,±1%,±100ppm/°C,0.0625,,,,2200Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,RC0402FR-073K3L,Yageo,Resistor,Thin Film,0402,,,3300.0,,±1%,±100ppm/°C,0.0625,,,,3300Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,RC0402FR-074K7L,Yageo,Resistor,Thin Film,0402,,,4700.0,,±1%,±100ppm/°C,0.0625,,,,4700Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,RC0402FR-076K8L,Yageo,Resistor,Thin Film,0402,,,6800.0,,±1%,±100ppm/°C,0.0625,,,,6800Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,RC0402FR-0710KL,Yageo,Resistor,Thin Film,0402,,,10000.0,,±1%,±100ppm/°C,0.0625,,,,10000Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,RC0402FR-0715KL,Yageo,Resistor,Thin Film,0402,,,15000.0,,±1%,±100ppm/°C,0.0625,,,,15000Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,RC0402FR-0722KL,Yageo,Resistor,Thin Film,0402,,,22000.0,,±1%,±100ppm/°C,0.0625,,,,22000Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,RC0402FR-0733KL,Yageo,Resistor,Thin Film,0402,,,33000.0,,±1%,±100ppm/°C,0.0625,,,,33000Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,RC0402FR-0747KL,Yageo,Resistor,Thin Film,0402,,,47000.0,,±1%,±100ppm/°C,0.0625,,,,47000Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,RC0402FR-0768KL,Yageo,Resistor,Thin Film,0402,,,68000.0,,±1%,±100ppm/°C,0.0625,,,,68000Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,RC0402FR-07100KL,Yageo,Resistor,Thin Film,0402,,,100000.0,,±1%,±100ppm/°C,0.0625,,,,100000Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,RC0402FR-07150KL,Yageo,Resistor,Thin Film,0402,,,150000.0,,±1%,±100ppm/°C,0.0625,,,,150000Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,RC0402FR-07220KL,Yageo,Resistor,Thin Film,0402,,,220000.0,,±1%,±100ppm/°C,0.0625,,,,220000Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,RC0402FR-07330KL,Yageo,Resistor,Thin Film,0402,,,330000.0,,±1%,±100ppm/°C,0.0625,,,,330000Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,RC0402FR-07470KL,Yageo,Resistor,Thin Film,0402,,,470000.0,,±1%,±100ppm/°C,0.0625,,,,470000Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,RC0402FR-07680KL,Yageo,Resistor,Thin Film,0402,,,680000.0,,±1%,±100ppm/°C,0.0625,,,,680000Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,RC0402FR-071ML,Yageo,Resistor,Thin Film,0402,,,1000000.0,,±1%,±100ppm/°C,0.0625,,,,1000000Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,RC0603FR-071RL,Yageo,Resistor,Thin Film,0603,,,1.0,,±1%,±100ppm/°C,0.1,,,,1Ω 0603 1% 1/10W,resistor 0603 1% thin-film
+,RC0603FR-071R5L,Yageo,Resistor,Thin Film,0603,,,1.5,,±1%,±100ppm/°C,0.1,,,,1.5Ω 0603 1% 1/10W,resistor 0603 1% thin-film
+,RC0603FR-072R2L,Yageo,Resistor,Thin Film,0603,,,2.2,,±1%,±100ppm/°C,0.1,,,,2.2Ω 0603 1% 1/10W,resistor 0603 1% thin-film
+,RC0603FR-073R3L,Yageo,Resistor,Thin Film,0603,,,3.3,,±1%,±100ppm/°C,0.1,,,,3.3Ω 0603 1% 1/10W,resistor 0603 1% thin-film
+,RC0603FR-074R7L,Yageo,Resistor,Thin Film,0603,,,4.7,,±1%,±100ppm/°C,0.1,,,,4.7Ω 0603 1% 1/10W,resistor 0603 1% thin-film
+,RC0603FR-076R8L,Yageo,Resistor,Thin Film,0603,,,6.8,,±1%,±100ppm/°C,0.1,,,,6.8Ω 0603 1% 1/10W,resistor 0603 1% thin-film
+,RC0603FR-0710RL,Yageo,Resistor,Thin Film,0603,,,10.0,,±1%,±100ppm/°C,0.1,,,,10Ω 0603 1% 1/10W,resistor 0603 1% thin-film
+,RC0603FR-0715RL,Yageo,Resistor,Thin Film,0603,,,15.0,,±1%,±100ppm/°C,0.1,,,,15Ω 0603 1% 1/10W,resistor 0603 1% thin-film
+,RC0603FR-0722RL,Yageo,Resistor,Thin Film,0603,,,22.0,,±1%,±100ppm/°C,0.1,,,,22Ω 0603 1% 1/10W,resistor 0603 1% thin-film
+,RC0603FR-0733RL,Yageo,Resistor,Thin Film,0603,,,33.0,,±1%,±100ppm/°C,0.1,,,,33Ω 0603 1% 1/10W,resistor 0603 1% thin-film
+,RC0603FR-0747RL,Yageo,Resistor,Thin Film,0603,,,47.0,,±1%,±100ppm/°C,0.1,,,,47Ω 0603 1% 1/10W,resistor 0603 1% thin-film
+,RC0603FR-0768RL,Yageo,Resistor,Thin Film,0603,,,68.0,,±1%,±100ppm/°C,0.1,,,,68Ω 0603 1% 1/10W,resistor 0603 1% thin-film
+,RC0603FR-07100L,Yageo,Resistor,Thin Film,0603,,,100.0,,±1%,±100ppm/°C,0.1,,,,100Ω 0603 1% 1/10W,resistor 0603 1% thin-film
+,RC0603FR-07150L,Yageo,Resistor,Thin Film,0603,,,150.0,,±1%,±100ppm/°C,0.1,,,,150Ω 0603 1% 1/10W,resistor 0603 1% thin-film
+,RC0603FR-07220L,Yageo,Resistor,Thin Film,0603,,,220.0,,±1%,±100ppm/°C,0.1,,,,220Ω 0603 1% 1/10W,resistor 0603 1% thin-film
+,RC0603FR-07330L,Yageo,Resistor,Thin Film,0603,,,330.0,,±1%,±100ppm/°C,0.1,,,,330Ω 0603 1% 1/10W,resistor 0603 1% thin-film
+,RC0603FR-07470L,Yageo,Resistor,Thin Film,0603,,,470.0,,±1%,±100ppm/°C,0.1,,,,470Ω 0603 1% 1/10W,resistor 0603 1% thin-film
+,RC0603FR-07680L,Yageo,Resistor,Thin Film,0603,,,680.0,,±1%,±100ppm/°C,0.1,,,,680Ω 0603 1% 1/10W,resistor 0603 1% thin-film
+,RC0603FR-071KL,Yageo,Resistor,Thin Film,0603,,,1000.0,,±1%,±100ppm/°C,0.1,,,,1000Ω 0603 1% 1/10W,resistor 0603 1% thin-film
+,RC0603FR-071K5L,Yageo,Resistor,Thin Film,0603,,,1500.0,,±1%,±100ppm/°C,0.1,,,,1500Ω 0603 1% 1/10W,resistor 0603 1% thin-film
+,RC0603FR-072K2L,Yageo,Resistor,Thin Film,0603,,,2200.0,,±1%,±100ppm/°C,0.1,,,,2200Ω 0603 1% 1/10W,resistor 0603 1% thin-film
+,RC0603FR-073K3L,Yageo,Resistor,Thin Film,0603,,,3300.0,,±1%,±100ppm/°C,0.1,,,,3300Ω 0603 1% 1/10W,resistor 0603 1% thin-film
+,RC0603FR-074K7L,Yageo,Resistor,Thin Film,0603,,,4700.0,,±1%,±100ppm/°C,0.1,,,,4700Ω 0603 1% 1/10W,resistor 0603 1% thin-film
+,RC0603FR-076K8L,Yageo,Resistor,Thin Film,0603,,,6800.0,,±1%,±100ppm/°C,0.1,,,,6800Ω 0603 1% 1/10W,resistor 0603 1% thin-film
+,RC0603FR-0710KL,Yageo,Resistor,Thin Film,0603,,,10000.0,,±1%,±100ppm/°C,0.1,,,,10000Ω 0603 1% 1/10W,resistor 0603 1% thin-film
+,RC0603FR-0715KL,Yageo,Resistor,Thin Film,0603,,,15000.0,,±1%,±100ppm/°C,0.1,,,,15000Ω 0603 1% 1/10W,resistor 0603 1% thin-film
+,RC0603FR-0722KL,Yageo,Resistor,Thin Film,0603,,,22000.0,,±1%,±100ppm/°C,0.1,,,,22000Ω 0603 1% 1/10W,resistor 0603 1% thin-film
+,RC0603FR-0733KL,Yageo,Resistor,Thin Film,0603,,,33000.0,,±1%,±100ppm/°C,0.1,,,,33000Ω 0603 1% 1/10W,resistor 0603 1% thin-film
+,RC0603FR-0747KL,Yageo,Resistor,Thin Film,0603,,,47000.0,,±1%,±100ppm/°C,0.1,,,,47000Ω 0603 1% 1/10W,resistor 0603 1% thin-film
+,RC0603FR-0768KL,Yageo,Resistor,Thin Film,0603,,,68000.0,,±1%,±100ppm/°C,0.1,,,,68000Ω 0603 1% 1/10W,resistor 0603 1% thin-film
+,RC0603FR-07100KL,Yageo,Resistor,Thin Film,0603,,,100000.0,,±1%,±100ppm/°C,0.1,,,,100000Ω 0603 1% 1/10W,resistor 0603 1% thin-film
+,RC0603FR-07150KL,Yageo,Resistor,Thin Film,0603,,,150000.0,,±1%,±100ppm/°C,0.1,,,,150000Ω 0603 1% 1/10W,resistor 0603 1% thin-film
+,RC0603FR-07220KL,Yageo,Resistor,Thin Film,0603,,,220000.0,,±1%,±100ppm/°C,0.1,,,,220000Ω 0603 1% 1/10W,resistor 0603 1% thin-film
+,RC0603FR-07330KL,Yageo,Resistor,Thin Film,0603,,,330000.0,,±1%,±100ppm/°C,0.1,,,,330000Ω 0603 1% 1/10W,resistor 0603 1% thin-film
+,RC0603FR-07470KL,Yageo,Resistor,Thin Film,0603,,,470000.0,,±1%,±100ppm/°C,0.1,,,,470000Ω 0603 1% 1/10W,resistor 0603 1% thin-film
+,RC0603FR-07680KL,Yageo,Resistor,Thin Film,0603,,,680000.0,,±1%,±100ppm/°C,0.1,,,,680000Ω 0603 1% 1/10W,resistor 0603 1% thin-film
+,RC0603FR-071ML,Yageo,Resistor,Thin Film,0603,,,1000000.0,,±1%,±100ppm/°C,0.1,,,,1000000Ω 0603 1% 1/10W,resistor 0603 1% thin-film
+,RC0805FR-071RL,Yageo,Resistor,Thin Film,0805,,,1.0,,±1%,±100ppm/°C,0.125,,,,1Ω 0805 1% 1/8W,resistor 0805 1% thin-film
+,RC0805FR-071R5L,Yageo,Resistor,Thin Film,0805,,,1.5,,±1%,±100ppm/°C,0.125,,,,1.5Ω 0805 1% 1/8W,resistor 0805 1% thin-film
+,RC0805FR-072R2L,Yageo,Resistor,Thin Film,0805,,,2.2,,±1%,±100ppm/°C,0.125,,,,2.2Ω 0805 1% 1/8W,resistor 0805 1% thin-film
+,RC0805FR-073R3L,Yageo,Resistor,Thin Film,0805,,,3.3,,±1%,±100ppm/°C,0.125,,,,3.3Ω 0805 1% 1/8W,resistor 0805 1% thin-film
+,RC0805FR-074R7L,Yageo,Resistor,Thin Film,0805,,,4.7,,±1%,±100ppm/°C,0.125,,,,4.7Ω 0805 1% 1/8W,resistor 0805 1% thin-film
+,RC0805FR-076R8L,Yageo,Resistor,Thin Film,0805,,,6.8,,±1%,±100ppm/°C,0.125,,,,6.8Ω 0805 1% 1/8W,resistor 0805 1% thin-film
+,RC0805FR-0710RL,Yageo,Resistor,Thin Film,0805,,,10.0,,±1%,±100ppm/°C,0.125,,,,10Ω 0805 1% 1/8W,resistor 0805 1% thin-film
+,RC0805FR-0715RL,Yageo,Resistor,Thin Film,0805,,,15.0,,±1%,±100ppm/°C,0.125,,,,15Ω 0805 1% 1/8W,resistor 0805 1% thin-film
+,RC0805FR-0722RL,Yageo,Resistor,Thin Film,0805,,,22.0,,±1%,±100ppm/°C,0.125,,,,22Ω 0805 1% 1/8W,resistor 0805 1% thin-film
+,RC0805FR-0733RL,Yageo,Resistor,Thin Film,0805,,,33.0,,±1%,±100ppm/°C,0.125,,,,33Ω 0805 1% 1/8W,resistor 0805 1% thin-film
+,RC0805FR-0747RL,Yageo,Resistor,Thin Film,0805,,,47.0,,±1%,±100ppm/°C,0.125,,,,47Ω 0805 1% 1/8W,resistor 0805 1% thin-film
+,RC0805FR-0768RL,Yageo,Resistor,Thin Film,0805,,,68.0,,±1%,±100ppm/°C,0.125,,,,68Ω 0805 1% 1/8W,resistor 0805 1% thin-film
+,RC0805FR-07100L,Yageo,Resistor,Thin Film,0805,,,100.0,,±1%,±100ppm/°C,0.125,,,,100Ω 0805 1% 1/8W,resistor 0805 1% thin-film
+,RC0805FR-07150L,Yageo,Resistor,Thin Film,0805,,,150.0,,±1%,±100ppm/°C,0.125,,,,150Ω 0805 1% 1/8W,resistor 0805 1% thin-film
+,RC0805FR-07220L,Yageo,Resistor,Thin Film,0805,,,220.0,,±1%,±100ppm/°C,0.125,,,,220Ω 0805 1% 1/8W,resistor 0805 1% thin-film
+,RC0805FR-07330L,Yageo,Resistor,Thin Film,0805,,,330.0,,±1%,±100ppm/°C,0.125,,,,330Ω 0805 1% 1/8W,resistor 0805 1% thin-film
+,RC0805FR-07470L,Yageo,Resistor,Thin Film,0805,,,470.0,,±1%,±100ppm/°C,0.125,,,,470Ω 0805 1% 1/8W,resistor 0805 1% thin-film
+,RC0805FR-07680L,Yageo,Resistor,Thin Film,0805,,,680.0,,±1%,±100ppm/°C,0.125,,,,680Ω 0805 1% 1/8W,resistor 0805 1% thin-film
+,RC0805FR-071KL,Yageo,Resistor,Thin Film,0805,,,1000.0,,±1%,±100ppm/°C,0.125,,,,1000Ω 0805 1% 1/8W,resistor 0805 1% thin-film
+,RC0805FR-071K5L,Yageo,Resistor,Thin Film,0805,,,1500.0,,±1%,±100ppm/°C,0.125,,,,1500Ω 0805 1% 1/8W,resistor 0805 1% thin-film
+,RC0805FR-072K2L,Yageo,Resistor,Thin Film,0805,,,2200.0,,±1%,±100ppm/°C,0.125,,,,2200Ω 0805 1% 1/8W,resistor 0805 1% thin-film
+,RC0805FR-073K3L,Yageo,Resistor,Thin Film,0805,,,3300.0,,±1%,±100ppm/°C,0.125,,,,3300Ω 0805 1% 1/8W,resistor 0805 1% thin-film
+,RC0805FR-074K7L,Yageo,Resistor,Thin Film,0805,,,4700.0,,±1%,±100ppm/°C,0.125,,,,4700Ω 0805 1% 1/8W,resistor 0805 1% thin-film
+,RC0805FR-076K8L,Yageo,Resistor,Thin Film,0805,,,6800.0,,±1%,±100ppm/°C,0.125,,,,6800Ω 0805 1% 1/8W,resistor 0805 1% thin-film
+,RC0805FR-0710KL,Yageo,Resistor,Thin Film,0805,,,10000.0,,±1%,±100ppm/°C,0.125,,,,10000Ω 0805 1% 1/8W,resistor 0805 1% thin-film
+,RC0805FR-0715KL,Yageo,Resistor,Thin Film,0805,,,15000.0,,±1%,±100ppm/°C,0.125,,,,15000Ω 0805 1% 1/8W,resistor 0805 1% thin-film
+,RC0805FR-0722KL,Yageo,Resistor,Thin Film,0805,,,22000.0,,±1%,±100ppm/°C,0.125,,,,22000Ω 0805 1% 1/8W,resistor 0805 1% thin-film
+,RC0805FR-0733KL,Yageo,Resistor,Thin Film,0805,,,33000.0,,±1%,±100ppm/°C,0.125,,,,33000Ω 0805 1% 1/8W,resistor 0805 1% thin-film
+,RC0805FR-0747KL,Yageo,Resistor,Thin Film,0805,,,47000.0,,±1%,±100ppm/°C,0.125,,,,47000Ω 0805 1% 1/8W,resistor 0805 1% thin-film
+,RC0805FR-0768KL,Yageo,Resistor,Thin Film,0805,,,68000.0,,±1%,±100ppm/°C,0.125,,,,68000Ω 0805 1% 1/8W,resistor 0805 1% thin-film
+,RC0805FR-07100KL,Yageo,Resistor,Thin Film,0805,,,100000.0,,±1%,±100ppm/°C,0.125,,,,100000Ω 0805 1% 1/8W,resistor 0805 1% thin-film
+,RC0805FR-07150KL,Yageo,Resistor,Thin Film,0805,,,150000.0,,±1%,±100ppm/°C,0.125,,,,150000Ω 0805 1% 1/8W,resistor 0805 1% thin-film
+,RC0805FR-07220KL,Yageo,Resistor,Thin Film,0805,,,220000.0,,±1%,±100ppm/°C,0.125,,,,220000Ω 0805 1% 1/8W,resistor 0805 1% thin-film
+,RC0805FR-07330KL,Yageo,Resistor,Thin Film,0805,,,330000.0,,±1%,±100ppm/°C,0.125,,,,330000Ω 0805 1% 1/8W,resistor 0805 1% thin-film
+,RC0805FR-07470KL,Yageo,Resistor,Thin Film,0805,,,470000.0,,±1%,±100ppm/°C,0.125,,,,470000Ω 0805 1% 1/8W,resistor 0805 1% thin-film
+,RC0805FR-07680KL,Yageo,Resistor,Thin Film,0805,,,680000.0,,±1%,±100ppm/°C,0.125,,,,680000Ω 0805 1% 1/8W,resistor 0805 1% thin-film
+,RC0805FR-071ML,Yageo,Resistor,Thin Film,0805,,,1000000.0,,±1%,±100ppm/°C,0.125,,,,1000000Ω 0805 1% 1/8W,resistor 0805 1% thin-film
+,CRCW04021R00FKED,Vishay,Resistor,Thin Film,0402,,,1.0,,±1%,±100ppm/°C,0.0625,,,,1Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,CRCW04021R50FKED,Vishay,Resistor,Thin Film,0402,,,1.5,,±1%,±100ppm/°C,0.0625,,,,1.5Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,CRCW04022R20FKED,Vishay,Resistor,Thin Film,0402,,,2.2,,±1%,±100ppm/°C,0.0625,,,,2.2Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,CRCW04023R30FKED,Vishay,Resistor,Thin Film,0402,,,3.3,,±1%,±100ppm/°C,0.0625,,,,3.3Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,CRCW04024R70FKED,Vishay,Resistor,Thin Film,0402,,,4.7,,±1%,±100ppm/°C,0.0625,,,,4.7Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,CRCW04026R80FKED,Vishay,Resistor,Thin Film,0402,,,6.8,,±1%,±100ppm/°C,0.0625,,,,6.8Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,CRCW040210R0FKED,Vishay,Resistor,Thin Film,0402,,,10.0,,±1%,±100ppm/°C,0.0625,,,,10Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,CRCW040215R0FKED,Vishay,Resistor,Thin Film,0402,,,15.0,,±1%,±100ppm/°C,0.0625,,,,15Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,CRCW040222R0FKED,Vishay,Resistor,Thin Film,0402,,,22.0,,±1%,±100ppm/°C,0.0625,,,,22Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,CRCW040233R0FKED,Vishay,Resistor,Thin Film,0402,,,33.0,,±1%,±100ppm/°C,0.0625,,,,33Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,CRCW040247R0FKED,Vishay,Resistor,Thin Film,0402,,,47.0,,±1%,±100ppm/°C,0.0625,,,,47Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,CRCW040268R0FKED,Vishay,Resistor,Thin Film,0402,,,68.0,,±1%,±100ppm/°C,0.0625,,,,68Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,CRCW0402100RFKED,Vishay,Resistor,Thin Film,0402,,,100.0,,±1%,±100ppm/°C,0.0625,,,,100Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,CRCW0402150RFKED,Vishay,Resistor,Thin Film,0402,,,150.0,,±1%,±100ppm/°C,0.0625,,,,150Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,CRCW0402220RFKED,Vishay,Resistor,Thin Film,0402,,,220.0,,±1%,±100ppm/°C,0.0625,,,,220Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,CRCW0402330RFKED,Vishay,Resistor,Thin Film,0402,,,330.0,,±1%,±100ppm/°C,0.0625,,,,330Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,CRCW0402470RFKED,Vishay,Resistor,Thin Film,0402,,,470.0,,±1%,±100ppm/°C,0.0625,,,,470Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,CRCW0402680RFKED,Vishay,Resistor,Thin Film,0402,,,680.0,,±1%,±100ppm/°C,0.0625,,,,680Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,CRCW04021K00FKED,Vishay,Resistor,Thin Film,0402,,,1000.0,,±1%,±100ppm/°C,0.0625,,,,1000Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,CRCW04021K50FKED,Vishay,Resistor,Thin Film,0402,,,1500.0,,±1%,±100ppm/°C,0.0625,,,,1500Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,CRCW04022K20FKED,Vishay,Resistor,Thin Film,0402,,,2200.0,,±1%,±100ppm/°C,0.0625,,,,2200Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,CRCW04023K30FKED,Vishay,Resistor,Thin Film,0402,,,3300.0,,±1%,±100ppm/°C,0.0625,,,,3300Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,CRCW04024K70FKED,Vishay,Resistor,Thin Film,0402,,,4700.0,,±1%,±100ppm/°C,0.0625,,,,4700Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,CRCW04026K80FKED,Vishay,Resistor,Thin Film,0402,,,6800.0,,±1%,±100ppm/°C,0.0625,,,,6800Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,CRCW040210K0FKED,Vishay,Resistor,Thin Film,0402,,,10000.0,,±1%,±100ppm/°C,0.0625,,,,10000Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,CRCW040215K0FKED,Vishay,Resistor,Thin Film,0402,,,15000.0,,±1%,±100ppm/°C,0.0625,,,,15000Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,CRCW040222K0FKED,Vishay,Resistor,Thin Film,0402,,,22000.0,,±1%,±100ppm/°C,0.0625,,,,22000Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,CRCW040233K0FKED,Vishay,Resistor,Thin Film,0402,,,33000.0,,±1%,±100ppm/°C,0.0625,,,,33000Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,CRCW040247K0FKED,Vishay,Resistor,Thin Film,0402,,,47000.0,,±1%,±100ppm/°C,0.0625,,,,47000Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,CRCW040268K0FKED,Vishay,Resistor,Thin Film,0402,,,68000.0,,±1%,±100ppm/°C,0.0625,,,,68000Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,CRCW0402100KFKED,Vishay,Resistor,Thin Film,0402,,,100000.0,,±1%,±100ppm/°C,0.0625,,,,100000Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,CRCW0402150KFKED,Vishay,Resistor,Thin Film,0402,,,150000.0,,±1%,±100ppm/°C,0.0625,,,,150000Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,CRCW0402220KFKED,Vishay,Resistor,Thin Film,0402,,,220000.0,,±1%,±100ppm/°C,0.0625,,,,220000Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,CRCW0402330KFKED,Vishay,Resistor,Thin Film,0402,,,330000.0,,±1%,±100ppm/°C,0.0625,,,,330000Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,CRCW0402470KFKED,Vishay,Resistor,Thin Film,0402,,,470000.0,,±1%,±100ppm/°C,0.0625,,,,470000Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,CRCW0402680KFKED,Vishay,Resistor,Thin Film,0402,,,680000.0,,±1%,±100ppm/°C,0.0625,,,,680000Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,CRCW04021M00FKED,Vishay,Resistor,Thin Film,0402,,,1000000.0,,±1%,±100ppm/°C,0.0625,,,,1000000Ω 0402 1% 1/16W,resistor 0402 1% thin-film
+,ERJ-2GEJ1R0X,Panasonic,Resistor,Thick Film,0402,,,1.0,,±1%,±100ppm/°C,0.0625,,,,1Ω 0402 1% 1/16W,resistor 0402 1% thick-film
+,ERJ-2GEJ1R5X,Panasonic,Resistor,Thick Film,0402,,,1.5,,±1%,±100ppm/°C,0.0625,,,,1.5Ω 0402 1% 1/16W,resistor 0402 1% thick-film
+,ERJ-2GEJ2R2X,Panasonic,Resistor,Thick Film,0402,,,2.2,,±1%,±100ppm/°C,0.0625,,,,2.2Ω 0402 1% 1/16W,resistor 0402 1% thick-film
+,ERJ-2GEJ3R3X,Panasonic,Resistor,Thick Film,0402,,,3.3,,±1%,±100ppm/°C,0.0625,,,,3.3Ω 0402 1% 1/16W,resistor 0402 1% thick-film
+,ERJ-2GEJ4R7X,Panasonic,Resistor,Thick Film,0402,,,4.7,,±1%,±100ppm/°C,0.0625,,,,4.7Ω 0402 1% 1/16W,resistor 0402 1% thick-film
+,ERJ-2GEJ6R8X,Panasonic,Resistor,Thick Film,0402,,,6.8,,±1%,±100ppm/°C,0.0625,,,,6.8Ω 0402 1% 1/16W,resistor 0402 1% thick-film
+,ERJ-2GEJ100X,Panasonic,Resistor,Thick Film,0402,,,10.0,,±1%,±100ppm/°C,0.0625,,,,10Ω 0402 1% 1/16W,resistor 0402 1% thick-film
+,ERJ-2GEJ150X,Panasonic,Resistor,Thick Film,0402,,,15.0,,±1%,±100ppm/°C,0.0625,,,,15Ω 0402 1% 1/16W,resistor 0402 1% thick-film
+,ERJ-2GEJ220X,Panasonic,Resistor,Thick Film,0402,,,22.0,,±1%,±100ppm/°C,0.0625,,,,22Ω 0402 1% 1/16W,resistor 0402 1% thick-film
+,ERJ-2GEJ330X,Panasonic,Resistor,Thick Film,0402,,,33.0,,±1%,±100ppm/°C,0.0625,,,,33Ω 0402 1% 1/16W,resistor 0402 1% thick-film
+,ERJ-2GEJ470X,Panasonic,Resistor,Thick Film,0402,,,47.0,,±1%,±100ppm/°C,0.0625,,,,47Ω 0402 1% 1/16W,resistor 0402 1% thick-film
+,ERJ-2GEJ680X,Panasonic,Resistor,Thick Film,0402,,,68.0,,±1%,±100ppm/°C,0.0625,,,,68Ω 0402 1% 1/16W,resistor 0402 1% thick-film
+,ERJ-2GEJ101X,Panasonic,Resistor,Thick Film,0402,,,100.0,,±1%,±100ppm/°C,0.0625,,,,100Ω 0402 1% 1/16W,resistor 0402 1% thick-film
+,ERJ-2GEJ151X,Panasonic,Resistor,Thick Film,0402,,,150.0,,±1%,±100ppm/°C,0.0625,,,,150Ω 0402 1% 1/16W,resistor 0402 1% thick-film
+,ERJ-2GEJ221X,Panasonic,Resistor,Thick Film,0402,,,220.0,,±1%,±100ppm/°C,0.0625,,,,220Ω 0402 1% 1/16W,resistor 0402 1% thick-film
+,ERJ-2GEJ331X,Panasonic,Resistor,Thick Film,0402,,,330.0,,±1%,±100ppm/°C,0.0625,,,,330Ω 0402 1% 1/16W,resistor 0402 1% thick-film
+,ERJ-2GEJ471X,Panasonic,Resistor,Thick Film,0402,,,470.0,,±1%,±100ppm/°C,0.0625,,,,470Ω 0402 1% 1/16W,resistor 0402 1% thick-film
+,ERJ-2GEJ681X,Panasonic,Resistor,Thick Film,0402,,,680.0,,±1%,±100ppm/°C,0.0625,,,,680Ω 0402 1% 1/16W,resistor 0402 1% thick-film
+,ERJ-2GEJ102X,Panasonic,Resistor,Thick Film,0402,,,1000.0,,±1%,±100ppm/°C,0.0625,,,,1000Ω 0402 1% 1/16W,resistor 0402 1% thick-film
+,ERJ-2GEJ152X,Panasonic,Resistor,Thick Film,0402,,,1500.0,,±1%,±100ppm/°C,0.0625,,,,1500Ω 0402 1% 1/16W,resistor 0402 1% thick-film
+,ERJ-2GEJ222X,Panasonic,Resistor,Thick Film,0402,,,2200.0,,±1%,±100ppm/°C,0.0625,,,,2200Ω 0402 1% 1/16W,resistor 0402 1% thick-film
+,ERJ-2GEJ332X,Panasonic,Resistor,Thick Film,0402,,,3300.0,,±1%,±100ppm/°C,0.0625,,,,3300Ω 0402 1% 1/16W,resistor 0402 1% thick-film
+,ERJ-2GEJ472X,Panasonic,Resistor,Thick Film,0402,,,4700.0,,±1%,±100ppm/°C,0.0625,,,,4700Ω 0402 1% 1/16W,resistor 0402 1% thick-film
+,ERJ-2GEJ682X,Panasonic,Resistor,Thick Film,0402,,,6800.0,,±1%,±100ppm/°C,0.0625,,,,6800Ω 0402 1% 1/16W,resistor 0402 1% thick-film
+,ERJ-2GEJ103X,Panasonic,Resistor,Thick Film,0402,,,10000.0,,±1%,±100ppm/°C,0.0625,,,,10000Ω 0402 1% 1/16W,resistor 0402 1% thick-film
+,ERJ-2GEJ153X,Panasonic,Resistor,Thick Film,0402,,,15000.0,,±1%,±100ppm/°C,0.0625,,,,15000Ω 0402 1% 1/16W,resistor 0402 1% thick-film
+,ERJ-2GEJ223X,Panasonic,Resistor,Thick Film,0402,,,22000.0,,±1%,±100ppm/°C,0.0625,,,,22000Ω 0402 1% 1/16W,resistor 0402 1% thick-film
+,ERJ-2GEJ333X,Panasonic,Resistor,Thick Film,0402,,,33000.0,,±1%,±100ppm/°C,0.0625,,,,33000Ω 0402 1% 1/16W,resistor 0402 1% thick-film
+,ERJ-2GEJ473X,Panasonic,Resistor,Thick Film,0402,,,47000.0,,±1%,±100ppm/°C,0.0625,,,,47000Ω 0402 1% 1/16W,resistor 0402 1% thick-film
+,ERJ-2GEJ683X,Panasonic,Resistor,Thick Film,0402,,,68000.0,,±1%,±100ppm/°C,0.0625,,,,68000Ω 0402 1% 1/16W,resistor 0402 1% thick-film
+,ERJ-2GEJ104X,Panasonic,Resistor,Thick Film,0402,,,100000.0,,±1%,±100ppm/°C,0.0625,,,,100000Ω 0402 1% 1/16W,resistor 0402 1% thick-film
+,ERJ-2GEJ154X,Panasonic,Resistor,Thick Film,0402,,,150000.0,,±1%,±100ppm/°C,0.0625,,,,150000Ω 0402 1% 1/16W,resistor 0402 1% thick-film
+,GRM1555C1H1R0CA01,Murata,Capacitor,C0G/NP0,0402,50.0,1e-12,,,±5%,±30ppm/°C,,,,,1e-12F 0402 C0G 50V,capacitor 0402 C0G 50V
+,GRM1555C1H1R5CA01,Murata,Capacitor,C0G/NP0,0402,50.0,1.5e-12,,,±5%,±30ppm/°C,,,,,2e-12F 0402 C0G 50V,capacitor 0402 C0G 50V
+,GRM1555C1H2R2CA01,Murata,Capacitor,C0G/NP0,0402,50.0,2.2e-12,,,±5%,±30ppm/°C,,,,,2e-12F 0402 C0G 50V,capacitor 0402 C0G 50V
+,GRM1555C1H3R3CA01,Murata,Capacitor,C0G/NP0,0402,50.0,3.3e-12,,,±5%,±30ppm/°C,,,,,3e-12F 0402 C0G 50V,capacitor 0402 C0G 50V
+,GRM1555C1H4R7CA01,Murata,Capacitor,C0G/NP0,0402,50.0,4.7e-12,,,±5%,±30ppm/°C,,,,,5e-12F 0402 C0G 50V,capacitor 0402 C0G 50V
+,GRM1555C1H6R8DA01,Murata,Capacitor,C0G/NP0,0402,50.0,6.8e-12,,,±5%,±30ppm/°C,,,,,7e-12F 0402 C0G 50V,capacitor 0402 C0G 50V
+,GRM1555C1H100JA01,Murata,Capacitor,C0G/NP0,0402,50.0,1e-11,,,±5%,±30ppm/°C,,,,,1e-11F 0402 C0G 50V,capacitor 0402 C0G 50V
+,GRM1555C1H150JA01,Murata,Capacitor,C0G/NP0,0402,50.0,1.5e-11,,,±5%,±30ppm/°C,,,,,1e-11F 0402 C0G 50V,capacitor 0402 C0G 50V
+,GRM1555C1H220JA01,Murata,Capacitor,C0G/NP0,0402,50.0,2.2e-11,,,±5%,±30ppm/°C,,,,,2e-11F 0402 C0G 50V,capacitor 0402 C0G 50V
+,GRM1555C1H330JA01,Murata,Capacitor,C0G/NP0,0402,50.0,3.3e-11,,,±5%,±30ppm/°C,,,,,3e-11F 0402 C0G 50V,capacitor 0402 C0G 50V
+,GRM1555C1H470JA01,Murata,Capacitor,C0G/NP0,0402,50.0,4.7e-11,,,±5%,±30ppm/°C,,,,,5e-11F 0402 C0G 50V,capacitor 0402 C0G 50V
+,GRM1555C1H680JA01,Murata,Capacitor,C0G/NP0,0402,50.0,6.8e-11,,,±5%,±30ppm/°C,,,,,7e-11F 0402 C0G 50V,capacitor 0402 C0G 50V
+,GRM1555C1H101JA01,Murata,Capacitor,C0G/NP0,0402,50.0,1e-10,,,±5%,±30ppm/°C,,,,,1e-10F 0402 C0G 50V,capacitor 0402 C0G 50V
+,GRM1555C1H151JA01,Murata,Capacitor,C0G/NP0,0402,50.0,1.5e-10,,,±5%,±30ppm/°C,,,,,1e-10F 0402 C0G 50V,capacitor 0402 C0G 50V
+,GRM1555C1H221JA01,Murata,Capacitor,C0G/NP0,0402,50.0,2.2e-10,,,±5%,±30ppm/°C,,,,,2e-10F 0402 C0G 50V,capacitor 0402 C0G 50V
+,GRM1555C1H331JA01,Murata,Capacitor,C0G/NP0,0402,50.0,3.3e-10,,,±5%,±30ppm/°C,,,,,3e-10F 0402 C0G 50V,capacitor 0402 C0G 50V
+,GRM1555C1H471JA01,Murata,Capacitor,C0G/NP0,0402,50.0,4.7e-10,,,±5%,±30ppm/°C,,,,,5e-10F 0402 C0G 50V,capacitor 0402 C0G 50V
+,GRM1555C1H681JA01,Murata,Capacitor,C0G/NP0,0402,50.0,6.8e-10,,,±5%,±30ppm/°C,,,,,7e-10F 0402 C0G 50V,capacitor 0402 C0G 50V
+,GRM1555C1H102JA01,Murata,Capacitor,C0G/NP0,0402,50.0,1e-09,,,±5%,±30ppm/°C,,,,,1e-09F 0402 C0G 50V,capacitor 0402 C0G 50V
+,GRM1555C1H152JA01,Murata,Capacitor,C0G/NP0,0402,50.0,1.5e-09,,,±5%,±30ppm/°C,,,,,1e-09F 0402 C0G 50V,capacitor 0402 C0G 50V
+,GRM1555C1H222JA01,Murata,Capacitor,C0G/NP0,0402,50.0,2.2e-09,,,±5%,±30ppm/°C,,,,,2e-09F 0402 C0G 50V,capacitor 0402 C0G 50V
+,GRM1555C1H332JA01,Murata,Capacitor,C0G/NP0,0402,50.0,3.3e-09,,,±5%,±30ppm/°C,,,,,3e-09F 0402 C0G 50V,capacitor 0402 C0G 50V
+,GRM1555C1H472JA01,Murata,Capacitor,C0G/NP0,0402,50.0,4.7e-09,,,±5%,±30ppm/°C,,,,,5e-09F 0402 C0G 50V,capacitor 0402 C0G 50V
+,GRM1555C1H682JA01,Murata,Capacitor,C0G/NP0,0402,50.0,6.8e-09,,,±5%,±30ppm/°C,,,,,7e-09F 0402 C0G 50V,capacitor 0402 C0G 50V
+,GRM1555C1H103JA01,Murata,Capacitor,C0G/NP0,0402,50.0,1e-08,,,±5%,±30ppm/°C,,,,,1e-08F 0402 C0G 50V,capacitor 0402 C0G 50V
+,GRM155R71C103KA01,Murata,Capacitor,X7R,0402,16.0,1e-08,,,±10%,±15% (-55 to +125°C),,,,,1e-08F 0402 X7R 16V,capacitor 0402 X7R 16V
+,GRM155R71C153KA01,Murata,Capacitor,X7R,0402,16.0,1.5e-08,,,±10%,±15% (-55 to +125°C),,,,,1e-08F 0402 X7R 16V,capacitor 0402 X7R 16V
+,GRM155R71C223KA01,Murata,Capacitor,X7R,0402,16.0,2.2e-08,,,±10%,±15% (-55 to +125°C),,,,,2e-08F 0402 X7R 16V,capacitor 0402 X7R 16V
+,GRM155R71C333KA01,Murata,Capacitor,X7R,0402,16.0,3.3e-08,,,±10%,±15% (-55 to +125°C),,,,,3e-08F 0402 X7R 16V,capacitor 0402 X7R 16V
+,GRM155R71C473KA01,Murata,Capacitor,X7R,0402,16.0,4.7e-08,,,±10%,±15% (-55 to +125°C),,,,,5e-08F 0402 X7R 16V,capacitor 0402 X7R 16V
+,GRM155R71C683KA01,Murata,Capacitor,X7R,0402,16.0,6.8e-08,,,±10%,±15% (-55 to +125°C),,,,,7e-08F 0402 X7R 16V,capacitor 0402 X7R 16V
+,GRM155R71C104KA01,Murata,Capacitor,X7R,0402,16.0,1e-07,,,±10%,±15% (-55 to +125°C),,,,,1e-07F 0402 X7R 16V,capacitor 0402 X7R 16V
+,GRM155R71C154KA01,Murata,Capacitor,X7R,0402,16.0,1.5e-07,,,±10%,±15% (-55 to +125°C),,,,,1e-07F 0402 X7R 16V,capacitor 0402 X7R 16V
+,GRM155R71C224KA01,Murata,Capacitor,X7R,0402,16.0,2.2e-07,,,±10%,±15% (-55 to +125°C),,,,,2e-07F 0402 X7R 16V,capacitor 0402 X7R 16V
+,GRM155R71E103KA01,Murata,Capacitor,X7R,0402,25.0,1e-08,,,±10%,±15% (-55 to +125°C),,,,,1e-08F 0402 X7R 25V,capacitor 0402 X7R 25V
+,GRM155R71E153KA01,Murata,Capacitor,X7R,0402,25.0,1.5e-08,,,±10%,±15% (-55 to +125°C),,,,,1e-08F 0402 X7R 25V,capacitor 0402 X7R 25V
+,GRM155R71E223KA01,Murata,Capacitor,X7R,0402,25.0,2.2e-08,,,±10%,±15% (-55 to +125°C),,,,,2e-08F 0402 X7R 25V,capacitor 0402 X7R 25V
+,GRM155R71E333KA01,Murata,Capacitor,X7R,0402,25.0,3.3e-08,,,±10%,±15% (-55 to +125°C),,,,,3e-08F 0402 X7R 25V,capacitor 0402 X7R 25V
+,GRM155R71E473KA01,Murata,Capacitor,X7R,0402,25.0,4.7e-08,,,±10%,±15% (-55 to +125°C),,,,,5e-08F 0402 X7R 25V,capacitor 0402 X7R 25V
+,GRM155R71E683KA01,Murata,Capacitor,X7R,0402,25.0,6.8e-08,,,±10%,±15% (-55 to +125°C),,,,,7e-08F 0402 X7R 25V,capacitor 0402 X7R 25V
+,GRM155R71E104KA01,Murata,Capacitor,X7R,0402,25.0,1e-07,,,±10%,±15% (-55 to +125°C),,,,,1e-07F 0402 X7R 25V,capacitor 0402 X7R 25V
+,GRM155R71E154KA01,Murata,Capacitor,X7R,0402,25.0,1.5e-07,,,±10%,±15% (-55 to +125°C),,,,,1e-07F 0402 X7R 25V,capacitor 0402 X7R 25V
+,GRM155R71E224KA01,Murata,Capacitor,X7R,0402,25.0,2.2e-07,,,±10%,±15% (-55 to +125°C),,,,,2e-07F 0402 X7R 25V,capacitor 0402 X7R 25V
+,GRM155R71H103KA01,Murata,Capacitor,X7R,0402,50.0,1e-08,,,±10%,±15% (-55 to +125°C),,,,,1e-08F 0402 X7R 50V,capacitor 0402 X7R 50V
+,GRM155R71H153KA01,Murata,Capacitor,X7R,0402,50.0,1.5e-08,,,±10%,±15% (-55 to +125°C),,,,,1e-08F 0402 X7R 50V,capacitor 0402 X7R 50V
+,GRM155R71H223KA01,Murata,Capacitor,X7R,0402,50.0,2.2e-08,,,±10%,±15% (-55 to +125°C),,,,,2e-08F 0402 X7R 50V,capacitor 0402 X7R 50V
+,GRM155R71H333KA01,Murata,Capacitor,X7R,0402,50.0,3.3e-08,,,±10%,±15% (-55 to +125°C),,,,,3e-08F 0402 X7R 50V,capacitor 0402 X7R 50V
+,GRM155R71H473KA01,Murata,Capacitor,X7R,0402,50.0,4.7e-08,,,±10%,±15% (-55 to +125°C),,,,,5e-08F 0402 X7R 50V,capacitor 0402 X7R 50V
+,GRM155R71H683KA01,Murata,Capacitor,X7R,0402,50.0,6.8e-08,,,±10%,±15% (-55 to +125°C),,,,,7e-08F 0402 X7R 50V,capacitor 0402 X7R 50V
+,GRM155R71H104KA01,Murata,Capacitor,X7R,0402,50.0,1e-07,,,±10%,±15% (-55 to +125°C),,,,,1e-07F 0402 X7R 50V,capacitor 0402 X7R 50V
+,GRM1885C1H1R0CA01,Murata,Capacitor,C0G/NP0,0603,50.0,1e-12,,,±5%,±30ppm/°C,,,,,1e-12F 0603 C0G 50V,capacitor 0603 C0G 50V
+,GRM1885C1H1R5CA01,Murata,Capacitor,C0G/NP0,0603,50.0,1.5e-12,,,±5%,±30ppm/°C,,,,,2e-12F 0603 C0G 50V,capacitor 0603 C0G 50V
+,GRM1885C1H2R2CA01,Murata,Capacitor,C0G/NP0,0603,50.0,2.2e-12,,,±5%,±30ppm/°C,,,,,2e-12F 0603 C0G 50V,capacitor 0603 C0G 50V
+,GRM1885C1H3R3CA01,Murata,Capacitor,C0G/NP0,0603,50.0,3.3e-12,,,±5%,±30ppm/°C,,,,,3e-12F 0603 C0G 50V,capacitor 0603 C0G 50V
+,GRM1885C1H4R7CA01,Murata,Capacitor,C0G/NP0,0603,50.0,4.7e-12,,,±5%,±30ppm/°C,,,,,5e-12F 0603 C0G 50V,capacitor 0603 C0G 50V
+,GRM1885C1H6R8DA01,Murata,Capacitor,C0G/NP0,0603,50.0,6.8e-12,,,±5%,±30ppm/°C,,,,,7e-12F 0603 C0G 50V,capacitor 0603 C0G 50V
+,GRM1885C1H100JA01,Murata,Capacitor,C0G/NP0,0603,50.0,1e-11,,,±5%,±30ppm/°C,,,,,1e-11F 0603 C0G 50V,capacitor 0603 C0G 50V
+,GRM1885C1H150JA01,Murata,Capacitor,C0G/NP0,0603,50.0,1.5e-11,,,±5%,±30ppm/°C,,,,,1e-11F 0603 C0G 50V,capacitor 0603 C0G 50V
+,GRM1885C1H220JA01,Murata,Capacitor,C0G/NP0,0603,50.0,2.2e-11,,,±5%,±30ppm/°C,,,,,2e-11F 0603 C0G 50V,capacitor 0603 C0G 50V
+,GRM1885C1H330JA01,Murata,Capacitor,C0G/NP0,0603,50.0,3.3e-11,,,±5%,±30ppm/°C,,,,,3e-11F 0603 C0G 50V,capacitor 0603 C0G 50V
+,GRM1885C1H470JA01,Murata,Capacitor,C0G/NP0,0603,50.0,4.7e-11,,,±5%,±30ppm/°C,,,,,5e-11F 0603 C0G 50V,capacitor 0603 C0G 50V
+,GRM1885C1H680JA01,Murata,Capacitor,C0G/NP0,0603,50.0,6.8e-11,,,±5%,±30ppm/°C,,,,,7e-11F 0603 C0G 50V,capacitor 0603 C0G 50V
+,GRM1885C1H101JA01,Murata,Capacitor,C0G/NP0,0603,50.0,1e-10,,,±5%,±30ppm/°C,,,,,1e-10F 0603 C0G 50V,capacitor 0603 C0G 50V
+,GRM1885C1H151JA01,Murata,Capacitor,C0G/NP0,0603,50.0,1.5e-10,,,±5%,±30ppm/°C,,,,,1e-10F 0603 C0G 50V,capacitor 0603 C0G 50V
+,GRM1885C1H221JA01,Murata,Capacitor,C0G/NP0,0603,50.0,2.2e-10,,,±5%,±30ppm/°C,,,,,2e-10F 0603 C0G 50V,capacitor 0603 C0G 50V
+,GRM1885C1H331JA01,Murata,Capacitor,C0G/NP0,0603,50.0,3.3e-10,,,±5%,±30ppm/°C,,,,,3e-10F 0603 C0G 50V,capacitor 0603 C0G 50V
+,GRM1885C1H471JA01,Murata,Capacitor,C0G/NP0,0603,50.0,4.7e-10,,,±5%,±30ppm/°C,,,,,5e-10F 0603 C0G 50V,capacitor 0603 C0G 50V
+,GRM1885C1H681JA01,Murata,Capacitor,C0G/NP0,0603,50.0,6.8e-10,,,±5%,±30ppm/°C,,,,,7e-10F 0603 C0G 50V,capacitor 0603 C0G 50V
+,GRM1885C1H102JA01,Murata,Capacitor,C0G/NP0,0603,50.0,1e-09,,,±5%,±30ppm/°C,,,,,1e-09F 0603 C0G 50V,capacitor 0603 C0G 50V
+,GRM1885C1H152JA01,Murata,Capacitor,C0G/NP0,0603,50.0,1.5e-09,,,±5%,±30ppm/°C,,,,,1e-09F 0603 C0G 50V,capacitor 0603 C0G 50V
+,GRM1885C1H222JA01,Murata,Capacitor,C0G/NP0,0603,50.0,2.2e-09,,,±5%,±30ppm/°C,,,,,2e-09F 0603 C0G 50V,capacitor 0603 C0G 50V
+,GRM1885C1H332JA01,Murata,Capacitor,C0G/NP0,0603,50.0,3.3e-09,,,±5%,±30ppm/°C,,,,,3e-09F 0603 C0G 50V,capacitor 0603 C0G 50V
+,GRM1885C1H472JA01,Murata,Capacitor,C0G/NP0,0603,50.0,4.7e-09,,,±5%,±30ppm/°C,,,,,5e-09F 0603 C0G 50V,capacitor 0603 C0G 50V
+,GRM1885C1H682JA01,Murata,Capacitor,C0G/NP0,0603,50.0,6.8e-09,,,±5%,±30ppm/°C,,,,,7e-09F 0603 C0G 50V,capacitor 0603 C0G 50V
+,GRM1885C1H103JA01,Murata,Capacitor,C0G/NP0,0603,50.0,1e-08,,,±5%,±30ppm/°C,,,,,1e-08F 0603 C0G 50V,capacitor 0603 C0G 50V
+,GRM1885C1H153JA01,Murata,Capacitor,C0G/NP0,0603,50.0,1.5e-08,,,±5%,±30ppm/°C,,,,,1e-08F 0603 C0G 50V,capacitor 0603 C0G 50V
+,GRM1885C1H223JA01,Murata,Capacitor,C0G/NP0,0603,50.0,2.2e-08,,,±5%,±30ppm/°C,,,,,2e-08F 0603 C0G 50V,capacitor 0603 C0G 50V
+,GRM1885C1H333JA01,Murata,Capacitor,C0G/NP0,0603,50.0,3.3e-08,,,±5%,±30ppm/°C,,,,,3e-08F 0603 C0G 50V,capacitor 0603 C0G 50V
+,GRM1885C1H473JA01,Murata,Capacitor,C0G/NP0,0603,50.0,4.7e-08,,,±5%,±30ppm/°C,,,,,5e-08F 0603 C0G 50V,capacitor 0603 C0G 50V
+,GRM1885C1H683JA01,Murata,Capacitor,C0G/NP0,0603,50.0,6.8e-08,,,±5%,±30ppm/°C,,,,,7e-08F 0603 C0G 50V,capacitor 0603 C0G 50V
+,GRM1885C1H104JA01,Murata,Capacitor,C0G/NP0,0603,50.0,1e-07,,,±5%,±30ppm/°C,,,,,1e-07F 0603 C0G 50V,capacitor 0603 C0G 50V
+,GRM188R71C103KA01,Murata,Capacitor,X7R,0603,16.0,1e-08,,,±10%,±15% (-55 to +125°C),,,,,1e-08F 0603 X7R 16V,capacitor 0603 X7R 16V
+,GRM188R71C153KA01,Murata,Capacitor,X7R,0603,16.0,1.5e-08,,,±10%,±15% (-55 to +125°C),,,,,1e-08F 0603 X7R 16V,capacitor 0603 X7R 16V
+,GRM188R71C223KA01,Murata,Capacitor,X7R,0603,16.0,2.2e-08,,,±10%,±15% (-55 to +125°C),,,,,2e-08F 0603 X7R 16V,capacitor 0603 X7R 16V
+,GRM188R71C333KA01,Murata,Capacitor,X7R,0603,16.0,3.3e-08,,,±10%,±15% (-55 to +125°C),,,,,3e-08F 0603 X7R 16V,capacitor 0603 X7R 16V
+,GRM188R71C473KA01,Murata,Capacitor,X7R,0603,16.0,4.7e-08,,,±10%,±15% (-55 to +125°C),,,,,5e-08F 0603 X7R 16V,capacitor 0603 X7R 16V
+,GRM188R71C683KA01,Murata,Capacitor,X7R,0603,16.0,6.8e-08,,,±10%,±15% (-55 to +125°C),,,,,7e-08F 0603 X7R 16V,capacitor 0603 X7R 16V
+,GRM188R71C104KA01,Murata,Capacitor,X7R,0603,16.0,1e-07,,,±10%,±15% (-55 to +125°C),,,,,1e-07F 0603 X7R 16V,capacitor 0603 X7R 16V
+,GRM188R71C154KA01,Murata,Capacitor,X7R,0603,16.0,1.5e-07,,,±10%,±15% (-55 to +125°C),,,,,1e-07F 0603 X7R 16V,capacitor 0603 X7R 16V
+,GRM188R71C224KA01,Murata,Capacitor,X7R,0603,16.0,2.2e-07,,,±10%,±15% (-55 to +125°C),,,,,2e-07F 0603 X7R 16V,capacitor 0603 X7R 16V
+,GRM188R71C334KA01,Murata,Capacitor,X7R,0603,16.0,3.3e-07,,,±10%,±15% (-55 to +125°C),,,,,3e-07F 0603 X7R 16V,capacitor 0603 X7R 16V
+,GRM188R71C474KA01,Murata,Capacitor,X7R,0603,16.0,4.7e-07,,,±10%,±15% (-55 to +125°C),,,,,5e-07F 0603 X7R 16V,capacitor 0603 X7R 16V
+,GRM188R71C105KA01,Murata,Capacitor,X7R,0603,16.0,1e-06,,,±10%,±15% (-55 to +125°C),,,,,1e-06F 0603 X7R 16V,capacitor 0603 X7R 16V
+,GRM188R71E103KA01,Murata,Capacitor,X7R,0603,25.0,1e-08,,,±10%,±15% (-55 to +125°C),,,,,1e-08F 0603 X7R 25V,capacitor 0603 X7R 25V
+,GRM188R71E153KA01,Murata,Capacitor,X7R,0603,25.0,1.5e-08,,,±10%,±15% (-55 to +125°C),,,,,1e-08F 0603 X7R 25V,capacitor 0603 X7R 25V
+,GRM188R71E223KA01,Murata,Capacitor,X7R,0603,25.0,2.2e-08,,,±10%,±15% (-55 to +125°C),,,,,2e-08F 0603 X7R 25V,capacitor 0603 X7R 25V
+,GRM188R71E333KA01,Murata,Capacitor,X7R,0603,25.0,3.3e-08,,,±10%,±15% (-55 to +125°C),,,,,3e-08F 0603 X7R 25V,capacitor 0603 X7R 25V
+,GRM188R71E473KA01,Murata,Capacitor,X7R,0603,25.0,4.7e-08,,,±10%,±15% (-55 to +125°C),,,,,5e-08F 0603 X7R 25V,capacitor 0603 X7R 25V
+,GRM188R71E683KA01,Murata,Capacitor,X7R,0603,25.0,6.8e-08,,,±10%,±15% (-55 to +125°C),,,,,7e-08F 0603 X7R 25V,capacitor 0603 X7R 25V
+,GRM188R71E104KA01,Murata,Capacitor,X7R,0603,25.0,1e-07,,,±10%,±15% (-55 to +125°C),,,,,1e-07F 0603 X7R 25V,capacitor 0603 X7R 25V
+,GRM188R71E154KA01,Murata,Capacitor,X7R,0603,25.0,1.5e-07,,,±10%,±15% (-55 to +125°C),,,,,1e-07F 0603 X7R 25V,capacitor 0603 X7R 25V
+,GRM188R71E224KA01,Murata,Capacitor,X7R,0603,25.0,2.2e-07,,,±10%,±15% (-55 to +125°C),,,,,2e-07F 0603 X7R 25V,capacitor 0603 X7R 25V
+,GRM188R71E334KA01,Murata,Capacitor,X7R,0603,25.0,3.3e-07,,,±10%,±15% (-55 to +125°C),,,,,3e-07F 0603 X7R 25V,capacitor 0603 X7R 25V
+,GRM188R71E474KA01,Murata,Capacitor,X7R,0603,25.0,4.7e-07,,,±10%,±15% (-55 to +125°C),,,,,5e-07F 0603 X7R 25V,capacitor 0603 X7R 25V
+,GRM188R71E105KA01,Murata,Capacitor,X7R,0603,25.0,1e-06,,,±10%,±15% (-55 to +125°C),,,,,1e-06F 0603 X7R 25V,capacitor 0603 X7R 25V
+,GRM188R71H103KA01,Murata,Capacitor,X7R,0603,50.0,1e-08,,,±10%,±15% (-55 to +125°C),,,,,1e-08F 0603 X7R 50V,capacitor 0603 X7R 50V
+,GRM188R71H153KA01,Murata,Capacitor,X7R,0603,50.0,1.5e-08,,,±10%,±15% (-55 to +125°C),,,,,1e-08F 0603 X7R 50V,capacitor 0603 X7R 50V
+,GRM188R71H223KA01,Murata,Capacitor,X7R,0603,50.0,2.2e-08,,,±10%,±15% (-55 to +125°C),,,,,2e-08F 0603 X7R 50V,capacitor 0603 X7R 50V
+,GRM188R71H333KA01,Murata,Capacitor,X7R,0603,50.0,3.3e-08,,,±10%,±15% (-55 to +125°C),,,,,3e-08F 0603 X7R 50V,capacitor 0603 X7R 50V
+,GRM188R71H473KA01,Murata,Capacitor,X7R,0603,50.0,4.7e-08,,,±10%,±15% (-55 to +125°C),,,,,5e-08F 0603 X7R 50V,capacitor 0603 X7R 50V
+,GRM188R71H683KA01,Murata,Capacitor,X7R,0603,50.0,6.8e-08,,,±10%,±15% (-55 to +125°C),,,,,7e-08F 0603 X7R 50V,capacitor 0603 X7R 50V
+,GRM188R71H104KA01,Murata,Capacitor,X7R,0603,50.0,1e-07,,,±10%,±15% (-55 to +125°C),,,,,1e-07F 0603 X7R 50V,capacitor 0603 X7R 50V
+,GRM21BR71C105KA01,Murata,Capacitor,X7R,0805,16.0,1e-06,,,±10%,±15% (-55 to +125°C),,,,,1e-06F 0805 X7R 16V,capacitor 0805 X7R 16V
+,GRM21BR71C225KA01,Murata,Capacitor,X7R,0805,16.0,2.2e-06,,,±10%,±15% (-55 to +125°C),,,,,2e-06F 0805 X7R 16V,capacitor 0805 X7R 16V
+,GRM21BR71C475KA01,Murata,Capacitor,X7R,0805,16.0,4.7e-06,,,±10%,±15% (-55 to +125°C),,,,,5e-06F 0805 X7R 16V,capacitor 0805 X7R 16V
+,GRM21BR71E105KA01,Murata,Capacitor,X7R,0805,25.0,1e-06,,,±10%,±15% (-55 to +125°C),,,,,1e-06F 0805 X7R 25V,capacitor 0805 X7R 25V
+,GRM21BR71E225KA01,Murata,Capacitor,X7R,0805,25.0,2.2e-06,,,±10%,±15% (-55 to +125°C),,,,,2e-06F 0805 X7R 25V,capacitor 0805 X7R 25V
+,GRM21BR71E475KA01,Murata,Capacitor,X7R,0805,25.0,4.7e-06,,,±10%,±15% (-55 to +125°C),,,,,5e-06F 0805 X7R 25V,capacitor 0805 X7R 25V
+,GRM21BR71H104KA01,Murata,Capacitor,X7R,0805,50.0,1e-07,,,±10%,±15% (-55 to +125°C),,,,,1e-07F 0805 X7R 50V,capacitor 0805 X7R 50V
+,GRM21BR71H224KA01,Murata,Capacitor,X7R,0805,50.0,2.2e-07,,,±10%,±15% (-55 to +125°C),,,,,2e-07F 0805 X7R 50V,capacitor 0805 X7R 50V
+,GRM21BR71H474KA01,Murata,Capacitor,X7R,0805,50.0,4.7e-07,,,±10%,±15% (-55 to +125°C),,,,,5e-07F 0805 X7R 50V,capacitor 0805 X7R 50V
+,GRM21BR71H105KA01,Murata,Capacitor,X7R,0805,50.0,1e-06,,,±10%,±15% (-55 to +125°C),,,,,1e-06F 0805 X7R 50V,capacitor 0805 X7R 50V
+,GRM31CR71C106KA01,Murata,Capacitor,X7R,1206,16.0,1e-05,,,±10%,±15% (-55 to +125°C),,,,,1e-05F 1206 X7R 16V,capacitor 1206 X7R 16V
+,GRM31CR71C226KA01,Murata,Capacitor,X7R,1206,16.0,2.2e-05,,,±10%,±15% (-55 to +125°C),,,,,2e-05F 1206 X7R 16V,capacitor 1206 X7R 16V
+,GRM31CR71E106KA01,Murata,Capacitor,X7R,1206,25.0,1e-05,,,±10%,±15% (-55 to +125°C),,,,,1e-05F 1206 X7R 25V,capacitor 1206 X7R 25V
+,GRM31CR71E226KA01,Murata,Capacitor,X7R,1206,25.0,2.2e-05,,,±10%,±15% (-55 to +125°C),,,,,2e-05F 1206 X7R 25V,capacitor 1206 X7R 25V
+,GRM31CR71H105KA01,Murata,Capacitor,X7R,1206,50.0,1e-06,,,±10%,±15% (-55 to +125°C),,,,,1e-06F 1206 X7R 50V,capacitor 1206 X7R 50V
+,GRM31CR71H225KA01,Murata,Capacitor,X7R,1206,50.0,2.2e-06,,,±10%,±15% (-55 to +125°C),,,,,2e-06F 1206 X7R 50V,capacitor 1206 X7R 50V
+,GRM31CR71H475KA01,Murata,Capacitor,X7R,1206,50.0,4.7e-06,,,±10%,±15% (-55 to +125°C),,,,,5e-06F 1206 X7R 50V,capacitor 1206 X7R 50V
+,UMK105CG1R0CW-F,Taiyo Yuden,Capacitor,C0G/NP0,0402,50.0,1e-12,,,±5%,±30ppm/°C,,,,,1e-12F 0402 C0G 50V,capacitor 0402 C0G 50V
+,UMK105CG1R5CW-F,Taiyo Yuden,Capacitor,C0G/NP0,0402,50.0,1.5e-12,,,±5%,±30ppm/°C,,,,,2e-12F 0402 C0G 50V,capacitor 0402 C0G 50V
+,UMK105CG2R2CW-F,Taiyo Yuden,Capacitor,C0G/NP0,0402,50.0,2.2e-12,,,±5%,±30ppm/°C,,,,,2e-12F 0402 C0G 50V,capacitor 0402 C0G 50V
+,UMK105CG3R3CW-F,Taiyo Yuden,Capacitor,C0G/NP0,0402,50.0,3.3e-12,,,±5%,±30ppm/°C,,,,,3e-12F 0402 C0G 50V,capacitor 0402 C0G 50V
+,UMK105CG4R7CW-F,Taiyo Yuden,Capacitor,C0G/NP0,0402,50.0,4.7e-12,,,±5%,±30ppm/°C,,,,,5e-12F 0402 C0G 50V,capacitor 0402 C0G 50V
+,UMK105CG6R8DW-F,Taiyo Yuden,Capacitor,C0G/NP0,0402,50.0,6.8e-12,,,±5%,±30ppm/°C,,,,,7e-12F 0402 C0G 50V,capacitor 0402 C0G 50V
+,UMK105CG100JW-F,Taiyo Yuden,Capacitor,C0G/NP0,0402,50.0,1e-11,,,±5%,±30ppm/°C,,,,,1e-11F 0402 C0G 50V,capacitor 0402 C0G 50V
+,UMK105CG150JW-F,Taiyo Yuden,Capacitor,C0G/NP0,0402,50.0,1.5e-11,,,±5%,±30ppm/°C,,,,,1e-11F 0402 C0G 50V,capacitor 0402 C0G 50V
+,UMK105CG220JW-F,Taiyo Yuden,Capacitor,C0G/NP0,0402,50.0,2.2e-11,,,±5%,±30ppm/°C,,,,,2e-11F 0402 C0G 50V,capacitor 0402 C0G 50V
+,UMK105CG330JW-F,Taiyo Yuden,Capacitor,C0G/NP0,0402,50.0,3.3e-11,,,±5%,±30ppm/°C,,,,,3e-11F 0402 C0G 50V,capacitor 0402 C0G 50V
+,UMK105CG470JW-F,Taiyo Yuden,Capacitor,C0G/NP0,0402,50.0,4.7e-11,,,±5%,±30ppm/°C,,,,,5e-11F 0402 C0G 50V,capacitor 0402 C0G 50V
+,UMK105CG680JW-F,Taiyo Yuden,Capacitor,C0G/NP0,0402,50.0,6.8e-11,,,±5%,±30ppm/°C,,,,,7e-11F 0402 C0G 50V,capacitor 0402 C0G 50V
+,UMK105CG101JW-F,Taiyo Yuden,Capacitor,C0G/NP0,0402,50.0,1e-10,,,±5%,±30ppm/°C,,,,,1e-10F 0402 C0G 50V,capacitor 0402 C0G 50V
+,UMK105CG151JW-F,Taiyo Yuden,Capacitor,C0G/NP0,0402,50.0,1.5e-10,,,±5%,±30ppm/°C,,,,,1e-10F 0402 C0G 50V,capacitor 0402 C0G 50V
+,UMK105CG221JW-F,Taiyo Yuden,Capacitor,C0G/NP0,0402,50.0,2.2e-10,,,±5%,±30ppm/°C,,,,,2e-10F 0402 C0G 50V,capacitor 0402 C0G 50V
+,UMK105CG331JW-F,Taiyo Yuden,Capacitor,C0G/NP0,0402,50.0,3.3e-10,,,±5%,±30ppm/°C,,,,,3e-10F 0402 C0G 50V,capacitor 0402 C0G 50V
+,UMK105CG471JW-F,Taiyo Yuden,Capacitor,C0G/NP0,0402,50.0,4.7e-10,,,±5%,±30ppm/°C,,,,,5e-10F 0402 C0G 50V,capacitor 0402 C0G 50V
+,UMK105CG681JW-F,Taiyo Yuden,Capacitor,C0G/NP0,0402,50.0,6.8e-10,,,±5%,±30ppm/°C,,,,,7e-10F 0402 C0G 50V,capacitor 0402 C0G 50V
+,UMK105CG102JW-F,Taiyo Yuden,Capacitor,C0G/NP0,0402,50.0,1e-09,,,±5%,±30ppm/°C,,,,,1e-09F 0402 C0G 50V,capacitor 0402 C0G 50V
+,UMK105CG152JW-F,Taiyo Yuden,Capacitor,C0G/NP0,0402,50.0,1.5e-09,,,±5%,±30ppm/°C,,,,,1e-09F 0402 C0G 50V,capacitor 0402 C0G 50V
+,UMK105CG222JW-F,Taiyo Yuden,Capacitor,C0G/NP0,0402,50.0,2.2e-09,,,±5%,±30ppm/°C,,,,,2e-09F 0402 C0G 50V,capacitor 0402 C0G 50V
+,UMK105CG332JW-F,Taiyo Yuden,Capacitor,C0G/NP0,0402,50.0,3.3e-09,,,±5%,±30ppm/°C,,,,,3e-09F 0402 C0G 50V,capacitor 0402 C0G 50V
+,UMK105CG472JW-F,Taiyo Yuden,Capacitor,C0G/NP0,0402,50.0,4.7e-09,,,±5%,±30ppm/°C,,,,,5e-09F 0402 C0G 50V,capacitor 0402 C0G 50V
+,UMK105CG682JW-F,Taiyo Yuden,Capacitor,C0G/NP0,0402,50.0,6.8e-09,,,±5%,±30ppm/°C,,,,,7e-09F 0402 C0G 50V,capacitor 0402 C0G 50V
+,UMK105CG103JW-F,Taiyo Yuden,Capacitor,C0G/NP0,0402,50.0,1e-08,,,±5%,±30ppm/°C,,,,,1e-08F 0402 C0G 50V,capacitor 0402 C0G 50V
+,UMK105B7103KW-F,Taiyo Yuden,Capacitor,X7R,0402,16.0,1e-08,,,±10%,±15% (-55 to +125°C),,,,,1e-08F 0402 X7R 16V,capacitor 0402 X7R 16V
+,UMK105B7153KW-F,Taiyo Yuden,Capacitor,X7R,0402,16.0,1.5e-08,,,±10%,±15% (-55 to +125°C),,,,,1e-08F 0402 X7R 16V,capacitor 0402 X7R 16V
+,UMK105B7223KW-F,Taiyo Yuden,Capacitor,X7R,0402,16.0,2.2e-08,,,±10%,±15% (-55 to +125°C),,,,,2e-08F 0402 X7R 16V,capacitor 0402 X7R 16V
+,UMK105B7333KW-F,Taiyo Yuden,Capacitor,X7R,0402,16.0,3.3e-08,,,±10%,±15% (-55 to +125°C),,,,,3e-08F 0402 X7R 16V,capacitor 0402 X7R 16V
+,UMK105B7473KW-F,Taiyo Yuden,Capacitor,X7R,0402,16.0,4.7e-08,,,±10%,±15% (-55 to +125°C),,,,,5e-08F 0402 X7R 16V,capacitor 0402 X7R 16V
+,UMK105B7683KW-F,Taiyo Yuden,Capacitor,X7R,0402,16.0,6.8e-08,,,±10%,±15% (-55 to +125°C),,,,,7e-08F 0402 X7R 16V,capacitor 0402 X7R 16V
+,UMK105B7104KW-F,Taiyo Yuden,Capacitor,X7R,0402,16.0,1e-07,,,±10%,±15% (-55 to +125°C),,,,,1e-07F 0402 X7R 16V,capacitor 0402 X7R 16V
+,UMK105B7154KW-F,Taiyo Yuden,Capacitor,X7R,0402,16.0,1.5e-07,,,±10%,±15% (-55 to +125°C),,,,,1e-07F 0402 X7R 16V,capacitor 0402 X7R 16V
+,UMK105B7224KW-F,Taiyo Yuden,Capacitor,X7R,0402,16.0,2.2e-07,,,±10%,±15% (-55 to +125°C),,,,,2e-07F 0402 X7R 16V,capacitor 0402 X7R 16V
+,UMK105B7103KV-F,Taiyo Yuden,Capacitor,X7R,0402,25.0,1e-08,,,±10%,±15% (-55 to +125°C),,,,,1e-08F 0402 X7R 25V,capacitor 0402 X7R 25V
+,UMK105B7223KV-F,Taiyo Yuden,Capacitor,X7R,0402,25.0,2.2e-08,,,±10%,±15% (-55 to +125°C),,,,,2e-08F 0402 X7R 25V,capacitor 0402 X7R 25V
+,UMK105B7473KV-F,Taiyo Yuden,Capacitor,X7R,0402,25.0,4.7e-08,,,±10%,±15% (-55 to +125°C),,,,,5e-08F 0402 X7R 25V,capacitor 0402 X7R 25V
+,UMK105B7104KV-F,Taiyo Yuden,Capacitor,X7R,0402,25.0,1e-07,,,±10%,±15% (-55 to +125°C),,,,,1e-07F 0402 X7R 25V,capacitor 0402 X7R 25V
+,UMK105B7103KJ-F,Taiyo Yuden,Capacitor,X7R,0402,50.0,1e-08,,,±10%,±15% (-55 to +125°C),,,,,1e-08F 0402 X7R 50V,capacitor 0402 X7R 50V
+,UMK105B7223KJ-F,Taiyo Yuden,Capacitor,X7R,0402,50.0,2.2e-08,,,±10%,±15% (-55 to +125°C),,,,,2e-08F 0402 X7R 50V,capacitor 0402 X7R 50V
+,UMK105B7473KJ-F,Taiyo Yuden,Capacitor,X7R,0402,50.0,4.7e-08,,,±10%,±15% (-55 to +125°C),,,,,5e-08F 0402 X7R 50V,capacitor 0402 X7R 50V
+,UMK105B7104KJ-F,Taiyo Yuden,Capacitor,X7R,0402,50.0,1e-07,,,±10%,±15% (-55 to +125°C),,,,,1e-07F 0402 X7R 50V,capacitor 0402 X7R 50V
+,EMK107B7103KW-F,Taiyo Yuden,Capacitor,X7R,0603,16.0,1e-08,,,±10%,±15% (-55 to +125°C),,,,,1e-08F 0603 X7R 16V,capacitor 0603 X7R 16V
+,EMK107B7153KW-F,Taiyo Yuden,Capacitor,X7R,0603,16.0,1.5e-08,,,±10%,±15% (-55 to +125°C),,,,,1e-08F 0603 X7R 16V,capacitor 0603 X7R 16V
+,EMK107B7223KW-F,Taiyo Yuden,Capacitor,X7R,0603,16.0,2.2e-08,,,±10%,±15% (-55 to +125°C),,,,,2e-08F 0603 X7R 16V,capacitor 0603 X7R 16V
+,EMK107B7333KW-F,Taiyo Yuden,Capacitor,X7R,0603,16.0,3.3e-08,,,±10%,±15% (-55 to +125°C),,,,,3e-08F 0603 X7R 16V,capacitor 0603 X7R 16V
+,EMK107B7473KW-F,Taiyo Yuden,Capacitor,X7R,0603,16.0,4.7e-08,,,±10%,±15% (-55 to +125°C),,,,,5e-08F 0603 X7R 16V,capacitor 0603 X7R 16V
+,EMK107B7683KW-F,Taiyo Yuden,Capacitor,X7R,0603,16.0,6.8e-08,,,±10%,±15% (-55 to +125°C),,,,,7e-08F 0603 X7R 16V,capacitor 0603 X7R 16V
+,EMK107B7104KW-F,Taiyo Yuden,Capacitor,X7R,0603,16.0,1e-07,,,±10%,±15% (-55 to +125°C),,,,,1e-07F 0603 X7R 16V,capacitor 0603 X7R 16V
+,EMK107B7154KW-F,Taiyo Yuden,Capacitor,X7R,0603,16.0,1.5e-07,,,±10%,±15% (-55 to +125°C),,,,,1e-07F 0603 X7R 16V,capacitor 0603 X7R 16V
+,EMK107B7224KW-F,Taiyo Yuden,Capacitor,X7R,0603,16.0,2.2e-07,,,±10%,±15% (-55 to +125°C),,,,,2e-07F 0603 X7R 16V,capacitor 0603 X7R 16V
+,EMK107B7334KW-F,Taiyo Yuden,Capacitor,X7R,0603,16.0,3.3e-07,,,±10%,±15% (-55 to +125°C),,,,,3e-07F 0603 X7R 16V,capacitor 0603 X7R 16V
+,EMK107B7474KW-F,Taiyo Yuden,Capacitor,X7R,0603,16.0,4.7e-07,,,±10%,±15% (-55 to +125°C),,,,,5e-07F 0603 X7R 16V,capacitor 0603 X7R 16V
+,EMK107B7105KW-F,Taiyo Yuden,Capacitor,X7R,0603,16.0,1e-06,,,±10%,±15% (-55 to +125°C),,,,,1e-06F 0603 X7R 16V,capacitor 0603 X7R 16V
+,EMK107B7103KV-F,Taiyo Yuden,Capacitor,X7R,0603,25.0,1e-08,,,±10%,±15% (-55 to +125°C),,,,,1e-08F 0603 X7R 25V,capacitor 0603 X7R 25V
+,EMK107B7223KV-F,Taiyo Yuden,Capacitor,X7R,0603,25.0,2.2e-08,,,±10%,±15% (-55 to +125°C),,,,,2e-08F 0603 X7R 25V,capacitor 0603 X7R 25V
+,EMK107B7473KV-F,Taiyo Yuden,Capacitor,X7R,0603,25.0,4.7e-08,,,±10%,±15% (-55 to +125°C),,,,,5e-08F 0603 X7R 25V,capacitor 0603 X7R 25V
+,EMK107B7104KV-F,Taiyo Yuden,Capacitor,X7R,0603,25.0,1e-07,,,±10%,±15% (-55 to +125°C),,,,,1e-07F 0603 X7R 25V,capacitor 0603 X7R 25V
+,EMK107B7224KV-F,Taiyo Yuden,Capacitor,X7R,0603,25.0,2.2e-07,,,±10%,±15% (-55 to +125°C),,,,,2e-07F 0603 X7R 25V,capacitor 0603 X7R 25V
+,EMK107B7474KV-F,Taiyo Yuden,Capacitor,X7R,0603,25.0,4.7e-07,,,±10%,±15% (-55 to +125°C),,,,,5e-07F 0603 X7R 25V,capacitor 0603 X7R 25V
+,EMK107B7103KJ-F,Taiyo Yuden,Capacitor,X7R,0603,50.0,1e-08,,,±10%,±15% (-55 to +125°C),,,,,1e-08F 0603 X7R 50V,capacitor 0603 X7R 50V
+,EMK107B7223KJ-F,Taiyo Yuden,Capacitor,X7R,0603,50.0,2.2e-08,,,±10%,±15% (-55 to +125°C),,,,,2e-08F 0603 X7R 50V,capacitor 0603 X7R 50V
+,EMK107B7473KJ-F,Taiyo Yuden,Capacitor,X7R,0603,50.0,4.7e-08,,,±10%,±15% (-55 to +125°C),,,,,5e-08F 0603 X7R 50V,capacitor 0603 X7R 50V
+,EMK107B7104KJ-F,Taiyo Yuden,Capacitor,X7R,0603,50.0,1e-07,,,±10%,±15% (-55 to +125°C),,,,,1e-07F 0603 X7R 50V,capacitor 0603 X7R 50V
+,EMK107B7224KJ-F,Taiyo Yuden,Capacitor,X7R,0603,50.0,2.2e-07,,,±10%,±15% (-55 to +125°C),,,,,2e-07F 0603 X7R 50V,capacitor 0603 X7R 50V
+,EMK107B7474KJ-F,Taiyo Yuden,Capacitor,X7R,0603,50.0,4.7e-07,,,±10%,±15% (-55 to +125°C),,,,,5e-07F 0603 X7R 50V,capacitor 0603 X7R 50V
+,GMK212B7104KG-F,Taiyo Yuden,Capacitor,X7R,0805,16.0,1e-07,,,±10%,±15% (-55 to +125°C),,,,,1e-07F 0805 X7R 16V,capacitor 0805 X7R 16V
+,GMK212B7224KG-F,Taiyo Yuden,Capacitor,X7R,0805,16.0,2.2e-07,,,±10%,±15% (-55 to +125°C),,,,,2e-07F 0805 X7R 16V,capacitor 0805 X7R 16V
+,GMK212B7474KG-F,Taiyo Yuden,Capacitor,X7R,0805,16.0,4.7e-07,,,±10%,±15% (-55 to +125°C),,,,,5e-07F 0805 X7R 16V,capacitor 0805 X7R 16V
+,GMK212B7105KG-F,Taiyo Yuden,Capacitor,X7R,0805,16.0,1e-06,,,±10%,±15% (-55 to +125°C),,,,,1e-06F 0805 X7R 16V,capacitor 0805 X7R 16V
+,GMK212B7225KG-F,Taiyo Yuden,Capacitor,X7R,0805,16.0,2.2e-06,,,±10%,±15% (-55 to +125°C),,,,,2e-06F 0805 X7R 16V,capacitor 0805 X7R 16V
+,GMK212B7475KG-F,Taiyo Yuden,Capacitor,X7R,0805,16.0,4.7e-06,,,±10%,±15% (-55 to +125°C),,,,,5e-06F 0805 X7R 16V,capacitor 0805 X7R 16V
+,GMK212B7104KD-F,Taiyo Yuden,Capacitor,X7R,0805,25.0,1e-07,,,±10%,±15% (-55 to +125°C),,,,,1e-07F 0805 X7R 25V,capacitor 0805 X7R 25V
+,GMK212B7224KD-F,Taiyo Yuden,Capacitor,X7R,0805,25.0,2.2e-07,,,±10%,±15% (-55 to +125°C),,,,,2e-07F 0805 X7R 25V,capacitor 0805 X7R 25V
+,GMK212B7474KD-F,Taiyo Yuden,Capacitor,X7R,0805,25.0,4.7e-07,,,±10%,±15% (-55 to +125°C),,,,,5e-07F 0805 X7R 25V,capacitor 0805 X7R 25V
+,GMK212B7105KD-F,Taiyo Yuden,Capacitor,X7R,0805,25.0,1e-06,,,±10%,±15% (-55 to +125°C),,,,,1e-06F 0805 X7R 25V,capacitor 0805 X7R 25V
+,GMK212B7225KD-F,Taiyo Yuden,Capacitor,X7R,0805,25.0,2.2e-06,,,±10%,±15% (-55 to +125°C),,,,,2e-06F 0805 X7R 25V,capacitor 0805 X7R 25V
+,GMK212B7104KB-F,Taiyo Yuden,Capacitor,X7R,0805,50.0,1e-07,,,±10%,±15% (-55 to +125°C),,,,,1e-07F 0805 X7R 50V,capacitor 0805 X7R 50V
+,GMK212B7224KB-F,Taiyo Yuden,Capacitor,X7R,0805,50.0,2.2e-07,,,±10%,±15% (-55 to +125°C),,,,,2e-07F 0805 X7R 50V,capacitor 0805 X7R 50V
+,GMK212B7474KB-F,Taiyo Yuden,Capacitor,X7R,0805,50.0,4.7e-07,,,±10%,±15% (-55 to +125°C),,,,,5e-07F 0805 X7R 50V,capacitor 0805 X7R 50V
+,CL05A103KB5NNNC,Samsung Electro-Mechanics,Capacitor,X7R,0402,50.0,1e-08,,,±10%,±15% (-55 to +125°C),,,,,1e-08F 0402 X7R 50V,capacitor 0402 X7R 50V
+,CL05A153KB5NNNC,Samsung Electro-Mechanics,Capacitor,X7R,0402,50.0,1.5e-08,,,±10%,±15% (-55 to +125°C),,,,,1e-08F 0402 X7R 50V,capacitor 0402 X7R 50V
+,CL05A223KB5NNNC,Samsung Electro-Mechanics,Capacitor,X7R,0402,50.0,2.2e-08,,,±10%,±15% (-55 to +125°C),,,,,2e-08F 0402 X7R 50V,capacitor 0402 X7R 50V
+,CL05A333KB5NNNC,Samsung Electro-Mechanics,Capacitor,X7R,0402,50.0,3.3e-08,,,±10%,±15% (-55 to +125°C),,,,,3e-08F 0402 X7R 50V,capacitor 0402 X7R 50V
+,CL05A473KB5NNNC,Samsung Electro-Mechanics,Capacitor,X7R,0402,50.0,4.7e-08,,,±10%,±15% (-55 to +125°C),,,,,5e-08F 0402 X7R 50V,capacitor 0402 X7R 50V
+,CL05A683KB5NNNC,Samsung Electro-Mechanics,Capacitor,X7R,0402,50.0,6.8e-08,,,±10%,±15% (-55 to +125°C),,,,,7e-08F 0402 X7R 50V,capacitor 0402 X7R 50V
+,CL05A104KB5NNNC,Samsung Electro-Mechanics,Capacitor,X7R,0402,50.0,1e-07,,,±10%,±15% (-55 to +125°C),,,,,1e-07F 0402 X7R 50V,capacitor 0402 X7R 50V
+,CL05A154KB5NNNC,Samsung Electro-Mechanics,Capacitor,X7R,0402,50.0,1.5e-07,,,±10%,±15% (-55 to +125°C),,,,,1e-07F 0402 X7R 50V,capacitor 0402 X7R 50V
+,CL05A224KB5NNNC,Samsung Electro-Mechanics,Capacitor,X7R,0402,50.0,2.2e-07,,,±10%,±15% (-55 to +125°C),,,,,2e-07F 0402 X7R 50V,capacitor 0402 X7R 50V
+,CL05A103KO5NNNC,Samsung Electro-Mechanics,Capacitor,X7R,0402,16.0,1e-08,,,±10%,±15% (-55 to +125°C),,,,,1e-08F 0402 X7R 16V,capacitor 0402 X7R 16V
+,CL05A223KO5NNNC,Samsung Electro-Mechanics,Capacitor,X7R,0402,16.0,2.2e-08,,,±10%,±15% (-55 to +125°C),,,,,2e-08F 0402 X7R 16V,capacitor 0402 X7R 16V
+,CL05A473KO5NNNC,Samsung Electro-Mechanics,Capacitor,X7R,0402,16.0,4.7e-08,,,±10%,±15% (-55 to +125°C),,,,,5e-08F 0402 X7R 16V,capacitor 0402 X7R 16V
+,CL05A104KO5NNNC,Samsung Electro-Mechanics,Capacitor,X7R,0402,16.0,1e-07,,,±10%,±15% (-55 to +125°C),,,,,1e-07F 0402 X7R 16V,capacitor 0402 X7R 16V
+,CL05A103KQ5NNNC,Samsung Electro-Mechanics,Capacitor,X7R,0402,6.3,1e-08,,,±10%,±15% (-55 to +125°C),,,,,1e-08F 0402 X7R 6.3V,capacitor 0402 X7R 6.3V
+,CL05A223KQ5NNNC,Samsung Electro-Mechanics,Capacitor,X7R,0402,6.3,2.2e-08,,,±10%,±15% (-55 to +125°C),,,,,2e-08F 0402 X7R 6.3V,capacitor 0402 X7R 6.3V
+,CL05A473KQ5NNNC,Samsung Electro-Mechanics,Capacitor,X7R,0402,6.3,4.7e-08,,,±10%,±15% (-55 to +125°C),,,,,5e-08F 0402 X7R 6.3V,capacitor 0402 X7R 6.3V
+,CL05A104KQ5NNNC,Samsung Electro-Mechanics,Capacitor,X7R,0402,6.3,1e-07,,,±10%,±15% (-55 to +125°C),,,,,1e-07F 0402 X7R 6.3V,capacitor 0402 X7R 6.3V
+,CL05A104MP5NNNC,Samsung Electro-Mechanics,Capacitor,X5R,0402,10.0,1e-07,,,±10%,±15% (-55 to +85°C),,,,,1e-07F 0402 X5R 10V,capacitor 0402 X5R 10V
+,CL05A224MP5NNNC,Samsung Electro-Mechanics,Capacitor,X5R,0402,10.0,2.2e-07,,,±10%,±15% (-55 to +85°C),,,,,2e-07F 0402 X5R 10V,capacitor 0402 X5R 10V
+,CL05A474MP5NNNC,Samsung Electro-Mechanics,Capacitor,X5R,0402,10.0,4.7e-07,,,±10%,±15% (-55 to +85°C),,,,,5e-07F 0402 X5R 10V,capacitor 0402 X5R 10V
+,CL05A105MP5NNNC,Samsung Electro-Mechanics,Capacitor,X5R,0402,10.0,1e-06,,,±10%,±15% (-55 to +85°C),,,,,1e-06F 0402 X5R 10V,capacitor 0402 X5R 10V
+,CL05A225MP5NNNC,Samsung Electro-Mechanics,Capacitor,X5R,0402,10.0,2.2e-06,,,±10%,±15% (-55 to +85°C),,,,,2e-06F 0402 X5R 10V,capacitor 0402 X5R 10V
+,CL05A475MP5NNNC,Samsung Electro-Mechanics,Capacitor,X5R,0402,10.0,4.7e-06,,,±10%,±15% (-55 to +85°C),,,,,5e-06F 0402 X5R 10V,capacitor 0402 X5R 10V
+,CL05A105MQ5NNNC,Samsung Electro-Mechanics,Capacitor,X5R,0402,6.3,1e-06,,,±10%,±15% (-55 to +85°C),,,,,1e-06F 0402 X5R 6.3V,capacitor 0402 X5R 6.3V
+,CL05A225MQ5NNNC,Samsung Electro-Mechanics,Capacitor,X5R,0402,6.3,2.2e-06,,,±10%,±15% (-55 to +85°C),,,,,2e-06F 0402 X5R 6.3V,capacitor 0402 X5R 6.3V
+,CL10B103KB8NNNC,Samsung Electro-Mechanics,Capacitor,X7R,0603,50.0,1e-08,,,±10%,±15% (-55 to +125°C),,,,,1e-08F 0603 X7R 50V,capacitor 0603 X7R 50V
+,CL10B153KB8NNNC,Samsung Electro-Mechanics,Capacitor,X7R,0603,50.0,1.5e-08,,,±10%,±15% (-55 to +125°C),,,,,1e-08F 0603 X7R 50V,capacitor 0603 X7R 50V
+,CL10B223KB8NNNC,Samsung Electro-Mechanics,Capacitor,X7R,0603,50.0,2.2e-08,,,±10%,±15% (-55 to +125°C),,,,,2e-08F 0603 X7R 50V,capacitor 0603 X7R 50V
+,CL10B333KB8NNNC,Samsung Electro-Mechanics,Capacitor,X7R,0603,50.0,3.3e-08,,,±10%,±15% (-55 to +125°C),,,,,3e-08F 0603 X7R 50V,capacitor 0603 X7R 50V
+,CL10B473KB8NNNC,Samsung Electro-Mechanics,Capacitor,X7R,0603,50.0,4.7e-08,,,±10%,±15% (-55 to +125°C),,,,,5e-08F 0603 X7R 50V,capacitor 0603 X7R 50V
+,CL10B683KB8NNNC,Samsung Electro-Mechanics,Capacitor,X7R,0603,50.0,6.8e-08,,,±10%,±15% (-55 to +125°C),,,,,7e-08F 0603 X7R 50V,capacitor 0603 X7R 50V
+,CL10B104KB8NNNC,Samsung Electro-Mechanics,Capacitor,X7R,0603,50.0,1e-07,,,±10%,±15% (-55 to +125°C),,,,,1e-07F 0603 X7R 50V,capacitor 0603 X7R 50V
+,CL10B154KB8NNNC,Samsung Electro-Mechanics,Capacitor,X7R,0603,50.0,1.5e-07,,,±10%,±15% (-55 to +125°C),,,,,1e-07F 0603 X7R 50V,capacitor 0603 X7R 50V
+,CL10B224KB8NNNC,Samsung Electro-Mechanics,Capacitor,X7R,0603,50.0,2.2e-07,,,±10%,±15% (-55 to +125°C),,,,,2e-07F 0603 X7R 50V,capacitor 0603 X7R 50V
+,CL10B334KB8NNNC,Samsung Electro-Mechanics,Capacitor,X7R,0603,50.0,3.3e-07,,,±10%,±15% (-55 to +125°C),,,,,3e-07F 0603 X7R 50V,capacitor 0603 X7R 50V
+,CL10B474KB8NNNC,Samsung Electro-Mechanics,Capacitor,X7R,0603,50.0,4.7e-07,,,±10%,±15% (-55 to +125°C),,,,,5e-07F 0603 X7R 50V,capacitor 0603 X7R 50V
+,CL10B105KB8NNNC,Samsung Electro-Mechanics,Capacitor,X7R,0603,50.0,1e-06,,,±10%,±15% (-55 to +125°C),,,,,1e-06F 0603 X7R 50V,capacitor 0603 X7R 50V
+,CL10B103KO8NNNC,Samsung Electro-Mechanics,Capacitor,X7R,0603,16.0,1e-08,,,±10%,±15% (-55 to +125°C),,,,,1e-08F 0603 X7R 16V,capacitor 0603 X7R 16V
+,CL10B223KO8NNNC,Samsung Electro-Mechanics,Capacitor,X7R,0603,16.0,2.2e-08,,,±10%,±15% (-55 to +125°C),,,,,2e-08F 0603 X7R 16V,capacitor 0603 X7R 16V
+,CL10B473KO8NNNC,Samsung Electro-Mechanics,Capacitor,X7R,0603,16.0,4.7e-08,,,±10%,±15% (-55 to +125°C),,,,,5e-08F 0603 X7R 16V,capacitor 0603 X7R 16V
+,CL10B104KO8NNNC,Samsung Electro-Mechanics,Capacitor,X7R,0603,16.0,1e-07,,,±10%,±15% (-55 to +125°C),,,,,1e-07F 0603 X7R 16V,capacitor 0603 X7R 16V
+,LQG15HN1N0S02,Murata,Inductor,High-Frequency,0402,,,,1e-09,±5%,±25ppm/°C,,,,,1e-09H 0402 HF ±5%,inductor 0402 high-frequency
+,LQG15HN1N2S02,Murata,Inductor,High-Frequency,0402,,,,1.2e-09,±5%,±25ppm/°C,,,,,1e-09H 0402 HF ±5%,inductor 0402 high-frequency
+,LQG15HN1N5S02,Murata,Inductor,High-Frequency,0402,,,,1.5e-09,±5%,±25ppm/°C,,,,,1e-09H 0402 HF ±5%,inductor 0402 high-frequency
+,LQG15HN1N8S02,Murata,Inductor,High-Frequency,0402,,,,1.8e-09,±5%,±25ppm/°C,,,,,2e-09H 0402 HF ±5%,inductor 0402 high-frequency
+,LQG15HN2N2S02,Murata,Inductor,High-Frequency,0402,,,,2.2e-09,±5%,±25ppm/°C,,,,,2e-09H 0402 HF ±5%,inductor 0402 high-frequency
+,LQG15HN2N7S02,Murata,Inductor,High-Frequency,0402,,,,2.7e-09,±5%,±25ppm/°C,,,,,3e-09H 0402 HF ±5%,inductor 0402 high-frequency
+,LQG15HN3N3S02,Murata,Inductor,High-Frequency,0402,,,,3.3e-09,±5%,±25ppm/°C,,,,,3e-09H 0402 HF ±5%,inductor 0402 high-frequency
+,LQG15HN3N9S02,Murata,Inductor,High-Frequency,0402,,,,3.9e-09,±5%,±25ppm/°C,,,,,4e-09H 0402 HF ±5%,inductor 0402 high-frequency
+,LQG15HN4N7S02,Murata,Inductor,High-Frequency,0402,,,,4.7e-09,±5%,±25ppm/°C,,,,,5e-09H 0402 HF ±5%,inductor 0402 high-frequency
+,LQG15HN5N6S02,Murata,Inductor,High-Frequency,0402,,,,5.6e-09,±5%,±25ppm/°C,,,,,6e-09H 0402 HF ±5%,inductor 0402 high-frequency
+,LQG15HN6N8S02,Murata,Inductor,High-Frequency,0402,,,,6.8e-09,±5%,±25ppm/°C,,,,,7e-09H 0402 HF ±5%,inductor 0402 high-frequency
+,LQG15HN8N2S02,Murata,Inductor,High-Frequency,0402,,,,8.2e-09,±5%,±25ppm/°C,,,,,8e-09H 0402 HF ±5%,inductor 0402 high-frequency
+,LQG15HN10NJ02,Murata,Inductor,High-Frequency,0402,,,,1e-08,±5%,±25ppm/°C,,,,,1e-08H 0402 HF ±5%,inductor 0402 high-frequency
+,LQG15HN12NJ02,Murata,Inductor,High-Frequency,0402,,,,1.2e-08,±5%,±25ppm/°C,,,,,1e-08H 0402 HF ±5%,inductor 0402 high-frequency
+,LQG15HN15NJ02,Murata,Inductor,High-Frequency,0402,,,,1.5e-08,±5%,±25ppm/°C,,,,,1e-08H 0402 HF ±5%,inductor 0402 high-frequency
+,LQG15HN18NJ02,Murata,Inductor,High-Frequency,0402,,,,1.8e-08,±5%,±25ppm/°C,,,,,2e-08H 0402 HF ±5%,inductor 0402 high-frequency
+,LQG15HN22NJ02,Murata,Inductor,High-Frequency,0402,,,,2.2e-08,±5%,±25ppm/°C,,,,,2e-08H 0402 HF ±5%,inductor 0402 high-frequency
+,LQG15HN27NJ02,Murata,Inductor,High-Frequency,0402,,,,2.7e-08,±5%,±25ppm/°C,,,,,3e-08H 0402 HF ±5%,inductor 0402 high-frequency
+,LQG15HN33NJ02,Murata,Inductor,High-Frequency,0402,,,,3.3e-08,±5%,±25ppm/°C,,,,,3e-08H 0402 HF ±5%,inductor 0402 high-frequency
+,LQG15HN39NJ02,Murata,Inductor,High-Frequency,0402,,,,3.9e-08,±5%,±25ppm/°C,,,,,4e-08H 0402 HF ±5%,inductor 0402 high-frequency
+,LQG15HN47NJ02,Murata,Inductor,High-Frequency,0402,,,,4.7e-08,±5%,±25ppm/°C,,,,,5e-08H 0402 HF ±5%,inductor 0402 high-frequency
+,LQG15HN56NJ02,Murata,Inductor,High-Frequency,0402,,,,5.6e-08,±5%,±25ppm/°C,,,,,6e-08H 0402 HF ±5%,inductor 0402 high-frequency
+,LQG15HN68NJ02,Murata,Inductor,High-Frequency,0402,,,,6.8e-08,±5%,±25ppm/°C,,,,,7e-08H 0402 HF ±5%,inductor 0402 high-frequency
+,LQG15HN82NJ02,Murata,Inductor,High-Frequency,0402,,,,8.2e-08,±5%,±25ppm/°C,,,,,8e-08H 0402 HF ±5%,inductor 0402 high-frequency
+,LQG15HN100J02,Murata,Inductor,High-Frequency,0402,,,,1e-07,±5%,±25ppm/°C,,,,,1e-07H 0402 HF ±5%,inductor 0402 high-frequency
+,LQG15HN120J02,Murata,Inductor,High-Frequency,0402,,,,1.2e-07,±5%,±25ppm/°C,,,,,1e-07H 0402 HF ±5%,inductor 0402 high-frequency
+,LQG15HN150J02,Murata,Inductor,High-Frequency,0402,,,,1.5e-07,±5%,±25ppm/°C,,,,,1e-07H 0402 HF ±5%,inductor 0402 high-frequency
+,LQG15HN180J02,Murata,Inductor,High-Frequency,0402,,,,1.8e-07,±5%,±25ppm/°C,,,,,2e-07H 0402 HF ±5%,inductor 0402 high-frequency
+,LQG15HN220J02,Murata,Inductor,High-Frequency,0402,,,,2.2e-07,±5%,±25ppm/°C,,,,,2e-07H 0402 HF ±5%,inductor 0402 high-frequency
+,LQG15HN270J02,Murata,Inductor,High-Frequency,0402,,,,2.7e-07,±5%,±25ppm/°C,,,,,3e-07H 0402 HF ±5%,inductor 0402 high-frequency
+,LQG15HN330J02,Murata,Inductor,High-Frequency,0402,,,,3.3e-07,±5%,±25ppm/°C,,,,,3e-07H 0402 HF ±5%,inductor 0402 high-frequency
+,LQG15HN390J02,Murata,Inductor,High-Frequency,0402,,,,3.9e-07,±5%,±25ppm/°C,,,,,4e-07H 0402 HF ±5%,inductor 0402 high-frequency
+,LQG15HN470J02,Murata,Inductor,High-Frequency,0402,,,,4.7e-07,±5%,±25ppm/°C,,,,,5e-07H 0402 HF ±5%,inductor 0402 high-frequency
+,LQM18PN1R0M00,Murata,Inductor,Power,0603,,,,1e-06,±20%,±25ppm/°C,,,,,1e-06H 0603 Power ±20%,inductor 0603 power
+,LQM18PN1R5M00,Murata,Inductor,Power,0603,,,,1.5e-06,±20%,±25ppm/°C,,,,,2e-06H 0603 Power ±20%,inductor 0603 power
+,LQM18PN2R2M00,Murata,Inductor,Power,0603,,,,2.2e-06,±20%,±25ppm/°C,,,,,2e-06H 0603 Power ±20%,inductor 0603 power
+,LQM18PN3R3M00,Murata,Inductor,Power,0603,,,,3.3e-06,±20%,±25ppm/°C,,,,,3e-06H 0603 Power ±20%,inductor 0603 power
+,LQM18PN4R7M00,Murata,Inductor,Power,0603,,,,4.7e-06,±20%,±25ppm/°C,,,,,5e-06H 0603 Power ±20%,inductor 0603 power
+,LQM18PN6R8M00,Murata,Inductor,Power,0603,,,,6.8e-06,±20%,±25ppm/°C,,,,,7e-06H 0603 Power ±20%,inductor 0603 power
+,LQM18PN100M00,Murata,Inductor,Power,0603,,,,1e-05,±20%,±25ppm/°C,,,,,1e-05H 0603 Power ±20%,inductor 0603 power
+,LQM18PN150M00,Murata,Inductor,Power,0603,,,,1.5e-05,±20%,±25ppm/°C,,,,,2e-05H 0603 Power ±20%,inductor 0603 power
+,LQM18PN220M00,Murata,Inductor,Power,0603,,,,2.2e-05,±20%,±25ppm/°C,,,,,2e-05H 0603 Power ±20%,inductor 0603 power
+,LQM18PN330M00,Murata,Inductor,Power,0603,,,,3.3e-05,±20%,±25ppm/°C,,,,,3e-05H 0603 Power ±20%,inductor 0603 power
+,LQM18PN470M00,Murata,Inductor,Power,0603,,,,4.7e-05,±20%,±25ppm/°C,,,,,5e-05H 0603 Power ±20%,inductor 0603 power
+,LQM18PN680M00,Murata,Inductor,Power,0603,,,,6.8e-05,±20%,±25ppm/°C,,,,,7e-05H 0603 Power ±20%,inductor 0603 power
+,LQM18PN101M00,Murata,Inductor,Power,0603,,,,0.0001,±20%,±25ppm/°C,,,,,1e-04H 0603 Power ±20%,inductor 0603 power
+,LQM18PN151M00,Murata,Inductor,Power,0603,,,,0.00015,±20%,±25ppm/°C,,,,,1e-04H 0603 Power ±20%,inductor 0603 power
+,LQM18PN221M00,Murata,Inductor,Power,0603,,,,0.00022,±20%,±25ppm/°C,,,,,2e-04H 0603 Power ±20%,inductor 0603 power
+,MLZ1608M1R0WT000,TDK,Inductor,Power,0603,,,,1e-06,±20%,±25ppm/°C,,,,,1e-06H 0603 Power ±20%,inductor 0603 power
+,MLZ1608M1R5WT000,TDK,Inductor,Power,0603,,,,1.5e-06,±20%,±25ppm/°C,,,,,2e-06H 0603 Power ±20%,inductor 0603 power
+,MLZ1608M2R2WT000,TDK,Inductor,Power,0603,,,,2.2e-06,±20%,±25ppm/°C,,,,,2e-06H 0603 Power ±20%,inductor 0603 power
+,MLZ1608M3R3WT000,TDK,Inductor,Power,0603,,,,3.3e-06,±20%,±25ppm/°C,,,,,3e-06H 0603 Power ±20%,inductor 0603 power
+,MLZ1608M4R7WT000,TDK,Inductor,Power,0603,,,,4.7e-06,±20%,±25ppm/°C,,,,,5e-06H 0603 Power ±20%,inductor 0603 power
+,MLZ1608M6R8WT000,TDK,Inductor,Power,0603,,,,6.8e-06,±20%,±25ppm/°C,,,,,7e-06H 0603 Power ±20%,inductor 0603 power
+,MLZ1608M100WT000,TDK,Inductor,Power,0603,,,,1e-05,±20%,±25ppm/°C,,,,,1e-05H 0603 Power ±20%,inductor 0603 power
+,MLZ1608M150WT000,TDK,Inductor,Power,0603,,,,1.5e-05,±20%,±25ppm/°C,,,,,2e-05H 0603 Power ±20%,inductor 0603 power
+,MLZ1608M220WT000,TDK,Inductor,Power,0603,,,,2.2e-05,±20%,±25ppm/°C,,,,,2e-05H 0603 Power ±20%,inductor 0603 power
+,MLZ1608M330WT000,TDK,Inductor,Power,0603,,,,3.3e-05,±20%,±25ppm/°C,,,,,3e-05H 0603 Power ±20%,inductor 0603 power
+,MLZ1608M470WT000,TDK,Inductor,Power,0603,,,,4.7e-05,±20%,±25ppm/°C,,,,,5e-05H 0603 Power ±20%,inductor 0603 power
+,MLZ1608M680WT000,TDK,Inductor,Power,0603,,,,6.8e-05,±20%,±25ppm/°C,,,,,7e-05H 0603 Power ±20%,inductor 0603 power
+,MLZ1608M101WT000,TDK,Inductor,Power,0603,,,,0.0001,±20%,±25ppm/°C,,,,,1e-04H 0603 Power ±20%,inductor 0603 power
+,SRN2009-1R0M,Bourns,Inductor,Power,0805,,,,1e-06,±20%,±25ppm/°C,,,,,1e-06H 0805 Power ±20%,inductor 0805 power
+,SRN2009-1R5M,Bourns,Inductor,Power,0805,,,,1.5e-06,±20%,±25ppm/°C,,,,,2e-06H 0805 Power ±20%,inductor 0805 power
+,SRN2009-2R2M,Bourns,Inductor,Power,0805,,,,2.2e-06,±20%,±25ppm/°C,,,,,2e-06H 0805 Power ±20%,inductor 0805 power
+,SRN2009-3R3M,Bourns,Inductor,Power,0805,,,,3.3e-06,±20%,±25ppm/°C,,,,,3e-06H 0805 Power ±20%,inductor 0805 power
+,SRN2009-4R7M,Bourns,Inductor,Power,0805,,,,4.7e-06,±20%,±25ppm/°C,,,,,5e-06H 0805 Power ±20%,inductor 0805 power
+,SRN2009-6R8M,Bourns,Inductor,Power,0805,,,,6.8e-06,±20%,±25ppm/°C,,,,,7e-06H 0805 Power ±20%,inductor 0805 power
+,SRN2009-100M,Bourns,Inductor,Power,0805,,,,1e-05,±20%,±25ppm/°C,,,,,1e-05H 0805 Power ±20%,inductor 0805 power
+,SRN2009-150M,Bourns,Inductor,Power,0805,,,,1.5e-05,±20%,±25ppm/°C,,,,,2e-05H 0805 Power ±20%,inductor 0805 power
+,SRN2009-220M,Bourns,Inductor,Power,0805,,,,2.2e-05,±20%,±25ppm/°C,,,,,2e-05H 0805 Power ±20%,inductor 0805 power
