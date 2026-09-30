@@ -5,7 +5,10 @@
 //! kernel↔UI integration is the `TauriEventSink` below — everything else is standard Tauri config
 //! (generated locally; see ../../README.md). Build/run on a machine with the Tauri prerequisites.
 
-use eak_ports::{EventRecord, EventSink};
+use eak_ports::{EventRecord, EventSink, ReasoningResponse, CandidateRequirement};
+use eak_reasoning::FixtureEngine;
+use eak_cli::{RunConfig, ReasoningChoice};
+use std::path::PathBuf;
 use tauri::{AppHandle, Emitter};
 
 /// An [`EventSink`] that forwards every committed kernel event to the webview. It runs on the
@@ -27,17 +30,23 @@ impl EventSink for TauriEventSink {
 fn start_run(app: AppHandle, intent: String) {
     std::thread::spawn(move || {
         let _sink: Box<dyn EventSink> = Box::new(TauriEventSink { app });
-        // ── FINALIZE LOCALLY (README steps 1-5) ────────────────────────────────────────────────
-        // Build a reasoning engine + RunConfig, then stream a real run through the sink:
-        //
-        //   let reasoning = Box::new(
-        //       eak_reasoning::FixtureEngine::load("<cassette>.json").unwrap()); // or --features live
-        //   let cfg = eak_cli::RunConfig { intent, /* + the other RunConfig fields */ };
-        //   let _ = eak_cli::run_with_sink(reasoning, &cfg, Some(_sink));
-        //
-        // `run_with_sink` already exists in the kernel (eak-cli) and streams every committed
-        // EventRecord to `_sink`. This bridge is the entire integration; the call above is wiring.
-        let _ = intent;
+        let reasoning = Box::new(FixtureEngine::single(ReasoningResponse {
+            candidates: Vec::new(),
+            explanations: Vec::new(),
+            part_candidates: Vec::new(),
+            clarifying_questions: Vec::new(),
+            raw: String::new(),
+        }));
+        let cfg = RunConfig {
+            intent,
+            reasoning: ReasoningChoice::Fixture,
+            cassette: None,
+            log: PathBuf::from("/tmp/eak.log"),
+            model: "fixture".to_string(),
+            seed: 0,
+            deterministic_clock: true,
+        };
+        let _ = eak_cli::run_with_sink(reasoning, &cfg, Some(_sink));
     });
 }
 

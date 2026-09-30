@@ -18,7 +18,16 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 clap = { version = "4", features = ["derive"] }
 ureq = "2"
+regex = "1.10"
+rusqlite = { version = "0.31", features = ["bundled", "chrono", "serde_json"] }
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.0", features = ["serde", "v4"] }
+thiserror = "1.0"
+once_cell = "1.19"
+parking_lot = "0.12"
+rand = "0.8"
 
+eak-assets = { path = "crates/eak-assets" }
 eak-units = { path = "crates/eak-units" }
 eak-domain = { path = "crates/eak-domain" }
 eak-ports = { path = "crates/eak-ports" }
@@ -28,3 +37,6 @@ eak-compiler = { path = "crates/eak-compiler" }
 eak-phases = { path = "crates/eak-phases" }
 eak-store = { path = "crates/eak-store" }
 eak-reasoning = { path = "crates/eak-reasoning" }
+eak-telemetry = { path = "crates/eak-telemetry" }
+eak-dashboard = { path = "crates/eak-dashboard" }
+eak-observability = { path = "crates/eak-observability" }

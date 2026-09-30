@@ -1,0 +1,25 @@
+[package]
+name = "eak-assets"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+eak-domain = { workspace = true }
+eak-units = { workspace = true }
+rusqlite = { version = "0.31", features = ["bundled"] }
+sha2 = "0.10"
+ureq = { workspace = true }
+reqwest = { version = "0.12", features = ["blocking", "json", "gzip", "brotli", "deflate", "rustls-tls"] }
+tempfile = "3"
+walkdir = "2"
+chrono = { version = "0.4", features = ["serde"] }
+anyhow = "1"
+hex = "0.4"
+csv = "1"
+once_cell = "1"
+strum = { version = "0.26", features = ["derive"] }
+regex = { workspace = true }

@@ -7,8 +7,13 @@ rust-version.workspace = true
 
 [dependencies]
 serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = "1"
 eak-domain = { workspace = true }
 eak-units = { workspace = true }
+
+[features]
+live = []
 
 [dev-dependencies]
 serde_json = { workspace = true }

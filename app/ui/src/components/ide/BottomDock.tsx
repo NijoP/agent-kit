@@ -13,6 +13,7 @@ const TABS: { id: BottomTab; label: string }[] = [
   { id: "drc", label: "DRC" },
   { id: "log", label: "Log" },
   { id: "find", label: "Find" },
+    { id: "terminal", label: "Terminal" },
 ];
 
 function ViolationRow({ vm, v }: { vm: ViewModel; v: Violation }) {
@@ -165,8 +166,31 @@ export function BottomDock() {
         )}
 
         {bottomTab === "find" && (
+        
+        {bottomTab === "find" && (
           <div className="empty" style={{ height: 120 }}><Search size={18} strokeWidth={1.5} /> Search docs, parts, nets, requirements. <span className="mono" style={{ color: "var(--scaffold)" }}>◐ planned</span></div>
-        )}
+        })
+
+        {bottomTab === "terminal" && (
+          <div>
+            <div className="terminal-header">
+              <span className="terminal-label">bash</span>
+              <div className="terminal-controls">
+                <button className="terminal-btn" title="New Terminal">+</button>
+                <button className="terminal-btn" title="Split Panel">⌖</button>
+              </div>
+            </div>
+            <div className="terminal-content">
+              <div className="terminal-prompt">$ </div>
+              <div className="terminal-line">echo "Welcome to EAK Terminal"</div>
+              <div className="terminal-output">Welcome to EAK Terminal</div>
+              <div className="terminal-prompt">$ </div>
+              <div className="terminal-input">
+                <span className="cursor">█</span>
+              </div>
+            </div>
+          </div>
+        )
       </div>
     </section>
   );
