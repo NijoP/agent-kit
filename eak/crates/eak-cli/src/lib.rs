@@ -5,9 +5,22 @@
 //! library functions so it is testable without spawning a process; `main.rs` is a thin
 //! shell over [`run_cli`].
 
+use eak_assets::{
+    asset::{AssetRecord, AssetState, AssetType},
+    crosscheck::{self, cross_check_metadata, CrossCheckAssessment},
+    facts::{DatasheetFact, FactCollection, FactKind, ParameterFact},
+    identity::{self, verify_identity_from_asset, IdentityResult},
+    import::{import_asset, import_directory, list_component_assets, verify_asset},
+    parser::{parse_datasheet, DatasheetParser, ParseResult},
+    store::{
+        self, get_asset_by_id, get_cross_check_reports, get_datasheet_facts,
+        get_identity_verification, get_parse_result, init_db, store_cross_check_report,
+        store_datasheet_facts, store_identity_verification, store_parse_result, update_asset,
+    },
+};
 use eak_domain::{
-    Decision, Evidence, EvidenceKind, Priority, ProvenanceLink, RelationType, Requirement,
-    RequirementCategory,
+    ComponentClass, Decision, Evidence, EvidenceKind, Priority, ProvenanceLink, RelationType,
+    Requirement, RequirementCategory,
 };
 use eak_kicad::ImportedComponent;
 use eak_phases::{
@@ -87,6 +100,26 @@ impl From<eak_kicad::ImportError> for CliError {
 impl From<eak_runtime::CapabilityError> for CliError {
     fn from(e: eak_runtime::CapabilityError) -> Self {
         CliError::Import(e.to_string())
+    }
+}
+impl From<rusqlite::Error> for CliError {
+    fn from(e: rusqlite::Error) -> Self {
+        CliError::Msg(e.to_string())
+    }
+}
+impl From<eak_ports::provider_config::ProviderConfigError> for CliError {
+    fn from(e: eak_ports::provider_config::ProviderConfigError) -> Self {
+        CliError::Msg(e.to_string())
+    }
+}
+impl From<serde_json::Error> for CliError {
+    fn from(e: serde_json::Error) -> Self {
+        CliError::Msg(e.to_string())
+    }
+}
+impl From<std::io::Error> for CliError {
+    fn from(e: std::io::Error) -> Self {
+        CliError::Msg(e.to_string())
     }
 }
 
@@ -734,6 +767,86 @@ enum Command {
         log: PathBuf,
         requirement: String,
     },
+    /// List all configured providers.
+    ListProviders {
+        #[arg(long, default_value = ".")]
+        project_dir: PathBuf,
+    },
+    /// List available models for a provider.
+    ListModels {
+        #[arg(long)]
+        provider: String,
+        #[arg(long, default_value = ".")]
+        project_dir: PathBuf,
+    },
+    /// Test connectivity to a provider.
+    TestConnection {
+        #[arg(long)]
+        provider: String,
+        #[arg(long, default_value = ".")]
+        project_dir: PathBuf,
+    },
+    /// Add or update a provider configuration.
+    ConfigureProvider {
+        #[arg(long)]
+        provider_id: String,
+        #[arg(long)]
+        name: String,
+        #[arg(long)]
+        endpoint: Option<String>,
+        #[arg(long)]
+        default_model: Option<String>,
+        #[arg(long)]
+        credential_store: Option<String>,
+        #[arg(long)]
+        credential_key: Option<String>,
+        #[arg(long, value_parser = parse_header)]
+        extra_header: Vec<String>,
+        #[arg(long, default_value = ".")]
+        project_dir: PathBuf,
+    },
+    /// Parse a datasheet PDF and extract structured facts.
+    AssetParse {
+        /// Asset ID to parse
+        #[arg(long)]
+        id: i64,
+        /// Database path
+        #[arg(long, default_value = "data/library.db")]
+        db: PathBuf,
+    },
+    /// List extracted facts for a datasheet asset.
+    AssetFacts {
+        /// Asset ID
+        #[arg(long)]
+        id: i64,
+        /// Filter by fact kind (e.g., Voltage, Current, Resistance)
+        #[arg(long)]
+        kind: Option<String>,
+        /// Database path
+        #[arg(long, default_value = "data/library.db")]
+        db: PathBuf,
+    },
+    /// Cross-check datasheet facts against component metadata.
+    AssetCompare {
+        /// Asset ID
+        #[arg(long)]
+        id: i64,
+        /// Component class (e.g., Passive, Diode, Transistor)
+        #[arg(long)]
+        class: String,
+        /// Database path
+        #[arg(long, default_value = "data/library.db")]
+        db: PathBuf,
+    },
+    /// Verify datasheet identity matches component record.
+    AssetVerifyIdentity {
+        /// Asset ID
+        #[arg(long)]
+        id: i64,
+        /// Database path
+        #[arg(long, default_value = "data/library.db")]
+        db: PathBuf,
+    },
 }
 
 fn print_run(report: &RunReport, show_state: bool) {
@@ -771,6 +884,532 @@ fn print_replay(state: &EngineeringState, show_state: bool) {
     if show_state {
         println!("\n{}", state.canonical_json());
     }
+}
+
+/// Handle the list-providers command.
+fn handle_list_providers(project_dir: &Path) -> Result<(), CliError> {
+    use eak_ports::provider_config::ProviderProjectConfig;
+    let config = ProviderProjectConfig::load(project_dir)?;
+
+    if config.providers.list().is_empty() {
+        println!("No providers configured.");
+        return Ok(());
+    }
+
+    println!("Configured providers:");
+    for provider_id in config.providers.list() {
+        let cfg = config.providers.get(provider_id).unwrap();
+        let status = if cfg.enabled { "enabled" } else { "disabled" };
+        let default_model = cfg
+            .default_model
+            .as_ref()
+            .map(|m| m.0.as_str())
+            .unwrap_or("none");
+        let endpoint = cfg
+            .endpoint
+            .as_ref()
+            .map(|e| e.as_str())
+            .unwrap_or("default");
+        println!("  {} ({})", provider_id, status);
+        println!("    name: {}", cfg.name);
+        println!("    endpoint: {}", endpoint);
+        println!("    default_model: {}", default_model);
+        if let Some(cred_ref) = &cfg.credential_ref {
+            println!("    credential: {}:{}", cred_ref.store, cred_ref.key);
+        }
+        if let Some(headers) = &cfg.extra_headers {
+            if !headers.is_empty() {
+                println!("    extra_headers: {:?}", headers);
+            }
+        }
+    }
+
+    if let Some(active) = config.active_provider {
+        println!("\nActive provider: {}", active);
+    }
+
+    Ok(())
+}
+
+/// Handle the list-models command.
+fn handle_list_models(provider: &str, project_dir: &Path) -> Result<(), CliError> {
+    use eak_ports::{provider_config::ProviderProjectConfig, ProviderId};
+    let provider_id = ProviderId(provider.to_string());
+    let config = ProviderProjectConfig::load(project_dir)?;
+
+    if config.providers.get(&provider_id).is_none() {
+        return Err(CliError::Msg(format!("Provider '{}' not found", provider)));
+    }
+
+    let models = config.models.list_for_provider(&provider_id);
+    if models.is_empty() {
+        println!("No models configured for provider '{}'.", provider);
+        return Ok(());
+    }
+
+    println!("Models for provider '{}':", provider);
+    for model in models {
+        let status = if model.enabled { "enabled" } else { "disabled" };
+        let caps: Vec<String> = model
+            .capabilities
+            .iter()
+            .map(|c| format!("{:?}", c))
+            .collect();
+        println!("  {} ({})", model.model_id, status);
+        println!("    capabilities: {}", caps.join(", "));
+        if let Some(params) = model.parameters.temperature {
+            println!("    temperature: {}", params);
+        }
+        if let Some(max_tokens) = model.parameters.max_tokens {
+            println!("    max_tokens: {}", max_tokens);
+        }
+    }
+
+    Ok(())
+}
+
+/// Handle the test-connection command.
+fn handle_test_connection(provider: &str, project_dir: &Path) -> Result<(), CliError> {
+    use eak_ports::{
+        provider_config::ProviderProjectConfig, CredentialStore, EnvCredentialStore,
+        ProviderFactory, ProviderId,
+    };
+    let provider_id = ProviderId(provider.to_string());
+    let config = ProviderProjectConfig::load(project_dir)?;
+
+    let provider_config = config
+        .providers
+        .get(&provider_id)
+        .ok_or_else(|| CliError::Msg(format!("Provider '{}' not found", provider)))?;
+
+    if !provider_config.enabled {
+        return Err(CliError::Msg(format!(
+            "Provider '{}' is disabled",
+            provider
+        )));
+    }
+
+    let factory = ProviderFactory::new(Box::new(EnvCredentialStore));
+    let result = eak_ports::test_provider_connection(&factory, provider_config);
+
+    if result.success {
+        println!("✓ Connection successful: {}", result.message);
+        if let Some(details) = result.details {
+            if let Some(models) = details.get("models") {
+                println!("  Models found: {}", models);
+            }
+        }
+    } else {
+        println!("✗ Connection failed: {}", result.message);
+        return Err(CliError::Msg(result.message));
+    }
+
+    Ok(())
+}
+
+/// Handle the configure-provider command.
+fn handle_configure_provider(
+    provider_id: &str,
+    name: &str,
+    endpoint: Option<String>,
+    default_model: Option<String>,
+    credential_store: Option<String>,
+    credential_key: Option<String>,
+    extra_headers: Vec<String>,
+    project_dir: &Path,
+) -> Result<(), CliError> {
+    use eak_ports::{
+        provider_config::ProviderProjectConfig, CredentialRef, ModelId, ProviderConfig, ProviderId,
+    };
+    use std::collections::HashMap;
+
+    let provider_id = ProviderId(provider_id.to_string());
+    let mut config = ProviderProjectConfig::load(project_dir)?;
+
+    let credential_ref = match (credential_store, credential_key) {
+        (Some(store), Some(key)) => Some(CredentialRef::new(store, key)),
+        (None, None) => None,
+        _ => {
+            return Err(CliError::Msg(
+                "Both --credential-store and --credential-key must be provided together"
+                    .to_string(),
+            ))
+        }
+    };
+
+    // Parse extra headers from "Key:Value" format
+    let parsed_headers: HashMap<String, String> = extra_headers
+        .into_iter()
+        .map(|h| {
+            let parts: Vec<&str> = h.splitn(2, ':').collect();
+            if parts.len() != 2 {
+                return Err(CliError::Msg(format!(
+                    "Header must be in format 'Key:Value', got: {}",
+                    h
+                )));
+            }
+            Ok((parts[0].trim().to_string(), parts[1].trim().to_string()))
+        })
+        .collect::<Result<HashMap<_, _>, _>>()?;
+
+    let provider_config = ProviderConfig {
+        id: provider_id.clone(),
+        name: name.to_string(),
+        enabled: true,
+        endpoint,
+        credential_ref,
+        default_model: default_model.map(ModelId),
+        extra_headers: if parsed_headers.is_empty() {
+            None
+        } else {
+            Some(parsed_headers)
+        },
+    };
+
+    config.register_provider(provider_config);
+    config.save(project_dir)?;
+
+    println!("Provider '{}' configured successfully.", provider_id);
+    Ok(())
+}
+
+/// Handle asset parse command.
+fn handle_asset_parse(id: i64, db: PathBuf) -> Result<(), CliError> {
+    let conn = init_db(&db).map_err(|e| CliError::Msg(e.to_string()))?;
+
+    let mut asset = get_asset_by_id(&conn, id)?
+        .ok_or_else(|| CliError::Msg(format!("Asset not found: {}", id)))?;
+
+    if asset.asset_type != AssetType::Datasheet && asset.asset_type != AssetType::AppNote {
+        return Err(CliError::Msg(
+            "Asset is not a datasheet or app note".to_string(),
+        ));
+    }
+
+    if asset.state != AssetState::UserProvided && asset.state != AssetState::Verified {
+        return Err(CliError::Msg(format!(
+            "Asset must be verified or user-provided, current state: {}",
+            asset.state
+        )));
+    }
+
+    let result = parse_datasheet(&mut asset, &db).map_err(|e| CliError::Msg(e.to_string()))?;
+
+    // Store parse result
+    store_parse_result(&conn, &result).map_err(|e| CliError::Msg(e.to_string()))?;
+
+    // Store facts
+    store_datasheet_facts(&conn, id, &result.facts).map_err(|e| CliError::Msg(e.to_string()))?;
+
+    println!("Datasheet parsed successfully:");
+    println!("  Asset ID: {}", id);
+    println!("  Pages: {}", result.page_count);
+    println!(
+        "  Title: {}",
+        result.title.unwrap_or_else(|| "unknown".to_string())
+    );
+    println!(
+        "  Manufacturer: {}",
+        result.manufacturer.unwrap_or_else(|| "unknown".to_string())
+    );
+    println!(
+        "  MPN: {}",
+        result.mpn.unwrap_or_else(|| "unknown".to_string())
+    );
+    println!("  Facts extracted: {}", result.facts.len());
+    println!("  Sections found: {}", result.sections.len());
+    if !result.warnings.is_empty() {
+        println!("  Warnings:");
+        for w in &result.warnings {
+            println!("    - {}", w);
+        }
+    }
+
+    Ok(())
+}
+
+/// Handle asset facts command.
+fn handle_asset_facts(id: i64, kind: Option<String>, db: PathBuf) -> Result<(), CliError> {
+    let conn = init_db(&db).map_err(|e| CliError::Msg(e.to_string()))?;
+
+    let facts = get_datasheet_facts(&conn, id).map_err(|e| CliError::Msg(e.to_string()))?;
+
+    if facts.is_empty() {
+        println!(
+            "No facts found for asset {}. Run 'eak asset-parse --id {}' first.",
+            id, id
+        );
+        return Ok(());
+    }
+
+    let filter_kind = kind.and_then(|k| match k.to_lowercase().as_str() {
+        "voltage" => Some(FactKind::Voltage),
+        "current" => Some(FactKind::Current),
+        "resistance" => Some(FactKind::Resistance),
+        "capacitance" => Some(FactKind::Capacitance),
+        "inductance" => Some(FactKind::Inductance),
+        "power" => Some(FactKind::Power),
+        "frequency" => Some(FactKind::Frequency),
+        "temperature" => Some(FactKind::Temperature),
+        "packag" => Some(FactKind::Package),
+        "mpn" => Some(FactKind::Mpn),
+        "manufacturer" => Some(FactKind::Manufacturer),
+        _ => None,
+    });
+
+    println!("Facts for asset {}:", id);
+    println!("{:-<80}", "");
+    for fact in facts {
+        if let Some(fk) = filter_kind {
+            if fact.kind != fk {
+                continue;
+            }
+        }
+        let verified = if fact.provenance.verified { " ✓" } else { "" };
+        let corrected = if fact.provenance.manually_corrected {
+            " (corrected)"
+        } else {
+            ""
+        };
+        println!(
+            "  [{:?}] {} = {}{}{}",
+            fact.kind,
+            DatasheetFact::kind_description(fact.kind),
+            fact.parameter.value,
+            verified,
+            corrected
+        );
+        if !fact.parameter.conditions.is_empty() {
+            println!("      Conditions: {}", fact.parameter.conditions.join(", "));
+        }
+        println!(
+            "      Page: {}, Extracted: {}",
+            fact.provenance.page,
+            &fact.provenance.extracted_at[..19]
+        );
+        println!(
+            "      Source text: \"{}\"",
+            fact.provenance
+                .extracted_text
+                .chars()
+                .take(80)
+                .collect::<String>()
+        );
+    }
+    println!("{:-<80}", "");
+    Ok(())
+}
+
+/// Handle asset compare command.
+fn handle_asset_compare(id: i64, class_str: String, db: PathBuf) -> Result<(), CliError> {
+    let conn = init_db(&db).map_err(|e| CliError::Msg(e.to_string()))?;
+
+    let asset = get_asset_by_id(&conn, id)?
+        .ok_or_else(|| CliError::Msg(format!("Asset not found: {}", id)))?;
+
+    let facts = get_datasheet_facts(&conn, id).map_err(|e| CliError::Msg(e.to_string()))?;
+
+    if facts.is_empty() {
+        return Err(CliError::Msg(
+            "No facts found. Run 'eak asset-parse --id <id>' first.".to_string(),
+        ));
+    }
+
+    // Parse component class
+    let component_class = match class_str.to_lowercase().as_str() {
+        "resistor" | "passive" => ComponentClass::Resistor,
+        "capacitor" => ComponentClass::Capacitor,
+        "ic" | "analogic" | "analog" => ComponentClass::Ic,
+        "regulator" | "powermanagement" | "power" => ComponentClass::Regulator,
+        "connector" => ComponentClass::Connector,
+        _ => {
+            return Err(CliError::Msg(format!(
+            "Unknown component class: {} (valid: resistor, capacitor, ic, regulator, connector)",
+            class_str
+        )))
+        }
+    };
+
+    // Build fact collection
+    let mut fact_coll = FactCollection::new(id, "1.0.0".to_string());
+    for f in facts {
+        fact_coll.add_fact(f);
+    }
+
+    // Create minimal component metadata for comparison
+    let metadata = crosscheck::ComponentMetadata::with_family(component_class);
+
+    // Run cross-check
+    let report = cross_check_metadata(
+        &asset.component_mpn,
+        &asset.manufacturer,
+        component_class,
+        &metadata,
+        &fact_coll,
+    );
+
+    // Store report
+    store_cross_check_report(&conn, id, &report).map_err(|e| CliError::Msg(e.to_string()))?;
+
+    // Print results
+    println!(
+        "Cross-check report for {} ({})",
+        asset.component_mpn, asset.manufacturer
+    );
+    println!("Component class: {:?}", component_class);
+    println!("Assessment: {}", report.assessment);
+    println!(
+        "Summary: {} checked, {} matches, {} conflicts, {} missing in datasheet, {} datasheet-only",
+        report.summary.total_fields_checked,
+        report.summary.matches,
+        report.summary.conflicts,
+        report.summary.missing_in_datasheet,
+        report.summary.datasheet_only
+    );
+
+    if report.summary.conflicts > 0 {
+        println!("\nCONFLICTS:");
+        for fc in &report.field_comparisons {
+            if fc.comparison == crate::crosscheck::ComparisonType::Conflict {
+                println!(
+                    "  [{:?}] {}: metadata={} vs datasheet={}",
+                    fc.fact_kind,
+                    fc.name,
+                    fc.metadata_value
+                        .as_ref()
+                        .map(|v| v.value.to_string())
+                        .unwrap_or_else(|| "none".to_string()),
+                    fc.datasheet_value
+                        .as_ref()
+                        .map(|v| v.value.to_string())
+                        .unwrap_or_else(|| "none".to_string())
+                );
+            }
+        }
+    }
+
+    if report.summary.datasheet_only > 0 {
+        println!("\nDATASHEET-ONLY FACTS:");
+        for fc in &report.field_comparisons {
+            if fc.comparison == crate::crosscheck::ComparisonType::DatasheetOnly {
+                println!(
+                    "  [{:?}] {}: {}",
+                    fc.fact_kind,
+                    fc.name,
+                    fc.datasheet_value
+                        .as_ref()
+                        .map(|v| v.value.to_string())
+                        .unwrap_or_else(|| "none".to_string())
+                );
+            }
+        }
+    }
+
+    if report.summary.missing_in_datasheet > 0 {
+        println!("\nMISSING IN DATASHEET:");
+        for fc in &report.field_comparisons {
+            if fc.comparison == crate::crosscheck::ComparisonType::MissingInDatasheet {
+                println!(
+                    "  [{:?}] {}: metadata={}",
+                    fc.fact_kind,
+                    fc.name,
+                    fc.metadata_value
+                        .as_ref()
+                        .map(|v| v.value.to_string())
+                        .unwrap_or_else(|| "none".to_string())
+                );
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Handle asset verify-identity command.
+fn handle_asset_verify_identity(id: i64, db: PathBuf) -> Result<(), CliError> {
+    let conn = init_db(&db).map_err(|e| CliError::Msg(e.to_string()))?;
+
+    let asset = get_asset_by_id(&conn, id)?
+        .ok_or_else(|| CliError::Msg(format!("Asset not found: {}", id)))?;
+
+    let parse_result = get_parse_result(&conn, id)
+        .map_err(|e| CliError::Msg(e.to_string()))?
+        .ok_or_else(|| {
+            CliError::Msg(
+                "No parse result found. Run 'eak asset-parse --id <id>' first.".to_string(),
+            )
+        })?;
+
+    let facts = get_datasheet_facts(&conn, id).map_err(|e| CliError::Msg(e.to_string()))?;
+
+    let mut fact_coll = FactCollection::new(id, "1.0.0".to_string());
+    for f in facts {
+        fact_coll.add_fact(f);
+    }
+
+    let report = verify_identity_from_asset(&asset, &parse_result, &fact_coll);
+
+    // Store identity verification
+    store_identity_verification(&conn, id, &report).map_err(|e| CliError::Msg(e.to_string()))?;
+
+    // Update asset
+    let mut asset_mut = asset.clone();
+    identity::apply_identity_result(&mut asset_mut, &report);
+    store::update_asset(&conn, &asset_mut).map_err(|e| CliError::Msg(e.to_string()))?;
+
+    println!(
+        "Identity verification for {} ({}):",
+        asset.component_mpn, asset.manufacturer
+    );
+    println!("Result: {}", report.result);
+    println!("Confidence: {:.2}", report.confidence);
+    println!("Summary: {}", report.summary);
+    println!();
+    println!(
+        "Manufacturer: {} (component: {:?}, datasheet: {:?}, match: {}, conf: {:.2})",
+        if report.manufacturer.matches {
+            "✓"
+        } else {
+            "✗"
+        },
+        report.manufacturer.component_value,
+        report.manufacturer.datasheet_value,
+        report.manufacturer.matches,
+        report.manufacturer.confidence
+    );
+    println!(
+        "MPN: {} (component: {:?}, datasheet: {:?}, match: {}, conf: {:.2})",
+        if report.mpn.matches { "✓" } else { "✗" },
+        report.mpn.component_value,
+        report.mpn.datasheet_value,
+        report.mpn.matches,
+        report.mpn.confidence
+    );
+    if let Some(pkg) = &report.package {
+        println!(
+            "Package: {} (component: {:?}, datasheet: {:?}, match: {}, conf: {:.2})",
+            if pkg.matches { "✓" } else { "✗" },
+            pkg.component_value,
+            pkg.datasheet_value,
+            pkg.matches,
+            pkg.confidence
+        );
+    }
+
+    if report.result == IdentityResult::IdentityMismatch {
+        return Err(CliError::Msg("Identity mismatch detected".to_string()));
+    }
+
+    Ok(())
+}
+
+/// Parse a header string in "Key:Value" format.
+fn parse_header(s: &str) -> Result<(String, String), String> {
+    let parts: Vec<&str> = s.splitn(2, ':').collect();
+    if parts.len() != 2 {
+        return Err(format!("header must be in format 'Key:Value', got: {}", s));
+    }
+    Ok((parts[0].trim().to_string(), parts[1].trim().to_string()))
 }
 
 pub fn run_cli() -> ExitCode {
@@ -824,6 +1463,38 @@ pub fn run_cli() -> ExitCode {
             replay_cmd(&log).map(|state| print_replay(&state, show_state))
         }
         Command::Trace { log, requirement } => trace_cmd(&log, &requirement).map(|s| print!("{s}")),
+        Command::ListProviders { project_dir } => handle_list_providers(&project_dir),
+        Command::ListModels {
+            provider,
+            project_dir,
+        } => handle_list_models(&provider, &project_dir),
+        Command::TestConnection {
+            provider,
+            project_dir,
+        } => handle_test_connection(&provider, &project_dir),
+        Command::ConfigureProvider {
+            provider_id,
+            name,
+            endpoint,
+            default_model,
+            credential_store,
+            credential_key,
+            extra_header,
+            project_dir,
+        } => handle_configure_provider(
+            &provider_id,
+            &name,
+            endpoint,
+            default_model,
+            credential_store,
+            credential_key,
+            extra_header,
+            &project_dir,
+        ),
+        Command::AssetParse { id, db } => handle_asset_parse(id, db),
+        Command::AssetFacts { id, kind, db } => handle_asset_facts(id, kind, db),
+        Command::AssetCompare { id, class, db } => handle_asset_compare(id, class, db),
+        Command::AssetVerifyIdentity { id, db } => handle_asset_verify_identity(id, db),
     };
 
     match result {

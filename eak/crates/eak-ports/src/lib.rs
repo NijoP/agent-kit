@@ -481,6 +481,919 @@ impl std::fmt::Display for ReasoningError {
 }
 impl std::error::Error for ReasoningError {}
 
+/// Provider identifier (e.g., "anthropic", "openai", "ollama").
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct ProviderId(pub String);
+
+impl ProviderId {
+    pub fn anthropic() -> ProviderId {
+        ProviderId("anthropic".to_string())
+    }
+    pub fn openai() -> ProviderId {
+        ProviderId("openai".to_string())
+    }
+    pub fn ollama() -> ProviderId {
+        ProviderId("ollama".to_string())
+    }
+    pub fn gemini() -> ProviderId {
+        ProviderId("gemini".to_string())
+    }
+    pub fn kimi() -> ProviderId {
+        ProviderId("kimi".to_string())
+    }
+    pub fn nvidia() -> ProviderId {
+        ProviderId("nvidia".to_string())
+    }
+}
+
+impl std::fmt::Display for ProviderId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl std::str::FromStr for ProviderId {
+    type Err = std::convert::Infallible;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(ProviderId(s.to_string()))
+    }
+}
+
+/// Model identifier (e.g., "claude-opus-4", "gpt-4o", "llama3.1").
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct ModelId(pub String);
+
+impl std::fmt::Display for ModelId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl std::str::FromStr for ModelId {
+    type Err = std::convert::Infallible;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(ModelId(s.to_string()))
+    }
+}
+
+/// Capabilities a model may support. Used for capability-based routing and validation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ModelCapability {
+    /// Basic text generation (completion/chat)
+    TextGeneration,
+    /// Streaming response chunks
+    Streaming,
+    /// Function/tool calling with structured arguments
+    ToolCalling,
+    /// Structured output (JSON schema constrained)
+    StructuredOutput,
+    /// Vision/multimodal input (images, etc.)
+    Vision,
+    /// Audio input/output
+    Audio,
+    /// Reasoning/effort parameter (e.g., o-series, Claude thinking)
+    ReasoningEffort,
+    /// System prompt/instructions support
+    SystemInstructions,
+    /// Parallel tool calls
+    ParallelToolCalls,
+}
+
+impl ModelCapability {
+    /// All known capabilities for iteration.
+    pub const ALL: &[ModelCapability] = &[
+        ModelCapability::TextGeneration,
+        ModelCapability::Streaming,
+        ModelCapability::ToolCalling,
+        ModelCapability::StructuredOutput,
+        ModelCapability::Vision,
+        ModelCapability::Audio,
+        ModelCapability::ReasoningEffort,
+        ModelCapability::SystemInstructions,
+        ModelCapability::ParallelToolCalls,
+    ];
+}
+
+/// A set of model capabilities, stored as a bitflag for efficient checking.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct CapabilitySet(u16);
+
+impl CapabilitySet {
+    pub const EMPTY: CapabilitySet = CapabilitySet(0);
+    pub const TEXT_GENERATION: CapabilitySet = CapabilitySet(1 << 0);
+    pub const STREAMING: CapabilitySet = CapabilitySet(1 << 1);
+    pub const TOOL_CALLING: CapabilitySet = CapabilitySet(1 << 2);
+    pub const STRUCTURED_OUTPUT: CapabilitySet = CapabilitySet(1 << 3);
+    pub const VISION: CapabilitySet = CapabilitySet(1 << 4);
+    pub const AUDIO: CapabilitySet = CapabilitySet(1 << 5);
+    pub const REASONING_EFFORT: CapabilitySet = CapabilitySet(1 << 6);
+    pub const SYSTEM_INSTRUCTIONS: CapabilitySet = CapabilitySet(1 << 7);
+    pub const PARALLEL_TOOL_CALLS: CapabilitySet = CapabilitySet(1 << 8);
+
+    pub fn contains(self, cap: ModelCapability) -> bool {
+        (self.0 & CapabilitySet::from(cap).0) != 0
+    }
+
+    pub fn insert(&mut self, cap: ModelCapability) {
+        self.0 |= CapabilitySet::from(cap).0;
+    }
+
+    pub fn remove(&mut self, cap: ModelCapability) {
+        self.0 &= !CapabilitySet::from(cap).0;
+    }
+
+    pub fn is_empty(self) -> bool {
+        self.0 == 0
+    }
+
+    pub fn iter(self) -> impl Iterator<Item = ModelCapability> {
+        ModelCapability::ALL
+            .iter()
+            .copied()
+            .filter(move |c| self.contains(*c))
+    }
+}
+
+impl std::iter::FromIterator<ModelCapability> for CapabilitySet {
+    fn from_iter<T: IntoIterator<Item = ModelCapability>>(iter: T) -> Self {
+        let mut set = CapabilitySet::EMPTY;
+        for cap in iter {
+            set |= CapabilitySet::from(cap);
+        }
+        set
+    }
+}
+
+impl From<ModelCapability> for CapabilitySet {
+    fn from(cap: ModelCapability) -> Self {
+        match cap {
+            ModelCapability::TextGeneration => CapabilitySet::TEXT_GENERATION,
+            ModelCapability::Streaming => CapabilitySet::STREAMING,
+            ModelCapability::ToolCalling => CapabilitySet::TOOL_CALLING,
+            ModelCapability::StructuredOutput => CapabilitySet::STRUCTURED_OUTPUT,
+            ModelCapability::Vision => CapabilitySet::VISION,
+            ModelCapability::Audio => CapabilitySet::AUDIO,
+            ModelCapability::ReasoningEffort => CapabilitySet::REASONING_EFFORT,
+            ModelCapability::SystemInstructions => CapabilitySet::SYSTEM_INSTRUCTIONS,
+            ModelCapability::ParallelToolCalls => CapabilitySet::PARALLEL_TOOL_CALLS,
+        }
+    }
+}
+
+impl std::ops::BitOr for CapabilitySet {
+    type Output = CapabilitySet;
+    fn bitor(self, rhs: Self) -> Self::Output {
+        CapabilitySet(self.0 | rhs.0)
+    }
+}
+
+impl std::ops::BitOrAssign for CapabilitySet {
+    fn bitor_assign(&mut self, rhs: Self) {
+        self.0 |= rhs.0;
+    }
+}
+
+impl std::ops::BitAnd for CapabilitySet {
+    type Output = CapabilitySet;
+    fn bitand(self, rhs: Self) -> Self::Output {
+        CapabilitySet(self.0 & rhs.0)
+    }
+}
+
+/// Metadata describing a model's capabilities and limits.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ModelMetadata {
+    pub provider: ProviderId,
+    pub model_id: ModelId,
+    pub display_name: String,
+    pub capabilities: CapabilitySet,
+    pub context_window: Option<u32>,
+    pub max_output_tokens: Option<u32>,
+    pub supports_parallel_tool_calls: bool,
+    /// Optional: pricing info (per 1M tokens) for cost estimation
+    pub input_price_per_million: Option<f64>,
+    pub output_price_per_million: Option<f64>,
+}
+
+/// Configuration for a model provider.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ProviderConfig {
+    pub id: ProviderId,
+    pub name: String,
+    pub enabled: bool,
+    pub endpoint: Option<String>,
+    pub credential_ref: Option<CredentialRef>,
+    pub default_model: Option<ModelId>,
+    pub extra_headers: Option<std::collections::HashMap<String, String>>,
+}
+
+/// Configuration for a specific model.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ModelConfig {
+    pub provider: ProviderId,
+    pub model_id: ModelId,
+    pub enabled: bool,
+    pub capabilities: CapabilitySet,
+    pub parameters: ModelParameters,
+    pub metadata: Option<ModelMetadata>,
+}
+
+/// Runtime parameters for model inference.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct ModelParameters {
+    pub temperature: Option<f64>,
+    pub top_p: Option<f64>,
+    pub top_k: Option<u32>,
+    pub max_tokens: Option<u32>,
+    pub reasoning_effort: Option<String>,
+    pub stop_sequences: Option<Vec<String>>,
+    pub presence_penalty: Option<f64>,
+    pub frequency_penalty: Option<f64>,
+    pub seed: Option<u64>,
+}
+
+/// Reference to a credential stored in a secure credential store.
+/// Never contains the raw secret — only an opaque reference.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CredentialRef {
+    pub store: String,
+    pub key: String,
+}
+
+impl CredentialRef {
+    pub fn new(store: impl Into<String>, key: impl Into<String>) -> Self {
+        Self {
+            store: store.into(),
+            key: key.into(),
+        }
+    }
+}
+
+/// Provider registry for managing configured model providers.
+/// Allows dynamic registration, lookup, and selection of providers.
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+pub struct ProviderRegistry {
+    providers: std::collections::HashMap<ProviderId, ProviderConfig>,
+}
+
+impl ProviderRegistry {
+    pub fn new() -> Self {
+        Self {
+            providers: std::collections::HashMap::new(),
+        }
+    }
+
+    /// Register a provider configuration.
+    pub fn register(&mut self, config: ProviderConfig) {
+        self.providers.insert(config.id.clone(), config);
+    }
+
+    /// Remove a provider configuration.
+    pub fn remove(&mut self, id: &ProviderId) -> Option<ProviderConfig> {
+        self.providers.remove(id)
+    }
+
+    /// Get a provider configuration by ID.
+    pub fn get(&self, id: &ProviderId) -> Option<&ProviderConfig> {
+        self.providers.get(id)
+    }
+
+    /// Get a mutable reference to a provider configuration.
+    pub fn get_mut(&mut self, id: &ProviderId) -> Option<&mut ProviderConfig> {
+        self.providers.get_mut(id)
+    }
+
+    /// List all registered provider IDs.
+    pub fn list(&self) -> Vec<&ProviderId> {
+        self.providers.keys().collect()
+    }
+
+    /// List all registered provider configurations.
+    pub fn list_configs(&self) -> Vec<&ProviderConfig> {
+        self.providers.values().collect()
+    }
+
+    /// Enable a provider.
+    pub fn enable(&mut self, id: &ProviderId) -> bool {
+        if let Some(config) = self.providers.get_mut(id) {
+            config.enabled = true;
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Disable a provider.
+    pub fn disable(&mut self, id: &ProviderId) -> bool {
+        if let Some(config) = self.providers.get_mut(id) {
+            config.enabled = false;
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Check if a provider is enabled.
+    pub fn is_enabled(&self, id: &ProviderId) -> bool {
+        self.providers.get(id).map(|c| c.enabled).unwrap_or(false)
+    }
+
+    /// Get the default model for a provider.
+    pub fn default_model(&self, id: &ProviderId) -> Option<&ModelId> {
+        self.providers
+            .get(id)
+            .and_then(|c| c.default_model.as_ref())
+    }
+}
+
+/// Model registry for managing model metadata and capabilities.
+/// Allows lookup of models by provider and model ID.
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+pub struct ModelRegistry {
+    models: std::collections::HashMap<String, ModelConfig>,
+}
+
+fn model_key(provider: &ProviderId, model_id: &ModelId) -> String {
+    format!("{}:{}", provider.0, model_id.0)
+}
+
+impl ModelRegistry {
+    pub fn new() -> Self {
+        Self {
+            models: std::collections::HashMap::new(),
+        }
+    }
+
+    /// Register a model configuration.
+    pub fn register(&mut self, config: ModelConfig) {
+        let key = model_key(&config.provider, &config.model_id);
+        self.models.insert(key, config);
+    }
+
+    /// Remove a model configuration.
+    pub fn remove(&mut self, provider: &ProviderId, model_id: &ModelId) -> Option<ModelConfig> {
+        self.models.remove(&model_key(provider, model_id))
+    }
+
+    /// Get a model configuration by provider and model ID.
+    pub fn get(&self, provider: &ProviderId, model_id: &ModelId) -> Option<&ModelConfig> {
+        self.models.get(&model_key(provider, model_id))
+    }
+
+    /// List all models for a provider.
+    pub fn list_for_provider(&self, provider: &ProviderId) -> Vec<&ModelConfig> {
+        let prefix = format!("{}:", provider.0);
+        self.models
+            .iter()
+            .filter(|(k, _)| k.starts_with(&prefix))
+            .map(|(_, v)| v)
+            .collect()
+    }
+
+    /// List all models across all providers.
+    pub fn list_all(&self) -> Vec<&ModelConfig> {
+        self.models.values().collect()
+    }
+
+    /// Find models by capability.
+    pub fn find_by_capability(&self, capability: ModelCapability) -> Vec<&ModelConfig> {
+        self.models
+            .values()
+            .filter(|m| m.capabilities.contains(capability))
+            .collect()
+    }
+
+    /// Select the best model for a given capability and provider.
+    pub fn select_model(
+        &self,
+        provider: &ProviderId,
+        capability: ModelCapability,
+    ) -> Option<&ModelConfig> {
+        let prefix = format!("{}:", provider.0);
+        self.models
+            .iter()
+            .filter(|(k, m)| {
+                k.starts_with(&prefix) && m.capabilities.contains(capability) && m.enabled
+            })
+            .max_by_key(|(_, m)| m.capabilities.0.count_ones())
+            .map(|(_, m)| m)
+    }
+}
+
+/// Normalized provider errors — never leak credentials or raw provider responses.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ProviderError {
+    AuthenticationFailed,
+    InvalidApiKey,
+    ModelUnavailable { model: ModelId },
+    RateLimited { retry_after_secs: Option<u64> },
+    Timeout,
+    NetworkError,
+    InvalidRequest { reason: String },
+    SchemaViolation { reason: String },
+    UnsupportedCapability { capability: ModelCapability },
+    ContentFiltered,
+    ProviderUnavailable,
+    Unknown { code: String, message: String },
+}
+
+impl std::fmt::Display for ProviderError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ProviderError::AuthenticationFailed => write!(f, "authentication failed"),
+            ProviderError::InvalidApiKey => write!(f, "invalid API key"),
+            ProviderError::ModelUnavailable { model } => write!(f, "model unavailable: {}", model),
+            ProviderError::RateLimited { retry_after_secs } => {
+                if let Some(secs) = retry_after_secs {
+                    write!(f, "rate limited (retry after {}s)", secs)
+                } else {
+                    write!(f, "rate limited")
+                }
+            }
+            ProviderError::Timeout => write!(f, "request timeout"),
+            ProviderError::NetworkError => write!(f, "network error"),
+            ProviderError::InvalidRequest { reason } => write!(f, "invalid request: {}", reason),
+            ProviderError::SchemaViolation { reason } => write!(f, "schema violation: {}", reason),
+            ProviderError::UnsupportedCapability { capability } => {
+                write!(f, "unsupported capability: {:?}", capability)
+            }
+            ProviderError::ContentFiltered => write!(f, "content filtered"),
+            ProviderError::ProviderUnavailable => write!(f, "provider unavailable"),
+            ProviderError::Unknown { code, message } => {
+                write!(f, "provider error {}: {}", code, message)
+            }
+        }
+    }
+}
+impl std::error::Error for ProviderError {}
+
+/// Factory for creating `ModelProvider` instances from configuration.
+pub struct ProviderFactory {
+    credential_store: Box<dyn CredentialStore>,
+}
+
+impl ProviderFactory {
+    pub fn new(credential_store: Box<dyn CredentialStore>) -> Self {
+        Self { credential_store }
+    }
+
+    /// Resolve a configured credential without exposing the store implementation.
+    pub fn resolve_credential(&self, cred_ref: &CredentialRef) -> Option<String> {
+        self.credential_store.resolve(cred_ref)
+    }
+
+    /// Create a `ModelProvider` from a provider configuration.
+    pub fn create(
+        &self,
+        config: &ProviderConfig,
+    ) -> Result<Box<dyn ModelProvider>, ReasoningError> {
+        if !config.enabled {
+            return Err(ReasoningError::Provider(
+                ProviderError::ProviderUnavailable.to_string(),
+            ));
+        }
+
+        let provider = match config.id.0.as_str() {
+            "openai-compatible" | "openai" | "openrouter" | "groq" | "nvidia" | "together"
+            | "fireworks" | "vllm" | "lmstudio" => {
+                #[cfg(feature = "live")]
+                {
+                    let model =
+                        match config.default_model.clone() {
+                            Some(m) => m,
+                            None => return Err(ReasoningError::Provider(
+                                ProviderError::InvalidRequest {
+                                    reason:
+                                        "default_model must be set for OpenAI-compatible provider"
+                                            .into(),
+                                }
+                                .to_string(),
+                            )),
+                        };
+
+                    let mut config = eak_reasoning::OpenAICompatConfig {
+                        provider_id: config.id.clone(),
+                        display_name: config.name.clone(),
+                        base_url: config
+                            .endpoint
+                            .clone()
+                            .unwrap_or_else(|| "https://api.openai.com/v1".to_string()),
+                        model: config.default_model.clone().unwrap(),
+                        credential_ref: config.credential_ref.clone(),
+                        api_key: None,
+                        extra_headers: config.extra_headers.clone().unwrap_or_default(),
+                        supports_model_listing: true,
+                        supports_streaming: true,
+                        supports_tool_calling: true,
+                        supports_structured_output: false,
+                        supports_parallel_tool_calls: false,
+                        supports_vision: false,
+                        supports_system_instructions: true,
+                        supports_reasoning_effort: false,
+                        timeout_secs: 120,
+                    };
+
+                    // Resolve credential if credential_ref is provided
+                    if let Some(cred_ref) = &config.credential_ref {
+                        if let Some(api_key) = self.credential_store.resolve(cred_ref) {
+                            config.api_key = Some(api_key);
+                        }
+                    }
+
+                    let engine = eak_reasoning::OpenAICompatEngine::new(config).map_err(|e| {
+                        ReasoningError::Provider(
+                            eak_ports::ProviderError::InvalidRequest {
+                                reason: e.to_string(),
+                            }
+                            .to_string(),
+                        )
+                    })?;
+                    Ok(Box::new(engine))
+                }
+                #[cfg(not(feature = "live"))]
+                Err(ReasoningError::Provider(
+                    ProviderError::ProviderUnavailable.to_string(),
+                ))
+            }
+            "anthropic" => {
+                #[cfg(feature = "live")]
+                {
+                    let model = config
+                        .default_model
+                        .clone()
+                        .unwrap_or_else(|| "claude-opus-4-8".into());
+                    let engine = eak_reasoning::AnthropicEngine::from_env(model).map_err(|e| {
+                        ReasoningError::Provider(
+                            eak_ports::ProviderError::InvalidRequest {
+                                reason: e.to_string(),
+                            }
+                            .to_string(),
+                        )
+                    })?;
+                    Ok(Box::new(engine))
+                }
+                #[cfg(not(feature = "live"))]
+                Err(ReasoningError::Provider(
+                    ProviderError::ProviderUnavailable.to_string(),
+                ))
+            }
+            "fixture" => {
+                // Fixture engine is created by the caller (e.g., CLI) and passed as a ModelProvider
+                Err(ReasoningError::Provider(
+                    ProviderError::InvalidRequest {
+                        reason: "fixture provider must be created by caller".into(),
+                    }
+                    .to_string(),
+                ))
+            }
+            _ => Err(ReasoningError::Provider(
+                ProviderError::Unknown {
+                    code: "unknown_provider".to_string(),
+                    message: format!("Unknown provider: {}", config.id),
+                }
+                .to_string(),
+            )),
+        }?;
+
+        provider
+    }
+}
+
+/// Connection test result for a provider.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConnectionTestResult {
+    pub success: bool,
+    pub message: String,
+    pub details: Option<serde_json::Value>,
+}
+
+/// Test a provider connection.
+pub fn test_provider_connection(
+    factory: &ProviderFactory,
+    config: &ProviderConfig,
+) -> ConnectionTestResult {
+    let provider = match factory.create(config) {
+        Ok(p) => p,
+        Err(e) => {
+            return ConnectionTestResult {
+                success: false,
+                message: format!("Failed to create provider: {}", e),
+                details: None,
+            };
+        }
+    };
+
+    // Try to list models to test the connection
+    match provider.list_models() {
+        Ok(models) => ConnectionTestResult {
+            success: true,
+            message: format!("Successfully connected. Found {} models.", models.len()),
+            details: Some(serde_json::json!({
+                "models_found": models.len(),
+                "models": models.iter().map(|m| m.model_id.0.clone()).collect::<Vec<_>>()
+            })),
+        },
+        Err(e) => ConnectionTestResult {
+            success: false,
+            message: format!("Connection test failed: {}", e),
+            details: None,
+        },
+    }
+}
+
+/// Trait for secure credential storage and resolution.
+/// Implementations can read from environment variables, OS keyring, vault, etc.
+pub trait CredentialStore: Send + Sync {
+    /// Resolve a credential reference to its raw value.
+    /// Returns None if the credential is not found.
+    fn resolve(&self, cred_ref: &CredentialRef) -> Option<String>;
+
+    /// Test if a credential reference can be resolved.
+    fn can_resolve(&self, cred_ref: &CredentialRef) -> bool {
+        self.resolve(cred_ref).is_some()
+    }
+}
+
+/// Default implementation that reads credentials from environment variables.
+/// Uses the convention: `{STORE}_{KEY}` (e.g., "OPENAI_API_KEY" for store="OPENAI", key="API_KEY")
+pub struct EnvCredentialStore;
+
+impl CredentialStore for EnvCredentialStore {
+    fn resolve(&self, cred_ref: &CredentialRef) -> Option<String> {
+        let env_key = format!(
+            "{}_{}",
+            cred_ref.store.to_uppercase(),
+            cred_ref.key.to_uppercase()
+        );
+        std::env::var(&env_key).ok()
+    }
+}
+
+/// A secure credential store that uses the OS keyring (stub implementation).
+///
+/// This is a placeholder that provides the same interface as `EnvCredentialStore`
+/// but can be extended to use the `keyring` crate for actual OS keyring integration.
+/// Currently falls back to environment variables.
+#[derive(Debug, Default, Clone)]
+pub struct KeyringCredentialStore;
+
+impl CredentialStore for KeyringCredentialStore {
+    fn resolve(&self, cred_ref: &CredentialRef) -> Option<String> {
+        // Try keyring first (not implemented yet, falls through to env)
+        // In a full implementation, this would use the `keyring` crate:
+        // keyring::Entry::new(&cred_ref.store, &cred_ref.key)
+        //     .ok()
+        //     .and_then(|e| e.get_password().ok())
+
+        // Fallback to environment variable convention
+        let env_key = format!(
+            "{}_{}",
+            cred_ref.store.to_uppercase(),
+            cred_ref.key.to_uppercase()
+        );
+        std::env::var(&env_key).ok()
+    }
+}
+
+/// Validation result for a provider configuration.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProviderValidationResult {
+    pub provider_id: ProviderId,
+    pub valid: bool,
+    pub errors: Vec<String>,
+    pub warnings: Vec<String>,
+}
+
+/// Validate a single provider configuration without creating a provider.
+pub fn validate_provider_config(config: &ProviderConfig) -> ProviderValidationResult {
+    let mut errors = Vec::new();
+    let mut warnings = Vec::new();
+
+    // Required fields
+    if config.id.0.is_empty() {
+        errors.push("Provider ID cannot be empty".to_string());
+    }
+    if config.name.is_empty() {
+        errors.push("Provider name cannot be empty".to_string());
+    }
+
+    // If enabled, must have default_model
+    if config.enabled {
+        if config.default_model.is_none() {
+            errors.push("Enabled provider must have a default_model".to_string());
+        }
+        if config.endpoint.is_none() {
+            warnings.push("No endpoint specified; will use provider default".to_string());
+        }
+    }
+
+    // Validate credential reference
+    if let Some(cred_ref) = &config.credential_ref {
+        if cred_ref.store.is_empty() || cred_ref.key.is_empty() {
+            errors.push("Credential reference has empty store or key".to_string());
+        }
+    } else if config.enabled {
+        warnings.push(
+            "No credential reference configured; will rely on environment variables".to_string(),
+        );
+    }
+
+    // Validate base URL format if provided
+    if let Some(endpoint) = &config.endpoint {
+        if !endpoint.starts_with("http://") && !endpoint.starts_with("https://") {
+            errors.push("Endpoint must be a valid HTTP/HTTPS URL".to_string());
+        }
+    }
+
+    ProviderValidationResult {
+        provider_id: config.id.clone(),
+        valid: errors.is_empty(),
+        errors,
+        warnings,
+    }
+}
+
+/// Validate a model configuration.
+pub fn validate_model_config(config: &ModelConfig) -> ProviderValidationResult {
+    let mut errors = Vec::new();
+    let mut warnings = Vec::new();
+
+    if config.provider.0.is_empty() {
+        errors.push("Model provider ID cannot be empty".to_string());
+    }
+    if config.model_id.0.is_empty() {
+        errors.push("Model ID cannot be empty".to_string());
+    }
+
+    if !config.enabled {
+        warnings.push("Model is disabled".to_string());
+    }
+
+    if config.capabilities.is_empty() {
+        warnings.push("Model has no declared capabilities".to_string());
+    }
+
+    ProviderValidationResult {
+        provider_id: config.provider.clone(),
+        valid: errors.is_empty(),
+        errors,
+        warnings,
+    }
+}
+
+/// A tool definition for function calling.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ToolDefinition {
+    pub name: String,
+    pub description: String,
+    pub parameters: serde_json::Value,
+}
+
+/// A tool call requested by the model.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ToolCall {
+    pub id: String,
+    pub name: String,
+    pub arguments: serde_json::Value,
+}
+
+/// A tool result returned to the model.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ToolResult {
+    pub tool_call_id: String,
+    pub content: serde_json::Value,
+    pub is_error: bool,
+}
+
+/// How the model should choose tools.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ToolChoice {
+    None,
+    Auto,
+    Required,
+    Specific { name: String },
+}
+
+/// Token usage metadata from the provider.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct UsageMetadata {
+    pub prompt_tokens: u32,
+    pub completion_tokens: u32,
+    pub total_tokens: u32,
+    pub cached_tokens: Option<u32>,
+    pub reasoning_tokens: Option<u32>,
+}
+
+/// Streaming event from a model provider.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum StreamEvent {
+    TextDelta {
+        text: String,
+    },
+    ToolCallDelta {
+        index: u32,
+        id: Option<String>,
+        name: Option<String>,
+        arguments: Option<String>,
+    },
+    ToolCallComplete {
+        tool_call: ToolCall,
+    },
+    Complete {
+        usage: Option<UsageMetadata>,
+    },
+    Error {
+        error: ProviderError,
+    },
+}
+
+/// Extended provider interface supporting streaming, tool calling, and capability introspection.
+/// This is the main trait for model providers in EAK V1.
+pub trait ModelProvider: ReasoningEngine {
+    /// Returns the provider identifier (e.g., "anthropic", "openai", "ollama").
+    fn provider_id(&self) -> ProviderId {
+        ProviderId(
+            self.model_id()
+                .split(':')
+                .next()
+                .unwrap_or("unknown")
+                .to_string(),
+        )
+    }
+
+    /// Returns the model identifier (e.g., "claude-opus-4", "gpt-4o", "llama3.1").
+    fn model_id_parsed(&self) -> ModelId {
+        ModelId(
+            self.model_id()
+                .split(':')
+                .nth(1)
+                .unwrap_or(&self.model_id())
+                .to_string(),
+        )
+    }
+
+    /// Returns the model's capability set.
+    fn capabilities(&self) -> CapabilitySet {
+        CapabilitySet::TEXT_GENERATION
+    }
+
+    /// Returns model metadata if available.
+    fn metadata(&self) -> Option<ModelMetadata> {
+        None
+    }
+
+    /// Synchronous request (default implementation uses ReasoningEngine).
+    fn request(&self, req: &ReasoningRequest) -> Result<ReasoningResponse, ReasoningError> {
+        self.request_judgement(req)
+    }
+
+    /// Streaming request — returns a stream of events.
+    /// Default implementation returns an error indicating streaming not supported.
+    fn stream_request(
+        &self,
+        _req: &ReasoningRequest,
+    ) -> Result<Box<dyn Iterator<Item = Result<StreamEvent, ReasoningError>> + Send>, ReasoningError>
+    {
+        Err(ReasoningError::Provider(
+            ProviderError::UnsupportedCapability {
+                capability: ModelCapability::Streaming,
+            }
+            .to_string(),
+        ))
+    }
+
+    /// Cancel an in-flight request (if supported by provider).
+    fn cancel(&self) -> Result<(), ReasoningError> {
+        Err(ReasoningError::Provider(
+            ProviderError::UnsupportedCapability {
+                capability: ModelCapability::Streaming,
+            }
+            .to_string(),
+        ))
+    }
+
+    /// Check if the provider supports a specific capability.
+    fn supports(&self, capability: ModelCapability) -> bool {
+        self.capabilities().contains(capability)
+    }
+
+    /// List available models from this provider (if supported).
+    fn list_models(&self) -> Result<Vec<ModelMetadata>, ReasoningError> {
+        Err(ReasoningError::Provider(
+            ProviderError::UnsupportedCapability {
+                capability: ModelCapability::TextGeneration,
+            }
+            .to_string(),
+        ))
+    }
+}
+
+/// Note: explicit `ModelProvider` implementations are provided for `FixtureEngine` and all
+/// test reasoners. A blanket impl is not used to avoid conflicts with custom implementations.
+///
 /// The single boundary to stochastic judgement (P3). Implemented by `eak-reasoning`
 /// (fixture + live Anthropic). Phase 1 uses the synchronous request form; the spec's
 /// stream/cancel operations are deferred.
@@ -493,6 +1406,12 @@ pub trait ReasoningEngine {
         req: &ReasoningRequest,
     ) -> Result<ReasoningResponse, ReasoningError>;
 }
+
+/// Provider configuration persistence and validation.
+pub mod provider_config;
+
+// Tool execution boundary between model providers and the kernel.
+// pub mod tool_execution;
 
 #[cfg(test)]
 mod tests {
