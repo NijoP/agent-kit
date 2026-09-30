@@ -26,18 +26,33 @@ impl EventSink for TauriEventSink {
 #[tauri::command]
 fn start_run(app: AppHandle, intent: String) {
     std::thread::spawn(move || {
-        let _sink: Box<dyn EventSink> = Box::new(TauriEventSink { app });
-        // ── FINALIZE LOCALLY (README steps 1-5) ────────────────────────────────────────────────
-        // Build a reasoning engine + RunConfig, then stream a real run through the sink:
-        //
-        //   let reasoning = Box::new(
-        //       eak_reasoning::FixtureEngine::load("<cassette>.json").unwrap()); // or --features live
-        //   let cfg = eak_cli::RunConfig { intent, /* + the other RunConfig fields */ };
-        //   let _ = eak_cli::run_with_sink(reasoning, &cfg, Some(_sink));
-        //
-        // `run_with_sink` already exists in the kernel (eak-cli) and streams every committed
-        // EventRecord to `_sink`. This bridge is the entire integration; the call above is wiring.
-        let _ = intent;
+        use eak_cli::RunConfig;
+        use eak_reasoning::FixtureEngine;
+
+        // Build a deterministic fixture engine (no API key needed). In a full deployment this
+        // would load a cassette; for now we use a single canned response so the pipeline has
+        // a reasoning engine to drive its phases.
+        let reasoning = Box::new(FixtureEngine::single(eak_reasoning::ReasoningResponse {
+            candidates: vec![],
+            part_candidates: vec![],
+            explanations: vec![],
+            clarifying_questions: vec![],
+            raw: String::new(),
+        }));
+
+        // Build the run config from the supplied intent string.
+        let cfg = RunConfig {
+            intent,
+            reasoning: eak_cli::ReasoningChoice::Fixture,
+            cassette: None,
+            log: std::path::PathBuf::from(std::env::temp_dir().join("eak_run_log.json")),
+            model: String::new(),
+            seed: 42,
+            deterministic_clock: true,
+        };
+
+        // Run the full 15-phase workflow, streaming every EventRecord to the Tauri sink.
+        let _ = eak_cli::run_with_sink(reasoning, &cfg, Some(Box::new(TauriEventSink { app })));
     });
 }
 
