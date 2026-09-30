@@ -8,3 +8,11 @@ rust-version.workspace = true
 [dependencies]
 eak-domain = { workspace = true }
 eak-units = { workspace = true }
+rusqlite = { version = "0.31", features = ["bundled"] }
+serde_json = "1.0"
+serde = { workspace = true, features = ["derive"] }
+chrono = { version = "0.4", features = ["serde"] }
+once_cell = "1.19"
+
+[dev-dependencies]
+tempfile = "3.8"
