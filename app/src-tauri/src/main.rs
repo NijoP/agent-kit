@@ -5,8 +5,11 @@
 //! kernel↔UI integration is the `TauriEventSink` below — everything else is standard Tauri config
 //! (generated locally; see ../../README.md). Build/run on a machine with the Tauri prerequisites.
 
-use eak_ports::{EventRecord, EventSink};
+use eak_ports::{EventRecord, EventSink, ReasoningEngine};
 use tauri::{AppHandle, Emitter};
+use eak_reasoning::FixtureEngine;
+use eak_cli::{RunConfig, ReasoningChoice};
+use std::path::PathBuf;
 
 /// An [`EventSink`] that forwards every committed kernel event to the webview. It runs on the
 /// kernel's worker thread; `AppHandle` is `Send + Sync`, so emitting across the thread boundary is
@@ -24,21 +27,44 @@ impl EventSink for TauriEventSink {
 
 /// Kick off a real pipeline run on a background thread, streaming its events to the UI live.
 #[tauri::command]
-fn start_run(app: AppHandle, intent: String) {
+fn start_run(app: AppHandle, intent: String) -> Result<(), String> {
     std::thread::spawn(move || {
-        let _sink: Box<dyn EventSink> = Box::new(TauriEventSink { app });
-        // ── FINALIZE LOCALLY (README steps 1-5) ────────────────────────────────────────────────
-        // Build a reasoning engine + RunConfig, then stream a real run through the sink:
-        //
-        //   let reasoning = Box::new(
-        //       eak_reasoning::FixtureEngine::load("<cassette>.json").unwrap()); // or --features live
-        //   let cfg = eak_cli::RunConfig { intent, /* + the other RunConfig fields */ };
-        //   let _ = eak_cli::run_with_sink(reasoning, &cfg, Some(_sink));
-        //
-        // `run_with_sink` already exists in the kernel (eak-cli) and streams every committed
-        // EventRecord to `_sink`. This bridge is the entire integration; the call above is wiring.
-        let _ = intent;
+        let sink: Box<dyn EventSink> = Box::new(TauriEventSink { app });
+        // Load the default cassette
+        let cassette_path = match std::env::current_dir() {
+            Ok(mut dir) => {
+                dir.push("eak/crates/eak-cli/fixtures/default_cassette.json");
+                dir
+            }
+            Err(e) => {
+                eprintln!("Failed to get current directory: {e}");
+                return;
+            }
+        };
+        let reasoning: Box<dyn ReasoningEngine> = match eak_reasoning::FixtureEngine::load(&cassette_path) {
+            Ok(engine) => Box::new(engine),
+            Err(e) => {
+                eprintln!("Failed to load cassette: {e}");
+                return;
+            }
+        };
+        // Build config
+        let log_path = std::env::temp_dir().join("eak-run.log");
+        let cfg = RunConfig {
+            intent,
+            reasoning: ReasoningChoice::Fixture,
+            cassette: Some(cassette_path),
+            log: log_path,
+            model: "claude-opus-4-8".to_string(),
+            seed: 1,
+            deterministic_clock: true,
+        };
+        // Run with sink
+        if let Err(e) = eak_cli::run_with_sink(reasoning, &cfg, Some(sink)) {
+            eprintln!("Run failed: {e}");
+        }
     });
+    Ok(())
 }
 
 fn main() {
