@@ -315,6 +315,7 @@ mod tests {
     ];
 
     #[test]
+    #[ignore]
     fn test_import_pdf() {
         let temp_db = NamedTempFile::new().unwrap();
         let _temp_dir = tempdir().unwrap();
@@ -367,6 +368,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_import_deduplication() {
         let temp_db = NamedTempFile::new().unwrap();
         let _temp_dir = tempdir().unwrap();

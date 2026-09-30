@@ -13,7 +13,7 @@ const TABS: { id: BottomTab; label: string }[] = [
   { id: "drc", label: "DRC" },
   { id: "log", label: "Log" },
   { id: "find", label: "Find" },
-    { id: "terminal", label: "Terminal" },
+  { id: "terminal", label: "Terminal" },
 ];
 
 function ViolationRow({ vm, v }: { vm: ViewModel; v: Violation }) {
@@ -136,7 +136,7 @@ export function BottomDock() {
                   <span className="cs-line add">+ part · TVS diode on VBUS</span>
                   <span className="cs-line add">+ task · verify clamping voltage</span>
                 </div>
-                <span className="mono" style={{ color: "var(--scaffold)", fontSize: 11 }}>◐ live generation next — the seam &amp; UI are ready</span>
+                <span className="mono" style={{ color: "var(--scaffold)", fontSize: 11 }}>◐ live generation next — the seam & UI are ready</span>
               </div>
             </div>
           </div>
@@ -166,10 +166,8 @@ export function BottomDock() {
         )}
 
         {bottomTab === "find" && (
-        
-        {bottomTab === "find" && (
           <div className="empty" style={{ height: 120 }}><Search size={18} strokeWidth={1.5} /> Search docs, parts, nets, requirements. <span className="mono" style={{ color: "var(--scaffold)" }}>◐ planned</span></div>
-        })
+        )}
 
         {bottomTab === "terminal" && (
           <div>
@@ -190,7 +188,7 @@ export function BottomDock() {
               </div>
             </div>
           </div>
-        )
+        )}
       </div>
     </section>
   );
