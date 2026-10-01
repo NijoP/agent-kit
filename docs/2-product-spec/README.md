@@ -134,7 +134,7 @@ Engineer reviews verification results (ERC, DRC, power, SI, EMC, DFM) with confi
 - `eak asset-facts` — List extracted facts for a datasheet asset.
 - `eak asset-compare` — Cross-check datasheet facts against component metadata.
 - `eak asset-verify-identity` — Verify datasheet identity matches component record.
-
+- • `eak export` — Export manufacturing assets (KiCad, Gerber, BOM). *(Planned)*
 ### IPC (Tauri)
 - `start_run(intent, config)` — returns stream of `EventRecord`
 - `get_state(snapshot_id)` — returns serialized engineering model
