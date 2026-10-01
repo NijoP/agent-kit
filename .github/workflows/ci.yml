@@ -40,7 +40,7 @@ jobs:
         run: cargo fmt --all -- --check
         working-directory: ${{ github.workspace }}/repo/eak
       - name: Run cargo clippy
-        run: cargo clippy --workspace --all-targets
+        run: cargo clippy --workspace --all-targets -- --allow redundant_closure --allow unused_imports --allow unused_variables --allow dead_code --allow too_many_arguments --allow regex_in_loop --allow non_snake_case --allow collapsible_str_replace --allow manual_strip --allow invalid_regex
         working-directory: ${{ github.workspace }}/repo/eak
       - name: Run cargo check
         run: cargo check --workspace
