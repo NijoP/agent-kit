@@ -331,11 +331,9 @@ fn footprint_refdes(fp: &[Sexp]) -> Option<String> {
     None
 }
 
-/// Infer a [`ComponentClass`] from a refdes prefix — the coarse convention every schematic follows
-/// (R=resistor, C=capacitor, U/IC=integrated circuit, J/P/CN=connector, VR/REG=regulator). A
-/// HEURISTIC on the imported name, not an electrical claim: the domain enum has no generic/unknown
-/// class, so an unrecognised prefix (L, D, Q, Y, …) falls back to the neutral active class,
-/// [`ComponentClass::Ic`]. The class only drives the default courtyard size and ERC expectations.
+/// Infer a [`ComponentClass`] from a refdes prefix — the coarse convention every schematic follows.
+/// A HEURISTIC on the imported name, not an electrical claim: the domain enum now covers all 16
+/// families, so we map prefixes to specific variants where possible.
 fn classify_refdes(refdes: &str) -> ComponentClass {
     let prefix: String = refdes
         .chars()
@@ -343,12 +341,98 @@ fn classify_refdes(refdes: &str) -> ComponentClass {
         .collect::<String>()
         .to_uppercase();
     match prefix.as_str() {
+        // Passives
         "R" | "RN" => ComponentClass::Resistor,
         "C" => ComponentClass::Capacitor,
-        "J" | "P" | "CN" | "CON" => ComponentClass::Connector,
-        "VR" | "REG" => ComponentClass::Regulator,
-        "U" | "IC" => ComponentClass::Ic,
-        _ => ComponentClass::Ic,
+        "L" | "IND" => ComponentClass::Inductor,
+        // Diodes
+        "D" | "ZD" => ComponentClass::DiodeZener, // Note: ZD is often Zener, but we have separate variants
+        "LED" => ComponentClass::DiodeLed,
+        // For simplicity, we map generic D to Schottky? But the spec says appropriate Diode variant.
+        // We'll map D to DiodeRectifier as a default, but note that the spec says:
+        // "D" | "ZD" | "LED" → appropriate Diode variant
+        // We'll break down by second letter if possible, but we only have prefix.
+        // Since we only take alphabetic prefix, we cannot distinguish D, ZD, LED beyond first letter.
+        // We'll handle LED above, and for D and ZD we'll assign Zener (as ZD is explicitly Zener).
+        // For a plain D, we'll assign Rectifier (as a common default).
+        // However, note that the spec says: "D" | "ZD" | "LED" → appropriate Diode variant.
+        // We'll do:
+        //   "D" -> DiodeRectifier (assuming rectifier is the most generic)
+        //   "ZD" -> DiodeZener
+        //   "LED" -> DiodeLed
+        // But note: the prefix extraction for "ZD" will be "ZD", and for "LED" will be "LED".
+        // So we can do:
+        "D" => ComponentClass::DiodeRectifier,
+        "ZD" => ComponentClass::DiodeZener,
+        "LED" => ComponentClass::DiodeLed,
+        // Transistors
+        "Q" => ComponentClass::TransistorBjt, // Default to BJT
+        "MOS" => ComponentClass::TransistorMosfet,
+        "IGBT" => ComponentClass::TransistorIgbt,
+        // Note: JFET prefix is often "Q" as well, but we don't have a separate prefix for JFET.
+        // We'll leave JFET under the generic Q? But the spec says "Q" | "MOS" | "IGBT" → appropriate Transistor variant.
+        // We'll map Q to BJT, MOS to MOSFET, IGBT to IGBT, and JFET we don't have a prefix for.
+        // We'll add a note: JFET is often marked as "Q" as well, but we cannot distinguish.
+        // We'll leave JFET unhandled for now and fall back to Ic? But the spec says we must cover all.
+        // We'll add a separate prefix for JFET? Not common. We'll map Q to BJT and hope that JFET is marked as "QJ" or something.
+        // Alternatively, we can map Q to TransistorBjt and then later in a more sophisticated system we could look at the full refdes.
+        // For now, we follow the spec: "Q" | "MOS" | "IGBT" → appropriate Transistor variant.
+        // We'll map Q to BJT, MOS to MOSFET, IGBT to IGBT, and leave JFET unhandled (will fall through to Ic?).
+        // But note: the spec says we must cover all 16 families. We must map JFET to something.
+        // Let's map Q to TransistorBjt and then if we see "QJ" we could map to JFET, but we only take alphabetic prefix.
+        // We'll change the prefix to allow up to 2 characters? But the spec says prefix.
+        // We'll stick to the spec as written: "Q" | "MOS" | "IGBT" → appropriate Transistor variant.
+        // We'll map Q to BJT, MOS to MOSFET, IGBT to IGBT, and for JFET we have no prefix, so it will fall through.
+        // We'll add a comment that JFET is not handled by prefix and will be classified as Ic (which is not ideal).
+        // However, the task says to map to appropriate variant. We'll do our best.
+        // We'll leave JFET unhandled for now and note that we could improve by looking at more characters.
+        // For the purpose of this task, we'll map Q to BJT and accept that JFET will be misclassified.
+        // Alternatively, we can map Q to TransistorJfet? But that would be wrong for BJT.
+        // We'll follow the common convention: Q for all transistors, and then look at the package or value to determine type.
+        // Since we cannot, we'll map Q to BJT and note the limitation.
+        // We'll also add a prefix "JFET" if we see it, but it's rare.
+        // We'll add: "JFET" => ComponentClass::TransistorJfet,
+        // But note: the prefix extraction would stop at "JFET" because it's all alphabetic.
+        // Let's do that.
+        "JFET" => ComponentClass::TransistorJfet,
+        // Analog ICs
+        "OP" => ComponentClass::AnalogOpAmp,
+        "U" | "IC" => ComponentClass::AnalogOpAmp, // Generic IC fallback to AnalogOpAmp
+        // Power Management
+        "VR" | "REG" => ComponentClass::RegulatorLdo, // Assume LDO for simplicity, could be switching
+        // Note: we have RegulatorLdo and RegulatorSwitching. We'll map VR/REG to Ldo as a default.
+        // For more specificity, we would need to look at the footprint or value.
+        // Digital Logic
+        // No common prefix? Often "U" for logic gates as well.
+        // We'll leave digital logic under the generic Ic for now.
+        // MCUs
+        // Also under U.
+        // Memory
+        // Also under U.
+        // Communication
+        // Also under U.
+        // Sensors
+        // Often "U" or specific prefixes like "TEMP" for temperature, but not standardized.
+        // We'll leave sensors under Ic for now.
+        // RF/Wireless
+        // Also under U.
+        // Audio
+        // Also under U.
+        // Protection
+        "F" | "FUSE" => ComponentClass::ProtectionFuse,
+        // "RT" | "NTC" | "PTC" -> SensorTemperature or ProtectionPtc
+        "RT" | "NTC" => ComponentClass::SensorTemperature,
+        "PTC" => ComponentClass::ProtectionPtc, // Note: PTC can be either a resettable fuse (protection) or a temperature sensor
+        // Connectors
+        "CN" | "J" | "P" | "CON" => ComponentClass::ConnectorHeader, // Assume header as default
+        "USB" => ComponentClass::ConnectorUsb, // USB connectors
+        // Electromechanical
+        "SW" | "BTN" | "KEY" => ComponentClass::ElectromechSwitch,
+        "K" | "RLY" => ComponentClass::ElectromechRelay,
+        // Specialized
+        "X" | "Y" | "OSC" => ComponentClass::SpecializedCrystal,
+        // Fallback to AnalogOpAmp for anything else
+        _ => ComponentClass::AnalogOpAmp,
     }
 }
 
@@ -357,9 +441,65 @@ fn classify_refdes(refdes: &str) -> ComponentClass {
 /// one of the same class would. Used only when the footprint declares no explicit courtyard rect.
 fn courtyard_default_mm(class: ComponentClass) -> f64 {
     match class {
-        ComponentClass::Connector => 9.0,
-        ComponentClass::Regulator | ComponentClass::Ic => 6.0,
-        ComponentClass::Resistor | ComponentClass::Capacitor => 3.0,
+        // Passives
+        ComponentClass::Resistor | ComponentClass::Capacitor | ComponentClass::Inductor => 3.0,
+        // Diodes
+        ComponentClass::DiodeRectifier | ComponentClass::DiodeSchottky | ComponentClass::DiodeZener
+        | ComponentClass::DiodeTvs | ComponentClass::DiodeLed => 3.0,
+        // Transistors
+        ComponentClass::TransistorBjt | ComponentClass::TransistorMosfet
+        | ComponentClass::TransistorIgbt | ComponentClass::TransistorJfet => 3.0,
+        // Analog ICs
+        ComponentClass::AnalogOpAmp | ComponentClass::AnalogComparator
+        | ComponentClass::AnalogAdcDac | ComponentClass::AnalogVoltageReference => 6.0,
+        // Power Management
+        ComponentClass::RegulatorLdo | ComponentClass::RegulatorSwitching
+        | ComponentClass::Pmic | ComponentClass::BatteryManagement
+        | ComponentClass::PowerSwitch => 6.0,
+        // Digital Logic
+        ComponentClass::LogicGate | ComponentClass::LogicFlipFlop
+        | ComponentClass::LogicCounter | ComponentClass::LogicShiftRegister
+        | ComponentClass::LogicBufferDriver => 6.0,
+        // MCUs
+        ComponentClass::Mcu | ComponentClass::Soc | ComponentClass::Dsp => 6.0,
+        // Memory
+        ComponentClass::MemoryFlash | ComponentClass::MemoryEeprom
+        | ComponentClass::MemorySram | ComponentClass::MemoryDram
+        | ComponentClass::MemoryFram => 6.0,
+        // Communication
+        ComponentClass::CommUart | ComponentClass::CommSpi
+        | ComponentClass::CommI2c | ComponentClass::CommCan
+        | ComponentClass::CommEthernet | ComponentClass::CommUsb
+        | ComponentClass::CommWireless => 6.0,
+        // Sensors
+        ComponentClass::SensorTemperature | ComponentClass::SensorPressure
+        | ComponentClass::SensorAccelerometer | ComponentClass::SensorGyroscope
+        | ComponentClass::SensorMagnetometer | ComponentClass::SensorOptical
+        | ComponentClass::SensorCurrent | ComponentClass::SensorVoltage => 3.0,
+        // RF/Wireless
+        ComponentClass::RfTransceiver | ComponentClass::RfFrontEnd
+        | ComponentClass::RfAntenna | ComponentClass::RfFilter
+        | ComponentClass::RfAmplifier => 6.0,
+        // Audio
+        ComponentClass::AudioCodec | ComponentClass::AudioAmplifier
+        | ComponentClass::AudioMicrophone | ComponentClass::AudioSpeakerDriver => 6.0,
+        // Protection
+        ComponentClass::ProtectionTvs | ComponentClass::ProtectionFuse
+        | ComponentClass::ProtectionPtc | ComponentClass::ProtectionVaristor
+        | ComponentClass::ProtectionEsd | ComponentClass::ProtectionCrowbar => 3.0,
+        // Connectors
+        ComponentClass::ConnectorHeader | ComponentClass::ConnectorTerminalBlock
+        | ComponentClass::ConnectorUsb | ComponentClass::ConnectorHdmi
+        | ComponentClass::ConnectorRj45 | ComponentClass::ConnectorCardEdge
+        | ComponentClass::ConnectorFfcFpc => 9.0,
+        // Electromechanical
+        ComponentClass::ElectromechSwitch | ComponentClass::ElectromechRelay
+        | ComponentClass::ElectromechButton | ComponentClass::ElectromechEncoder
+        | ComponentClass::ElectromechMotorDriver | ComponentClass::ElectromechFan => 6.0,
+        // Specialized
+        ComponentClass::SpecializedCrystal | ComponentClass::SpecializedOptocoupler
+        | ComponentClass::SpecializedIsolator | ComponentClass::SpecializedCurrentSense
+        | ComponentClass::SpecializedThermal => 6.0,
     }
 }
 
@@ -853,12 +993,12 @@ mod tests {
         assert!(near(&r1.placement.x, 20.0) && near(&r1.placement.y, 30.0));
 
         let u1 = comp(&d, "U1");
-        assert_eq!(u1.component.class, ComponentClass::Ic); // U prefix
+        assert_eq!(u1.component.class, ComponentClass::AnalogOpAmp); // U prefix
         assert_eq!(u1.placement.side, BoardSide::Bottom); // B.Cu
         assert!(near(&u1.placement.x, 50.0) && near(&u1.placement.y, 40.0));
 
         let j1 = comp(&d, "J1");
-        assert_eq!(j1.component.class, ComponentClass::Connector); // J prefix, via property
+        assert_eq!(j1.component.class, ComponentClass::ConnectorHeader); // J prefix, via property
         assert_eq!(j1.placement.side, BoardSide::Top);
     }
 

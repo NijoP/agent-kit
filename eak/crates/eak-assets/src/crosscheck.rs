@@ -434,35 +434,87 @@ impl FamilyMetadata {
     pub fn component_class(&self) -> ComponentClass {
         match self {
             FamilyMetadata::Passive(_) => ComponentClass::Resistor, // Map to Resistor for passives
-            FamilyMetadata::Diode(_) => ComponentClass::Ic,         // Map to IC for diodes
-            FamilyMetadata::Transistor(_) => ComponentClass::Ic,    // Map to IC for transistors
-            FamilyMetadata::AnalogIc(_) => ComponentClass::Ic,
-            FamilyMetadata::PowerManagement(_) => ComponentClass::Regulator,
-            FamilyMetadata::DigitalLogic(_) => ComponentClass::Ic,
-            FamilyMetadata::Mcu(_) => ComponentClass::Ic,
-            FamilyMetadata::Memory(_) => ComponentClass::Ic,
-            FamilyMetadata::Communication(_) => ComponentClass::Ic,
-            FamilyMetadata::Sensor(_) => ComponentClass::Ic,
-            FamilyMetadata::RfWireless(_) => ComponentClass::Ic,
-            FamilyMetadata::Audio(_) => ComponentClass::Ic,
-            FamilyMetadata::Protection(_) => ComponentClass::Ic,
-            FamilyMetadata::Connector(_) => ComponentClass::Connector,
-            FamilyMetadata::Electromechanical(_) => ComponentClass::Ic,
-            FamilyMetadata::Specialized(_) => ComponentClass::Ic,
+            FamilyMetadata::Diode(_) => ComponentClass::DiodeRectifier,
+            FamilyMetadata::Transistor(_) => ComponentClass::TransistorBjt,
+            FamilyMetadata::AnalogIc(_) => ComponentClass::AnalogOpAmp,
+            FamilyMetadata::PowerManagement(_) => ComponentClass::RegulatorLdo,
+            FamilyMetadata::DigitalLogic(_) => ComponentClass::LogicGate,
+            FamilyMetadata::Mcu(_) => ComponentClass::Mcu,
+            FamilyMetadata::Memory(_) => ComponentClass::MemoryFlash,
+            FamilyMetadata::Communication(_) => ComponentClass::CommUart,
+            FamilyMetadata::Sensor(_) => ComponentClass::SensorTemperature,
+            FamilyMetadata::RfWireless(_) => ComponentClass::RfTransceiver,
+            FamilyMetadata::Audio(_) => ComponentClass::AudioCodec,
+            FamilyMetadata::Protection(_) => ComponentClass::ProtectionTvs,
+            FamilyMetadata::Connector(_) => ComponentClass::ConnectorHeader,
+            FamilyMetadata::Electromechanical(_) => ComponentClass::ElectromechSwitch,
+            FamilyMetadata::Specialized(_) => ComponentClass::SpecializedCrystal,
         }
     }
 
     pub fn default_for(class: ComponentClass) -> Self {
         match class {
-            ComponentClass::Resistor | ComponentClass::Capacitor => {
+            // Passives
+            ComponentClass::Resistor | ComponentClass::Capacitor | ComponentClass::Inductor => {
                 FamilyMetadata::Passive(PassiveMetadata::default())
             }
-            ComponentClass::Connector => FamilyMetadata::Connector(ConnectorMetadata::default()),
-            ComponentClass::Regulator => {
-                FamilyMetadata::PowerManagement(PowerManagementMetadata::default())
-            }
-            ComponentClass::Ic => FamilyMetadata::AnalogIc(AnalogIcMetadata::default()),
-            _ => FamilyMetadata::Passive(PassiveMetadata::default()),
+            // Diodes
+            ComponentClass::DiodeRectifier | ComponentClass::DiodeSchottky | ComponentClass::DiodeZener
+            | ComponentClass::DiodeTvs | ComponentClass::DiodeLed => FamilyMetadata::Diode(DiodeMetadata::default()),
+            // Transistors
+            ComponentClass::TransistorBjt | ComponentClass::TransistorMosfet
+            | ComponentClass::TransistorIgbt | ComponentClass::TransistorJfet => FamilyMetadata::Transistor(TransistorMetadata::default()),
+            // Analog ICs
+            ComponentClass::AnalogOpAmp | ComponentClass::AnalogComparator
+            | ComponentClass::AnalogAdcDac | ComponentClass::AnalogVoltageReference => FamilyMetadata::AnalogIc(AnalogIcMetadata::default()),
+            // Power Management
+            ComponentClass::RegulatorLdo | ComponentClass::RegulatorSwitching
+            | ComponentClass::Pmic | ComponentClass::BatteryManagement
+            | ComponentClass::PowerSwitch => FamilyMetadata::PowerManagement(PowerManagementMetadata::default()),
+            // Digital Logic
+            ComponentClass::LogicGate | ComponentClass::LogicFlipFlop
+            | ComponentClass::LogicCounter | ComponentClass::LogicShiftRegister
+            | ComponentClass::LogicBufferDriver => FamilyMetadata::DigitalLogic(DigitalLogicMetadata::default()),
+            // MCUs
+            ComponentClass::Mcu | ComponentClass::Soc | ComponentClass::Dsp => FamilyMetadata::Mcu(McuMetadata::default()),
+            // Memory
+            ComponentClass::MemoryFlash | ComponentClass::MemoryEeprom
+            | ComponentClass::MemorySram | ComponentClass::MemoryDram
+            | ComponentClass::MemoryFram => FamilyMetadata::Memory(MemoryMetadata::default()),
+            // Communication
+            ComponentClass::CommUart | ComponentClass::CommSpi
+            | ComponentClass::CommI2c | ComponentClass::CommCan
+            | ComponentClass::CommEthernet | ComponentClass::CommUsb
+            | ComponentClass::CommWireless => FamilyMetadata::Communication(CommunicationMetadata::default()),
+            // Sensors
+            ComponentClass::SensorTemperature | ComponentClass::SensorPressure
+            | ComponentClass::SensorAccelerometer | ComponentClass::SensorGyroscope
+            | ComponentClass::SensorMagnetometer | ComponentClass::SensorOptical
+            | ComponentClass::SensorCurrent | ComponentClass::SensorVoltage => FamilyMetadata::Sensor(SensorMetadata::default()),
+            // RF/Wireless
+            ComponentClass::RfTransceiver | ComponentClass::RfFrontEnd
+            | ComponentClass::RfAntenna | ComponentClass::RfFilter
+            | ComponentClass::RfAmplifier => FamilyMetadata::RfWireless(RfWirelessMetadata::default()),
+            // Audio
+            ComponentClass::AudioCodec | ComponentClass::AudioAmplifier
+            | ComponentClass::AudioMicrophone | ComponentClass::AudioSpeakerDriver => FamilyMetadata::Audio(AudioMetadata::default()),
+            // Protection
+            ComponentClass::ProtectionTvs | ComponentClass::ProtectionFuse
+            | ComponentClass::ProtectionPtc | ComponentClass::ProtectionVaristor
+            | ComponentClass::ProtectionEsd | ComponentClass::ProtectionCrowbar => FamilyMetadata::Protection(ProtectionMetadata::default()),
+            // Connectors
+            ComponentClass::ConnectorHeader | ComponentClass::ConnectorTerminalBlock
+            | ComponentClass::ConnectorUsb | ComponentClass::ConnectorHdmi
+            | ComponentClass::ConnectorRj45 | ComponentClass::ConnectorCardEdge
+            | ComponentClass::ConnectorFfcFpc => FamilyMetadata::Connector(ConnectorMetadata::default()),
+            // Electromechanical
+            ComponentClass::ElectromechSwitch | ComponentClass::ElectromechRelay
+            | ComponentClass::ElectromechButton | ComponentClass::ElectromechEncoder
+            | ComponentClass::ElectromechMotorDriver | ComponentClass::ElectromechFan => FamilyMetadata::Electromechanical(ElectromechanicalMetadata::default()),
+            // Specialized
+            ComponentClass::SpecializedCrystal | ComponentClass::SpecializedOptocoupler
+            | ComponentClass::SpecializedIsolator | ComponentClass::SpecializedCurrentSense
+            | ComponentClass::SpecializedThermal => FamilyMetadata::Specialized(SpecializedMetadata::default()),
         }
     }
 }

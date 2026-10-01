@@ -289,11 +289,104 @@ impl FunctionalBlock {
 /// power source, a connector may be a sink).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ComponentClass {
-    Connector,
-    Regulator,
-    Ic,
+    // Passives
     Resistor,
     Capacitor,
+    Inductor,
+    // Diodes
+    DiodeRectifier,
+    DiodeSchottky,
+    DiodeZener,
+    DiodeTvs,
+    DiodeLed,
+    // Transistors
+    TransistorBjt,
+    TransistorMosfet,
+    TransistorIgbt,
+    TransistorJfet,
+    // Analog ICs
+    AnalogOpAmp,
+    AnalogComparator,
+    AnalogAdcDac,
+    AnalogVoltageReference,
+    // Power Management
+    RegulatorLdo,
+    RegulatorSwitching,
+    Pmic,
+    BatteryManagement,
+    PowerSwitch,
+    // Digital Logic
+    LogicGate,
+    LogicFlipFlop,
+    LogicCounter,
+    LogicShiftRegister,
+    LogicBufferDriver,
+    // MCUs
+    Mcu,
+    Soc,
+    Dsp,
+    // Memory
+    MemoryFlash,
+    MemoryEeprom,
+    MemorySram,
+    MemoryDram,
+    MemoryFram,
+    // Communication
+    CommUart,
+    CommSpi,
+    CommI2c,
+    CommCan,
+    CommEthernet,
+    CommUsb,
+    CommWireless,
+    // Sensors
+    SensorTemperature,
+    SensorPressure,
+    SensorAccelerometer,
+    SensorGyroscope,
+    SensorMagnetometer,
+    SensorOptical,
+    SensorCurrent,
+    SensorVoltage,
+    // RF/Wireless
+    RfTransceiver,
+    RfFrontEnd,
+    RfAntenna,
+    RfFilter,
+    RfAmplifier,
+    // Audio
+    AudioCodec,
+    AudioAmplifier,
+    AudioMicrophone,
+    AudioSpeakerDriver,
+    // Protection
+    ProtectionTvs,
+    ProtectionFuse,
+    ProtectionPtc,
+    ProtectionVaristor,
+    ProtectionEsd,
+    ProtectionCrowbar,
+    // Connectors
+    ConnectorHeader,
+    ConnectorTerminalBlock,
+    ConnectorUsb,
+    ConnectorHdmi,
+    ConnectorRj45,
+    ConnectorCardEdge,
+    ConnectorFfcFpc,
+    // Electromechanical
+    ElectromechSwitch,
+    ElectromechRelay,
+    ElectromechButton,
+    ElectromechEncoder,
+    ElectromechMotorDriver,
+    ElectromechFan,
+    // Specialized
+    SpecializedCrystal,
+    SpecializedOptocoupler,
+    SpecializedIsolator,
+    SpecializedCurrentSense,
+    SpecializedThermal,
 }
 
 /// The electrical role of a [`Pin`]. Drives ERC drive/sink analysis (P9): a power net must
@@ -1860,7 +1953,7 @@ mod tests {
         let c = Component {
             id: EntityId(1),
             refdes: "  ".into(),
-            class: ComponentClass::Regulator,
+            class: ComponentClass::RegulatorLdo,
             value: None,
             from_block: EntityId(2),
             origin: ComponentOrigin::Synthesized,

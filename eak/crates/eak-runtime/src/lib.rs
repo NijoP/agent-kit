@@ -351,7 +351,7 @@ mod kernel_tests {
                 component: Component {
                     id: synth_id,
                     refdes: "U1".into(),
-                    class: ComponentClass::Ic,
+                    class: ComponentClass::Mcu,
                     value: None,
                     from_block: EntityId::NULL,
                     origin: ComponentOrigin::Synthesized,
@@ -368,7 +368,7 @@ mod kernel_tests {
                 component: Component {
                     id: phantom_comp,
                     refdes: "U2".into(),
-                    class: ComponentClass::Ic,
+                    class: ComponentClass::Mcu,
                     value: None,
                     from_block: EntityId(0xDEAD_BEEF),
                     origin: ComponentOrigin::Imported,
@@ -433,7 +433,7 @@ mod kernel_tests {
         let comp = Component {
             id: core.fresh_id(),
             refdes: "U1".into(),
-            class: ComponentClass::Regulator,
+            class: ComponentClass::RegulatorLdo,
             value: None,
             from_block: bid,
             origin: ComponentOrigin::Synthesized,
@@ -534,7 +534,7 @@ mod kernel_tests {
         let comp = Component {
             id: core.fresh_id(),
             refdes: "U1".into(),
-            class: ComponentClass::Regulator,
+            class: ComponentClass::RegulatorLdo,
             value: None,
             from_block: bid,
             origin: ComponentOrigin::Synthesized,
@@ -647,7 +647,7 @@ mod kernel_tests {
         let comp = Component {
             id: core.fresh_id(),
             refdes: "U1".into(),
-            class: ComponentClass::Regulator,
+            class: ComponentClass::RegulatorLdo,
             value: None,
             from_block: bid,
             origin: ComponentOrigin::Synthesized,
@@ -970,7 +970,7 @@ mod kernel_tests {
             component: Component {
                 id: comp_id,
                 refdes: "U1".into(),
-                class: ComponentClass::Ic,
+                class: ComponentClass::RegulatorLdo,
                 value: None,
                 from_block: block_id,
                 origin: ComponentOrigin::Synthesized,
@@ -1076,7 +1076,7 @@ mod kernel_tests {
             component: Component {
                 id: comp_id,
                 refdes: "U1".into(),
-                class: ComponentClass::Ic,
+                class: ComponentClass::RegulatorLdo,
                 value: None,
                 from_block: block_id,
                 origin: ComponentOrigin::Synthesized,
@@ -2041,7 +2041,7 @@ mod kernel_tests {
             component: Component {
                 id: comp_id,
                 refdes: "U1".into(),
-                class: ComponentClass::Regulator,
+                class: ComponentClass::RegulatorLdo,
                 value: None,
                 from_block: block_id,
                 origin: ComponentOrigin::Synthesized,
@@ -2215,7 +2215,7 @@ mod kernel_tests {
             component: Component {
                 id: comp_id,
                 refdes: "Y1".into(),
-                class: ComponentClass::Ic,
+                class: ComponentClass::SpecializedCrystal,
                 value: None,
                 from_block: block_id,
                 origin: ComponentOrigin::Synthesized,
@@ -2407,7 +2407,7 @@ mod kernel_tests {
             component: Component {
                 id: sig_comp,
                 refdes: "U1".into(),
-                class: ComponentClass::Ic,
+                class: ComponentClass::AnalogOpAmp,
                 value: None,
                 from_block: EntityId::NULL,
                 origin: ComponentOrigin::Imported,
@@ -2428,7 +2428,7 @@ mod kernel_tests {
             component: Component {
                 id: ref_comp,
                 refdes: "U2".into(),
-                class: ComponentClass::Connector,
+                class: ComponentClass::ConnectorHeader,
                 value: None,
                 from_block: EntityId::NULL,
                 origin: ComponentOrigin::Imported,
@@ -2628,7 +2628,7 @@ mod kernel_tests {
             component: Component {
                 id: comp,
                 refdes: "U1".into(),
-                class: ComponentClass::Ic,
+                class: ComponentClass::CommUart,
                 value: None,
                 from_block: EntityId::NULL,
                 origin: ComponentOrigin::Imported,
@@ -2814,7 +2814,7 @@ mod kernel_tests {
             component: Component {
                 id: comp,
                 refdes: "U1".into(),
-                class: ComponentClass::Ic,
+                class: ComponentClass::CommUart,
                 value: None,
                 from_block: EntityId::NULL,
                 origin: ComponentOrigin::Imported,
@@ -3098,7 +3098,7 @@ mod kernel_tests {
             component: Component {
                 id: comp,
                 refdes: "U1".into(),
-                class: ComponentClass::Ic,
+                class: ComponentClass::CommI2c,
                 value: None,
                 from_block: EntityId::NULL,
                 origin: ComponentOrigin::Imported,

@@ -483,11 +483,67 @@ pub fn search(db_path: &Path, query: SearchQuery) -> Result<SearchResults> {
 /// Convert ComponentClass to category string.
 fn component_class_to_category(class: ComponentClass) -> String {
     match class {
+        // Passives
         ComponentClass::Resistor => "Resistor".to_string(),
         ComponentClass::Capacitor => "Capacitor".to_string(),
-        ComponentClass::Ic => "IC".to_string(), // Would need mapping
-        ComponentClass::Regulator => "Regulator".to_string(),
-        ComponentClass::Connector => "Connector".to_string(),
+        ComponentClass::Inductor => "Inductor".to_string(),
+        // Diodes
+        ComponentClass::DiodeRectifier | ComponentClass::DiodeSchottky | ComponentClass::DiodeZener
+        | ComponentClass::DiodeTvs | ComponentClass::DiodeLed => "Diode".to_string(),
+        // Transistors
+        ComponentClass::TransistorBjt | ComponentClass::TransistorMosfet
+        | ComponentClass::TransistorIgbt | ComponentClass::TransistorJfet => "Transistor".to_string(),
+        // Analog ICs
+        ComponentClass::AnalogOpAmp | ComponentClass::AnalogComparator
+        | ComponentClass::AnalogAdcDac | ComponentClass::AnalogVoltageReference => "Analog IC".to_string(),
+        // Power Management
+        ComponentClass::RegulatorLdo | ComponentClass::RegulatorSwitching
+        | ComponentClass::Pmic | ComponentClass::BatteryManagement
+        | ComponentClass::PowerSwitch => "Power Management".to_string(),
+        // Digital Logic
+        ComponentClass::LogicGate | ComponentClass::LogicFlipFlop
+        | ComponentClass::LogicCounter | ComponentClass::LogicShiftRegister
+        | ComponentClass::LogicBufferDriver => "Digital Logic".to_string(),
+        // MCUs
+        ComponentClass::Mcu | ComponentClass::Soc | ComponentClass::Dsp => "MCU".to_string(),
+        // Memory
+        ComponentClass::MemoryFlash | ComponentClass::MemoryEeprom
+        | ComponentClass::MemorySram | ComponentClass::MemoryDram
+        | ComponentClass::MemoryFram => "Memory".to_string(),
+        // Communication
+        ComponentClass::CommUart | ComponentClass::CommSpi
+        | ComponentClass::CommI2c | ComponentClass::CommCan
+        | ComponentClass::CommEthernet | ComponentClass::CommUsb
+        | ComponentClass::CommWireless => "Communication".to_string(),
+        // Sensors
+        ComponentClass::SensorTemperature | ComponentClass::SensorPressure
+        | ComponentClass::SensorAccelerometer | ComponentClass::SensorGyroscope
+        | ComponentClass::SensorMagnetometer | ComponentClass::SensorOptical
+        | ComponentClass::SensorCurrent | ComponentClass::SensorVoltage => "Sensor".to_string(),
+        // RF/Wireless
+        ComponentClass::RfTransceiver | ComponentClass::RfFrontEnd
+        | ComponentClass::RfAntenna | ComponentClass::RfFilter
+        | ComponentClass::RfAmplifier => "RF/Wireless".to_string(),
+        // Audio
+        ComponentClass::AudioCodec | ComponentClass::AudioAmplifier
+        | ComponentClass::AudioMicrophone | ComponentClass::AudioSpeakerDriver => "Audio".to_string(),
+        // Protection
+        ComponentClass::ProtectionTvs | ComponentClass::ProtectionFuse
+        | ComponentClass::ProtectionPtc | ComponentClass::ProtectionVaristor
+        | ComponentClass::ProtectionEsd | ComponentClass::ProtectionCrowbar => "Protection".to_string(),
+        // Connectors
+        ComponentClass::ConnectorHeader | ComponentClass::ConnectorTerminalBlock
+        | ComponentClass::ConnectorUsb | ComponentClass::ConnectorHdmi
+        | ComponentClass::ConnectorRj45 | ComponentClass::ConnectorCardEdge
+        | ComponentClass::ConnectorFfcFpc => "Connector".to_string(),
+        // Electromechanical
+        ComponentClass::ElectromechSwitch | ComponentClass::ElectromechRelay
+        | ComponentClass::ElectromechButton | ComponentClass::ElectromechEncoder
+        | ComponentClass::ElectromechMotorDriver | ComponentClass::ElectromechFan => "Electromechanical".to_string(),
+        // Specialized
+        ComponentClass::SpecializedCrystal | ComponentClass::SpecializedOptocoupler
+        | ComponentClass::SpecializedIsolator | ComponentClass::SpecializedCurrentSense
+        | ComponentClass::SpecializedThermal => "Specialized".to_string(),
     }
 }
 
@@ -586,10 +642,23 @@ fn row_to_result(row: &Row) -> Result<ComponentIntelligenceResult> {
     let component_class = match category.as_str() {
         "Resistor" => ComponentClass::Resistor,
         "Capacitor" => ComponentClass::Capacitor,
-        "Inductor" => ComponentClass::Ic, // Would need better mapping
-        "Regulator" => ComponentClass::Regulator,
-        "Connector" => ComponentClass::Connector,
-        _ => ComponentClass::Ic,
+        "Inductor" => ComponentClass::Inductor,
+        "Diode" => ComponentClass::DiodeRectifier,
+        "Transistor" => ComponentClass::TransistorBjt,
+        "Analog IC" => ComponentClass::AnalogOpAmp,
+        "Power Management" => ComponentClass::RegulatorLdo,
+        "Digital Logic" => ComponentClass::LogicGate,
+        "MCU" => ComponentClass::Mcu,
+        "Memory" => ComponentClass::MemoryFlash,
+        "Communication" => ComponentClass::CommUart,
+        "Sensor" => ComponentClass::SensorTemperature,
+        "RF/Wireless" => ComponentClass::RfTransceiver,
+        "Audio" => ComponentClass::AudioCodec,
+        "Protection" => ComponentClass::ProtectionTvs,
+        "Connector" => ComponentClass::ConnectorHeader,
+        "Electromechanical" => ComponentClass::ElectromechSwitch,
+        "Specialized" => ComponentClass::SpecializedCrystal,
+        _ => ComponentClass::AnalogOpAmp,
     };
 
     Ok(ComponentIntelligenceResult {

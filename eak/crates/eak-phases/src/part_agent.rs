@@ -244,11 +244,104 @@ fn class_matches(label: &str, class: ComponentClass) -> bool {
 /// The canonical string name of a [`ComponentClass`], used in the prompt and for matching.
 fn class_name(class: ComponentClass) -> &'static str {
     match class {
-        ComponentClass::Connector => "Connector",
-        ComponentClass::Regulator => "Regulator",
-        ComponentClass::Ic => "Ic",
+        // Passives
         ComponentClass::Resistor => "Resistor",
         ComponentClass::Capacitor => "Capacitor",
+        ComponentClass::Inductor => "Inductor",
+        // Diodes
+        ComponentClass::DiodeRectifier => "DiodeRectifier",
+        ComponentClass::DiodeSchottky => "DiodeSchottky",
+        ComponentClass::DiodeZener => "DiodeZener",
+        ComponentClass::DiodeTvs => "DiodeTvs",
+        ComponentClass::DiodeLed => "DiodeLed",
+        // Transistors
+        ComponentClass::TransistorBjt => "TransistorBjt",
+        ComponentClass::TransistorMosfet => "TransistorMosfet",
+        ComponentClass::TransistorIgbt => "TransistorIgbt",
+        ComponentClass::TransistorJfet => "TransistorJfet",
+        // Analog ICs
+        ComponentClass::AnalogOpAmp => "AnalogOpAmp",
+        ComponentClass::AnalogComparator => "AnalogComparator",
+        ComponentClass::AnalogAdcDac => "AnalogAdcDac",
+        ComponentClass::AnalogVoltageReference => "AnalogVoltageReference",
+        // Power Management
+        ComponentClass::RegulatorLdo => "RegulatorLdo",
+        ComponentClass::RegulatorSwitching => "RegulatorSwitching",
+        ComponentClass::Pmic => "Pmic",
+        ComponentClass::BatteryManagement => "BatteryManagement",
+        ComponentClass::PowerSwitch => "PowerSwitch",
+        // Digital Logic
+        ComponentClass::LogicGate => "LogicGate",
+        ComponentClass::LogicFlipFlop => "LogicFlipFlop",
+        ComponentClass::LogicCounter => "LogicCounter",
+        ComponentClass::LogicShiftRegister => "LogicShiftRegister",
+        ComponentClass::LogicBufferDriver => "LogicBufferDriver",
+        // MCUs
+        ComponentClass::Mcu => "Mcu",
+        ComponentClass::Soc => "Soc",
+        ComponentClass::Dsp => "Dsp",
+        // Memory
+        ComponentClass::MemoryFlash => "MemoryFlash",
+        ComponentClass::MemoryEeprom => "MemoryEeprom",
+        ComponentClass::MemorySram => "MemorySram",
+        ComponentClass::MemoryDram => "MemoryDram",
+        ComponentClass::MemoryFram => "MemoryFram",
+        // Communication
+        ComponentClass::CommUart => "CommUart",
+        ComponentClass::CommSpi => "CommSpi",
+        ComponentClass::CommI2c => "CommI2c",
+        ComponentClass::CommCan => "CommCan",
+        ComponentClass::CommEthernet => "CommEthernet",
+        ComponentClass::CommUsb => "CommUsb",
+        ComponentClass::CommWireless => "CommWireless",
+        // Sensors
+        ComponentClass::SensorTemperature => "SensorTemperature",
+        ComponentClass::SensorPressure => "SensorPressure",
+        ComponentClass::SensorAccelerometer => "SensorAccelerometer",
+        ComponentClass::SensorGyroscope => "SensorGyroscope",
+        ComponentClass::SensorMagnetometer => "SensorMagnetometer",
+        ComponentClass::SensorOptical => "SensorOptical",
+        ComponentClass::SensorCurrent => "SensorCurrent",
+        ComponentClass::SensorVoltage => "SensorVoltage",
+        // RF/Wireless
+        ComponentClass::RfTransceiver => "RfTransceiver",
+        ComponentClass::RfFrontEnd => "RfFrontEnd",
+        ComponentClass::RfAntenna => "RfAntenna",
+        ComponentClass::RfFilter => "RfFilter",
+        ComponentClass::RfAmplifier => "RfAmplifier",
+        // Audio
+        ComponentClass::AudioCodec => "AudioCodec",
+        ComponentClass::AudioAmplifier => "AudioAmplifier",
+        ComponentClass::AudioMicrophone => "AudioMicrophone",
+        ComponentClass::AudioSpeakerDriver => "AudioSpeakerDriver",
+        // Protection
+        ComponentClass::ProtectionTvs => "ProtectionTvs",
+        ComponentClass::ProtectionFuse => "ProtectionFuse",
+        ComponentClass::ProtectionPtc => "ProtectionPtc",
+        ComponentClass::ProtectionVaristor => "ProtectionVaristor",
+        ComponentClass::ProtectionEsd => "ProtectionEsd",
+        ComponentClass::ProtectionCrowbar => "ProtectionCrowbar",
+        // Connectors
+        ComponentClass::ConnectorHeader => "ConnectorHeader",
+        ComponentClass::ConnectorTerminalBlock => "ConnectorTerminalBlock",
+        ComponentClass::ConnectorUsb => "ConnectorUsb",
+        ComponentClass::ConnectorHdmi => "ConnectorHdmi",
+        ComponentClass::ConnectorRj45 => "ConnectorRj45",
+        ComponentClass::ConnectorCardEdge => "ConnectorCardEdge",
+        ComponentClass::ConnectorFfcFpc => "ConnectorFfcFpc",
+        // Electromechanical
+        ComponentClass::ElectromechSwitch => "ElectromechSwitch",
+        ComponentClass::ElectromechRelay => "ElectromechRelay",
+        ComponentClass::ElectromechButton => "ElectromechButton",
+        ComponentClass::ElectromechEncoder => "ElectromechEncoder",
+        ComponentClass::ElectromechMotorDriver => "ElectromechMotorDriver",
+        ComponentClass::ElectromechFan => "ElectromechFan",
+        // Specialized
+        ComponentClass::SpecializedCrystal => "SpecializedCrystal",
+        ComponentClass::SpecializedOptocoupler => "SpecializedOptocoupler",
+        ComponentClass::SpecializedIsolator => "SpecializedIsolator",
+        ComponentClass::SpecializedCurrentSense => "SpecializedCurrentSense",
+        ComponentClass::SpecializedThermal => "SpecializedThermal",
     }
 }
 
