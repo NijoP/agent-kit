@@ -1,6 +1,6 @@
 //! WebSocket server for real-time dashboard updates
 
-use crate::state::{AgentState, GlobalStats, ModelStatus, ObservabilityState, SessionState};
+use crate::state::{GlobalStats, ModelStatus, ObservabilityState};
 use axum::{
     extract::{
         ws::{Message, WebSocket, WebSocketUpgrade},
@@ -12,10 +12,9 @@ use chrono::Utc;
 use futures::{sink::SinkExt, stream::StreamExt};
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::broadcast;
-use tracing::{debug, info, warn};
+use tracing::info;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
@@ -137,6 +136,7 @@ pub struct TokenUsageInfo {
     pub provider_reported: bool,
 }
 
+#[allow(dead_code)]
 pub struct WebSocketServer {
     state: Arc<ObservabilityState>,
     tx: broadcast::Sender<DashboardMessage>,

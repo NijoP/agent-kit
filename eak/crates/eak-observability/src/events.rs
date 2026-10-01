@@ -151,7 +151,7 @@ impl OpenCodeEvent {
             OpenCodeEvent::StepFinish(e) => e.timestamp,
             OpenCodeEvent::Unknown => 0,
         };
-        DateTime::from_timestamp_millis(ts as i64).unwrap_or_else(|| Utc::now())
+        DateTime::from_timestamp_millis(ts as i64).unwrap_or_else(Utc::now)
     }
 
     pub fn event_type(&self) -> &'static str {

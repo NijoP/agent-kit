@@ -6,7 +6,7 @@ use crate::state::{
     ToolUsage,
 };
 use crate::{ObservabilityError, Result};
-use chrono::{DateTime, Duration, Utc};
+use chrono::Utc;
 use eak_telemetry::{
     models::{RequestType, TokenUsage as TelemetryTokenUsage},
     TelemetryRecorder,
@@ -30,6 +30,7 @@ pub struct ObservabilityBridge {
     event_rx: Arc<RwLock<Option<mpsc::UnboundedReceiver<AgentEvent>>>>,
 }
 
+#[allow(dead_code)]
 struct ProcessHandle {
     session_id: String,
     terminal_id: String,
@@ -37,6 +38,19 @@ struct ProcessHandle {
     model_id: String,
     handle: JoinHandle<()>,
     cancel_tx: mpsc::UnboundedSender<()>,
+}
+
+#[derive(Debug, Clone)]
+struct RunOpenCodeParams {
+    session_id: String,
+    terminal_id: String,
+    agent_name: String,
+    model_id: String,
+    prompt: String,
+    event_tx: mpsc::UnboundedSender<AgentEvent>,
+    state: Arc<ObservabilityState>,
+    recorder: Option<Arc<TelemetryRecorder>>,
+    cancel_rx: mpsc::UnboundedReceiver<()>,
 }
 
 impl ObservabilityBridge {
@@ -348,15 +362,7 @@ impl ObservabilityBridge {
 }
 
 async fn run_opencode_process(
-    session_id: String,
-    terminal_id: String,
-    agent_name: String,
-    model_id: String,
-    prompt: String,
-    event_tx: mpsc::UnboundedSender<AgentEvent>,
-    state: Arc<ObservabilityState>,
-    _recorder: Option<Arc<TelemetryRecorder>>,
-    cancel_rx: &mut mpsc::UnboundedReceiver<()>,
+    params: RunOpenCodeParams,
 ) -> Result<()> {
     // Build OpenCode command
     let mut cmd = Command::new("opencode");
