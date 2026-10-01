@@ -6,7 +6,7 @@
 
 use eak_domain::{ComponentClass, PartLifecycle};
 use once_cell::sync::Lazy;
-use rusqlite::{params, Connection, OptionalExtension, Result, Row};
+use rusqlite::{params, Connection, Result, Row};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
@@ -487,6 +487,7 @@ fn component_class_to_category(class: ComponentClass) -> String {
         ComponentClass::Capacitor => "Capacitor".to_string(),
         ComponentClass::Ic => "IC".to_string(), // Would need mapping
         ComponentClass::Regulator => "Regulator".to_string(),
+        ComponentClass::Connector => "Connector".to_string(),
     }
 }
 
@@ -623,7 +624,7 @@ fn extract_physical_quantities(
 ) {
     if let Some(core) = metadata.get("core") {
         if let Some(_obj) = core.as_object() {
-            for (key, value) in obj {
+            for (key, value) in _obj {
                 if let Some(_obj) = value.as_object() {
                     if let (Some(mag), Some(unit), Some(dim)) = (
                         value.get("magnitude").and_then(|v| v.as_f64()),
@@ -651,7 +652,7 @@ fn extract_physical_quantities(
     if let Some(family) = metadata.get("family") {
         if let Some(data) = family.get("data") {
             if let Some(_obj) = data.as_object() {
-                for (key, value) in obj {
+                for (key, value) in _obj {
                     if let Some(_obj) = value.as_object() {
                         if let (Some(mag), Some(unit), Some(dim)) = (
                             value.get("magnitude").and_then(|v| v.as_f64()),
