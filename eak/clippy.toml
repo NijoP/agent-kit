@@ -3,42 +3,42 @@
 # New code should avoid these patterns; this is a temporary relaxation for CI
 
 # Redundant closures (pre-existing in band-b-clock crosscheck.rs)
-clippy::redundant_closure = "allow"
+redundant_closure = "allow"
 
 # Unused imports (pre-existing in various crates)
-clippy::unused_imports = "allow"
+unused_imports = "allow"
 unused_variables = "allow"
 
 # Dead code (pre-existing in observability crate)
 dead_code = "allow"
 
 # Too many arguments (pre-existing in observability/bridge.rs)
-clippy::too_many_arguments = "allow"
+too_many_arguments = "allow"
 
 # Regex in loops (pre-existing in assets/parser.rs)
-clippy::regex_in_loop = "allow"
+regex_in_loop = "allow"
 
 # Variable naming (Time vs time in crosscheck.rs)
-clippy::enum_variant_names = "allow"
+enum_variant_names = "allow"
 
 # Unused struct fields (pre-existing in observability)
-clippy::unused_self = "allow"
+unused_self = "allow"
 
 # Mutability not needed (pre-existing)
-clippy::needless_mut = "allow"
+needless_mut = "allow"
 
 # Consecutive replace calls (pre-existing in assets/parser.rs)
-clippy::string_replace_consecutive = "allow"
+string_replace_consecutive = "allow"
 
 # Stripping prefix manually (pre-existing in assets/parser.rs)
-clippy::manual_strip = "allow"
-
-# Regex syntax errors with escape sequences (pre-existing in assets/parser.rs)
-# Note: These are actually compile errors in clippy, not lints
-# invalid_regex = "allow"  # Not a valid clippy lint
+manual_strip = "allow"
 
 # Duplicate attributes (pre-existing)
 duplicated_attributes = "allow"
 
 # Unused imports in telemetry
-clippy::unused_async = "allow"
+unused_async = "allow"
+
+# Regex syntax errors with escape sequences (pre-existing in assets/parser.rs)
+# Note: These are actually compile errors in clippy, not lints
+# invalid_regex = "allow"  # Not a valid clippy lint
