@@ -54,9 +54,9 @@ impl TelemetryRecorder {
         let timestamp = Utc::now();
 
         // Execute with retry logic
-        let result = self
-            .retry_policy
-            .execute_with_retry(provider, &self.provider_state, operation);
+        let result =
+            self.retry_policy
+                .execute_with_retry(provider, &self.provider_state, operation);
 
         let latency = start.elapsed().as_millis() as u64;
 

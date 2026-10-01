@@ -896,8 +896,7 @@ pub fn search_by_parameter(
             return Err(rusqlite::Error::InvalidParameterName(format!(
                 "Unknown parameter: {}",
                 param
-            ))
-            )
+            )))
         }
     }
 
