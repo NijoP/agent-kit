@@ -40,7 +40,6 @@ struct ProcessHandle {
     cancel_tx: mpsc::UnboundedSender<()>,
 }
 
-#[derive(Debug, Clone)]
 struct RunOpenCodeParams {
     session_id: String,
     terminal_id: String,
@@ -104,19 +103,18 @@ impl ObservabilityBridge {
         let prompt_for_task = prompt.clone();
 
         let handle = tokio::spawn(async move {
-            if let Err(e) = run_opencode_process(
-                session_id_for_task,
-                terminal_id_for_task,
-                agent_name_for_task,
-                model_id_for_task,
-                prompt_for_task,
+            let params = RunOpenCodeParams {
+                session_id: session_id_for_task,
+                terminal_id: terminal_id_for_task,
+                agent_name: agent_name_for_task,
+                model_id: model_id_for_task,
+                prompt: prompt_for_task,
                 event_tx,
                 state,
                 recorder,
-                &mut cancel_rx,
-            )
-            .await
-            {
+                cancel_rx,
+            };
+            if let Err(e) = run_opencode_process(params).await {
                 error!("OpenCode process error for {}: {}", agent_name_for_error, e);
             }
         });
@@ -362,6 +360,18 @@ impl ObservabilityBridge {
 }
 
 async fn run_opencode_process(params: RunOpenCodeParams) -> Result<()> {
+    let RunOpenCodeParams {
+        session_id,
+        terminal_id,
+        agent_name,
+        model_id,
+        prompt,
+        event_tx,
+        state,
+        recorder,
+        mut cancel_rx,
+    } = params;
+
     // Build OpenCode command
     let mut cmd = Command::new("opencode");
     cmd.arg("run")

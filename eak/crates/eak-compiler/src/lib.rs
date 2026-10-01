@@ -668,7 +668,7 @@ mod tests {
         Component {
             id: EntityId(id),
             refdes: "U1".into(),
-            class: ComponentClass::Regulator,
+            class: ComponentClass::RegulatorLdo,
             value: None,
             from_block,
             origin: ComponentOrigin::Synthesized,

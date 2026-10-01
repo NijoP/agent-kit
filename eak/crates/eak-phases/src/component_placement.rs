@@ -37,9 +37,65 @@ impl Default for ComponentPlacementMachine {
 /// footprint; actives (regulator/IC) sit in the middle; passives are the smallest.
 fn courtyard_mm(class: ComponentClass) -> f64 {
     match class {
-        ComponentClass::Connector => 9.0,
-        ComponentClass::Regulator | ComponentClass::Ic => 6.0,
-        ComponentClass::Resistor | ComponentClass::Capacitor => 3.0,
+        // Passives
+        ComponentClass::Resistor | ComponentClass::Capacitor | ComponentClass::Inductor => 3.0,
+        // Diodes
+        ComponentClass::DiodeRectifier | ComponentClass::DiodeSchottky | ComponentClass::DiodeZener
+        | ComponentClass::DiodeTvs | ComponentClass::DiodeLed => 3.0,
+        // Transistors
+        ComponentClass::TransistorBjt | ComponentClass::TransistorMosfet
+        | ComponentClass::TransistorIgbt | ComponentClass::TransistorJfet => 3.0,
+        // Analog ICs
+        ComponentClass::AnalogOpAmp | ComponentClass::AnalogComparator
+        | ComponentClass::AnalogAdcDac | ComponentClass::AnalogVoltageReference => 6.0,
+        // Power Management
+        ComponentClass::RegulatorLdo | ComponentClass::RegulatorSwitching
+        | ComponentClass::Pmic | ComponentClass::BatteryManagement
+        | ComponentClass::PowerSwitch => 6.0,
+        // Digital Logic
+        ComponentClass::LogicGate | ComponentClass::LogicFlipFlop
+        | ComponentClass::LogicCounter | ComponentClass::LogicShiftRegister
+        | ComponentClass::LogicBufferDriver => 6.0,
+        // MCUs
+        ComponentClass::Mcu | ComponentClass::Soc | ComponentClass::Dsp => 6.0,
+        // Memory
+        ComponentClass::MemoryFlash | ComponentClass::MemoryEeprom
+        | ComponentClass::MemorySram | ComponentClass::MemoryDram
+        | ComponentClass::MemoryFram => 6.0,
+        // Communication
+        ComponentClass::CommUart | ComponentClass::CommSpi
+        | ComponentClass::CommI2c | ComponentClass::CommCan
+        | ComponentClass::CommEthernet | ComponentClass::CommUsb
+        | ComponentClass::CommWireless => 6.0,
+        // Sensors
+        ComponentClass::SensorTemperature | ComponentClass::SensorPressure
+        | ComponentClass::SensorAccelerometer | ComponentClass::SensorGyroscope
+        | ComponentClass::SensorMagnetometer | ComponentClass::SensorOptical
+        | ComponentClass::SensorCurrent | ComponentClass::SensorVoltage => 3.0,
+        // RF/Wireless
+        ComponentClass::RfTransceiver | ComponentClass::RfFrontEnd
+        | ComponentClass::RfAntenna | ComponentClass::RfFilter
+        | ComponentClass::RfAmplifier => 6.0,
+        // Audio
+        ComponentClass::AudioCodec | ComponentClass::AudioAmplifier
+        | ComponentClass::AudioMicrophone | ComponentClass::AudioSpeakerDriver => 6.0,
+        // Protection
+        ComponentClass::ProtectionTvs | ComponentClass::ProtectionFuse
+        | ComponentClass::ProtectionPtc | ComponentClass::ProtectionVaristor
+        | ComponentClass::ProtectionEsd | ComponentClass::ProtectionCrowbar => 3.0,
+        // Connectors
+        ComponentClass::ConnectorHeader | ComponentClass::ConnectorTerminalBlock
+        | ComponentClass::ConnectorUsb | ComponentClass::ConnectorHdmi
+        | ComponentClass::ConnectorRj45 | ComponentClass::ConnectorCardEdge
+        | ComponentClass::ConnectorFfcFpc => 9.0,
+        // Electromechanical
+        ComponentClass::ElectromechSwitch | ComponentClass::ElectromechRelay
+        | ComponentClass::ElectromechButton | ComponentClass::ElectromechEncoder
+        | ComponentClass::ElectromechMotorDriver | ComponentClass::ElectromechFan => 6.0,
+        // Specialized
+        ComponentClass::SpecializedCrystal | ComponentClass::SpecializedOptocoupler
+        | ComponentClass::SpecializedIsolator | ComponentClass::SpecializedCurrentSense
+        | ComponentClass::SpecializedThermal => 6.0,
     }
 }
 

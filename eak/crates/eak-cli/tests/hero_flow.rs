@@ -169,7 +169,7 @@ fn hero_flow_releases_manufacturing_ir_and_replays_byte_identically() {
             .state
             .components
             .iter()
-            .any(|c| c.class == ComponentClass::Connector),
+            .any(|c| c.class == ComponentClass::ConnectorHeader),
         "a USB-C connector realizes the power input"
     );
     assert!(
@@ -177,7 +177,7 @@ fn hero_flow_releases_manufacturing_ir_and_replays_byte_identically() {
             .state
             .components
             .iter()
-            .any(|c| c.class == ComponentClass::Ic),
+            .any(|c| c.class == ComponentClass::AnalogOpAmp),
         "an IC realizes the I²C temperature-sensor host"
     );
     // No Regulator was synthesized (the hero wording avoids the EOL catalog regulator that would
@@ -187,7 +187,7 @@ fn hero_flow_releases_manufacturing_ir_and_replays_byte_identically() {
             .state
             .components
             .iter()
-            .all(|c| c.class != ComponentClass::Regulator),
+            .all(|c| c.class != ComponentClass::RegulatorLdo),
         "the curated hero design carries no (EOL) regulator, so it releases clean"
     );
 

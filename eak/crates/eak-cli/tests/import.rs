@@ -113,7 +113,7 @@ fn imported_footprints_land_as_components_and_placements_through_the_real_seam()
             .find(|c| c.refdes == "J1")
             .unwrap()
             .class,
-        ComponentClass::Connector
+        ComponentClass::ConnectorUsb
     );
 
     // Event-log proof (no back door): one ComponentCommitted + one PlacementCommitted per part and

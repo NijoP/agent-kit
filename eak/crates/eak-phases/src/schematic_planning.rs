@@ -62,12 +62,12 @@ impl Machine for SchematicPlanningMachine {
                     for block in &blocks {
                         let class = classify(block, &requirements);
                         let refdes = match class {
-                            ComponentClass::Connector => {
+                            ComponentClass::ConnectorHeader => {
                                 let r = format!("J{connector_n}");
                                 connector_n += 1;
                                 r
                             }
-                            ComponentClass::Regulator => {
+                            ComponentClass::RegulatorLdo => {
                                 let r = format!("VR{regulator_n}");
                                 regulator_n += 1;
                                 r
@@ -94,16 +94,16 @@ impl Machine for SchematicPlanningMachine {
                         // rail; a regulator sinks its input and drives its output; a load
                         // consumes the rail. All reference ground.
                         let pin_specs: Vec<(&str, PinElectricalType)> = match class {
-                            ComponentClass::Connector => vec![
+                            ComponentClass::ConnectorHeader => vec![
                                 ("VBUS", PinElectricalType::PowerOut),
                                 ("GND", PinElectricalType::Ground),
                             ],
-                            ComponentClass::Regulator => vec![
+                            ComponentClass::RegulatorLdo => vec![
                                 ("VIN", PinElectricalType::PowerIn),
                                 ("VOUT", PinElectricalType::PowerOut),
                                 ("GND", PinElectricalType::Ground),
                             ],
-                            ComponentClass::Ic => vec![
+                            ComponentClass::AnalogOpAmp => vec![
                                 ("VDD", PinElectricalType::PowerIn),
                                 ("GND", PinElectricalType::Ground),
                             ],
@@ -113,6 +113,11 @@ impl Machine for SchematicPlanningMachine {
                             ComponentClass::Resistor | ComponentClass::Capacitor => vec![
                                 ("1", PinElectricalType::Passive),
                                 ("2", PinElectricalType::Passive),
+                            ],
+                            // Default to IC-like template for any other class.
+                            _ => vec![
+                                ("VDD", PinElectricalType::PowerIn),
+                                ("GND", PinElectricalType::Ground),
                             ],
                         };
                         let pins: Vec<Pin> = pin_specs
@@ -160,7 +165,7 @@ impl Machine for SchematicPlanningMachine {
                     };
                     let has_regulator = components
                         .iter()
-                        .any(|c| c.class == ComponentClass::Regulator);
+                        .any(|c| c.class == ComponentClass::RegulatorLdo);
 
                     let mut rails: Vec<(&str, Vec<EntityId>)> = Vec::new();
                     if has_regulator {
@@ -170,9 +175,9 @@ impl Machine for SchematicPlanningMachine {
                             .filter(|p| {
                                 let c = class_of(p);
                                 (p.electrical_type == PinElectricalType::PowerOut
-                                    && c == Some(ComponentClass::Connector))
+                                    && c == Some(ComponentClass::ConnectorHeader))
                                     || (p.electrical_type == PinElectricalType::PowerIn
-                                        && c == Some(ComponentClass::Regulator))
+                                        && c == Some(ComponentClass::RegulatorLdo))
                             })
                             .map(|p| p.id)
                             .collect();
@@ -183,9 +188,9 @@ impl Machine for SchematicPlanningMachine {
                             .filter(|p| {
                                 let c = class_of(p);
                                 (p.electrical_type == PinElectricalType::PowerOut
-                                    && c == Some(ComponentClass::Regulator))
+                                    && c == Some(ComponentClass::RegulatorLdo))
                                     || (p.electrical_type == PinElectricalType::PowerIn
-                                        && c != Some(ComponentClass::Regulator))
+                                        && c != Some(ComponentClass::RegulatorLdo))
                             })
                             .map(|p| p.id)
                             .collect();
@@ -261,10 +266,10 @@ impl Machine for SchematicPlanningMachine {
 }
 
 /// Classify a block into a [`ComponentClass`] from its primary requirement (P3). A voltage
-/// regulator/LDO is recognized first ([`ComponentClass::Regulator`]) — its wording names a
+/// regulator/LDO is recognized first ([`ComponentClass::RegulatorLdo`]) — its wording names a
 /// regulation concept regardless of category. Otherwise a block is a power *source*
-/// ([`ComponentClass::Connector`]) iff that requirement is functional AND its wording names a
-/// power-entry concept; failing both it is a load ([`ComponentClass::Ic`]).
+/// ([`ComponentClass::ConnectorHeader`]) iff that requirement is functional AND its wording names a
+/// power-entry concept; failing both it is a load ([`ComponentClass::AnalogOpAmp`]).
 fn classify(block: &FunctionalBlock, requirements: &[Requirement]) -> ComponentClass {
     let primary = block
         .requirements
@@ -276,16 +281,16 @@ fn classify(block: &FunctionalBlock, requirements: &[Requirement]) -> ComponentC
         // downstream one, so it must not be mistaken for a plain power-entry source.
         const REGULATOR_CUES: [&str; 3] = ["regulator", "ldo", "voltage regulation"];
         if REGULATOR_CUES.iter().any(|cue| s.contains(cue)) {
-            return ComponentClass::Regulator;
+            return ComponentClass::RegulatorLdo;
         }
         const SOURCE_CUES: [&str; 4] = ["usb", "power", "connector", "supply"];
         let is_source = req.category == RequirementCategory::Functional
             && SOURCE_CUES.iter().any(|cue| s.contains(cue));
         if is_source {
-            return ComponentClass::Connector;
+            return ComponentClass::ConnectorHeader;
         }
     }
-    ComponentClass::Ic
+    ComponentClass::AnalogOpAmp
 }
 
 /// Project canonical state into the [`SchematicIr`] through the full lowering chain

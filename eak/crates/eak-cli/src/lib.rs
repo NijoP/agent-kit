@@ -1219,9 +1219,9 @@ fn handle_asset_compare(id: i64, class_str: String, db: PathBuf) -> Result<(), C
     let component_class = match class_str.to_lowercase().as_str() {
         "resistor" | "passive" => ComponentClass::Resistor,
         "capacitor" => ComponentClass::Capacitor,
-        "ic" | "analogic" | "analog" => ComponentClass::Ic,
-        "regulator" | "powermanagement" | "power" => ComponentClass::Regulator,
-        "connector" => ComponentClass::Connector,
+        "ic" | "analogic" | "analog" => ComponentClass::AnalogOpAmp,
+        "regulator" | "powermanagement" | "power" => ComponentClass::RegulatorLdo,
+        "connector" => ComponentClass::ConnectorHeader,
         _ => {
             return Err(CliError::Msg(format!(
             "Unknown component class: {} (valid: resistor, capacitor, ic, regulator, connector)",

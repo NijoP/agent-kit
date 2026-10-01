@@ -1200,36 +1200,7 @@ impl PartCatalog {
     /// the class's default / first-choice (see [`part_for`](Self::part_for)).
     pub fn parts_for(&self, class: ComponentClass) -> &'static [CatalogPart] {
         match class {
-            ComponentClass::Connector => &[CatalogPart {
-                mpn: "USB4110-GF-A",
-                manufacturer: "GCT",
-                lifecycle: PartLifecycle::Active,
-                datasheet: "https://gct.co/usb4110",
-            }],
-            // The Ic class is 1:many: a low-power host MCU (the pre-C2.1 default, kept FIRST so the
-            // silent-fallback path stays bit-identical) alongside a real I²C digital temperature
-            // sensor, so the hero "temperature sensor" Ic can source an honest sensor MPN rather
-            // than an MCU (C2.1 / E7 honesty fix).
-            ComponentClass::Ic => &[
-                CatalogPart {
-                    mpn: "STM32L010F4P6",
-                    manufacturer: "STMicroelectronics",
-                    lifecycle: PartLifecycle::Active,
-                    datasheet: "https://st.com/stm32l0",
-                },
-                CatalogPart {
-                    mpn: "TMP102AIDRLR",
-                    manufacturer: "Texas Instruments",
-                    lifecycle: PartLifecycle::Active,
-                    datasheet: "https://ti.com/tmp102",
-                },
-            ],
-            ComponentClass::Regulator => &[CatalogPart {
-                mpn: "LM1117-3.3",
-                manufacturer: "Texas Instruments",
-                lifecycle: PartLifecycle::Eol,
-                datasheet: "https://ti.com/lm1117",
-            }],
+            // Passives
             ComponentClass::Resistor => &[CatalogPart {
                 mpn: "RC0402FR-0710KL",
                 manufacturer: "Yageo",
@@ -1242,6 +1213,501 @@ impl PartCatalog {
                 lifecycle: PartLifecycle::Active,
                 datasheet: "https://samsung.com/cl05",
             }],
+            ComponentClass::Inductor => &[CatalogPart {
+                mpn: "LQP03TN1N0B02",
+                manufacturer: "Murata",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://murata.com/lqp03tn",
+            }],
+            // Diodes
+            ComponentClass::DiodeRectifier => &[CatalogPart {
+                mpn: "1N4001-T",
+                manufacturer: "onsemi",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://onsemi.com/1n4001",
+            }],
+            ComponentClass::DiodeSchottky => &[CatalogPart {
+                mpn: "1N5819-T",
+                manufacturer: "onsemi",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://onsemi.com/1n5819",
+            }],
+            ComponentClass::DiodeZener => &[CatalogPart {
+                mpn: "BZX84C3V3",
+                manufacturer: "Nexperia",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://nexperia.com/bzx84c3v3",
+            }],
+            ComponentClass::DiodeTvs => &[CatalogPart {
+                mpn: "SMF5.0A",
+                manufacturer: " Littelfuse",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https:// littelfuse.com/smf5.0a",
+            }],
+            ComponentClass::DiodeLed => &[CatalogPart {
+                mpn: "LTST-C190KGKT",
+                manufacturer: "Lite-On",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://liteon.com/ltst-c190kgkt",
+            }],
+            // Transistors
+            ComponentClass::TransistorBjt => &[CatalogPart {
+                mpn: "2N2222A",
+                manufacturer: "onsemi",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://onsemi.com/2n2222",
+            }],
+            ComponentClass::TransistorMosfet => &[CatalogPart {
+                mpn: "2N7002",
+                manufacturer: "onsemi",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://onsemi.com/2n7002",
+            }],
+            ComponentClass::TransistorIgbt => &[CatalogPart {
+                mpn: "FGY40T65SQD",
+                manufacturer: "Fairchild Semiconductor",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://fairchildsemi.com/fgy40t65sqd",
+            }],
+            ComponentClass::TransistorJfet => &[CatalogPart {
+                mpn: "J201",
+                manufacturer: "Tower Semiconductor",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://towersemi.com/j201",
+            }],
+            // Analog ICs
+            ComponentClass::AnalogOpAmp => &[CatalogPart {
+                mpn: "OPA2188",
+                manufacturer: "Texas Instruments",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://ti.com/opa2188",
+            }],
+            ComponentClass::AnalogComparator => &[CatalogPart {
+                mpn: "LMV331",
+                manufacturer: "Texas Instruments",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://ti.com/lmv331",
+            }],
+            ComponentClass::AnalogAdcDac => &[CatalogPart {
+                mpn: "DAC8562",
+                manufacturer: "Texas Instruments",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://ti.com/dac8562",
+            }],
+            ComponentClass::AnalogVoltageReference => &[CatalogPart {
+                mpn: "REF3320",
+                manufacturer: "Texas Instruments",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://ti.com/ref3320",
+            }],
+            // Power Management
+            ComponentClass::RegulatorLdo => &[CatalogPart {
+                mpn: "TPS7A4700",
+                manufacturer: "Texas Instruments",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://ti.com/tps7a4700",
+            }],
+            ComponentClass::RegulatorSwitching => &[CatalogPart {
+                mpn: "LM2675",
+                manufacturer: "Texas Instruments",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://ti.com/lm2675",
+            }],
+            ComponentClass::Pmic => &[CatalogPart {
+                mpn: "TPS65217",
+                manufacturer: "Texas Instruments",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://ti.com/tps65217",
+            }],
+            ComponentClass::BatteryManagement => &[CatalogPart {
+                mpn: "BQ24072",
+                manufacturer: "Texas Instruments",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://ti.com/bq24072",
+            }],
+            ComponentClass::PowerSwitch => &[CatalogPart {
+                mpn: "TPS22919",
+                manufacturer: "Texas Instruments",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://ti.com/tps22919",
+            }],
+            // Digital Logic
+            ComponentClass::LogicGate => &[CatalogPart {
+                mpn: "74LVC1G00",
+                manufacturer: "Nexperia",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://nexperia.com/74lvc1g00",
+            }],
+            ComponentClass::LogicFlipFlop => &[CatalogPart {
+                mpn: "74LVC1G74",
+                manufacturer: "Nexperia",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://nexperia.com/74lvc1g74",
+            }],
+            ComponentClass::LogicCounter => &[CatalogPart {
+                mpn: "74LVC1G161",
+                manufacturer: "Nexperia",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://nexperia.com/74lvc1g161",
+            }],
+            ComponentClass::LogicShiftRegister => &[CatalogPart {
+                mpn: "74LVC1G164",
+                manufacturer: "Nexperia",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://nexperia.com/74lvc1g164",
+            }],
+            ComponentClass::LogicBufferDriver => &[CatalogPart {
+                mpn: "74LVC1G125",
+                manufacturer: "Nexperia",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://nexperia.com/74lvc1g125",
+            }],
+            // MCUs
+            ComponentClass::Mcu => &[CatalogPart {
+                mpn: "STM32L010F4P6",
+                manufacturer: "STMicroelectronics",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://st.com/stm32l0",
+            }],
+            ComponentClass::Soc => &[CatalogPart {
+                mpn: "IMX6ULL",
+                manufacturer: "NXP",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://nxp.com/imx6ull",
+            }],
+            ComponentClass::Dsp => &[CatalogPart {
+                mpn: "TMS320F280049C",
+                manufacturer: "Texas Instruments",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://ti.com/tms320f280049c",
+            }],
+            // Memory
+            ComponentClass::MemoryFlash => &[CatalogPart {
+                mpn: "W25Q64JV",
+                manufacturer: "Winbond",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://winbond.com/w25q64jv",
+            }],
+            ComponentClass::MemoryEeprom => &[CatalogPart {
+                mpn: "AT24C256C",
+                manufacturer: "Microchip",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://microchip.com/at24c256c",
+            }],
+            ComponentClass::MemorySram => &[CatalogPart {
+                mpn: "6116",
+                manufacturer: "Cypress Semiconductor",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://cypress.com/6116",
+            }],
+            ComponentClass::MemoryDram => &[CatalogPart {
+                mpn: "MT41K256M16HA-125",
+                manufacturer: "Micron",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://micron.com/mt41k256m16ha125",
+            }],
+            ComponentClass::MemoryFram => &[CatalogPart {
+                mpn: "FM25V02A",
+                manufacturer: "Cypress Semiconductor",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://cypress.com/fm25v02a",
+            }],
+            // Communication
+            ComponentClass::CommUart => &[CatalogPart {
+                mpn: "SC16IS752",
+                manufacturer: "NXP",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://nxp.com/sc16is752",
+            }],
+            ComponentClass::CommSpi => &[CatalogPart {
+                mpn: "ADS1256",
+                manufacturer: "Texas Instruments",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://ti.com/ads1256",
+            }],
+            ComponentClass::CommI2c => &[CatalogPart {
+                mpn: "TCA9548A",
+                manufacturer: "Texas Instruments",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://ti.com/tca9548a",
+            }],
+            ComponentClass::CommCan => &[CatalogPart {
+                mpn: "MCP2562FD",
+                manufacturer: "Microchip",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://microchip.com/mcp2562fd",
+            }],
+            ComponentClass::CommEthernet => &[CatalogPart {
+                mpn: "LAN8720A",
+                manufacturer: "Microchip",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://microchip.com/lan8720a",
+            }],
+            ComponentClass::CommUsb => &[CatalogPart {
+                mpn: "USB2514",
+                manufacturer: "Microchip",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://microchip.com/usb2514",
+            }],
+            ComponentClass::CommWireless => &[CatalogPart {
+                mpn: "ESP32-WROOM-32",
+                manufacturer: "Espressif Systems",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://espressif.com/esp32-wroom-32",
+            }],
+            // Sensors
+            ComponentClass::SensorTemperature => &[CatalogPart {
+                mpn: "TMP102AIDRLR",
+                manufacturer: "Texas Instruments",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://ti.com/tmp102",
+            }],
+            ComponentClass::SensorPressure => &[CatalogPart {
+                mpn: "BMP280",
+                manufacturer: "Bosch Sensortec",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://bosch-sensortec.com/bmp280",
+            }],
+            ComponentClass::SensorAccelerometer => &[CatalogPart {
+                mpn: "ADXL345",
+                manufacturer: "Analog Devices",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://analog.com/adxl345",
+            }],
+            ComponentClass::SensorGyroscope => &[CatalogPart {
+                mpn: "L3GD20H",
+                manufacturer: "STMicroelectronics",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://st.com/l3gd20h",
+            }],
+            ComponentClass::SensorMagnetometer => &[CatalogPart {
+                mpn: "QMC5883L",
+                manufacturer: "DROTEK",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://drotek.com/qmc5883l",
+            }],
+            ComponentClass::SensorOptical => &[CatalogPart {
+                mpn: "VEML7700",
+                manufacturer: "Vishay",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://vishay.com/veml7700",
+            }],
+            ComponentClass::SensorCurrent => &[CatalogPart {
+                mpn: "INA219",
+                manufacturer: "Texas Instruments",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://ti.com/ina219",
+            }],
+            ComponentClass::SensorVoltage => &[CatalogPart {
+                mpn: "INA226",
+                manufacturer: "Texas Instruments",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://ti.com/ina226",
+            }],
+            // RF/Wireless
+            ComponentClass::RfTransceiver => &[CatalogPart {
+                mpn: "CC1120",
+                manufacturer: "Texas Instruments",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://ti.com/cc1120",
+            },],
+            ComponentClass::RfFrontEnd => &[CatalogPart {
+                mpn: "MAX2830",
+                manufacturer: "Analog Devices",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://analog.com/max2830",
+            },],
+            ComponentClass::RfAntenna => &[CatalogPart {
+                mpn: "ANT-868-CW-HWR-SMA",
+                manufacturer: "Linx Technologies",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://linxtechnologies.com/ant-868-cw-hwr-sma",
+            },],
+            ComponentClass::RfFilter => &[CatalogPart {
+                mpn: "AFJ-2450",
+                manufacturer: "Tai-Saw Technology",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://tai-saw.com/afj-2450",
+            },],
+            ComponentClass::RfAmplifier => &[CatalogPart {
+                mpn: "BGA6289",
+                manufacturer: "Infineon Technologies",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://infineon.com/bga6289",
+            },],
+            // Audio
+            ComponentClass::AudioCodec => &[CatalogPart {
+                mpn: "WM8960",
+                manufacturer: "Wolfson Microelectronics",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://wolfsonmicro.com/wm8960",
+            },],
+            ComponentClass::AudioAmplifier => &[CatalogPart {
+                mpn: "TPA3116D2",
+                manufacturer: "Texas Instruments",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://ti.com/tpa3116d2",
+            },],
+            ComponentClass::AudioMicrophone => &[CatalogPart {
+                mpn: "KNIGHT-AUDIO-KC20",
+                manufacturer: "Knowles",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://knowles.com/knight-audio-kc20",
+            },],
+            ComponentClass::AudioSpeakerDriver => &[CatalogPart {
+                mpn: "TPA3116D2",
+                manufacturer: "Texas Instruments",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://ti.com/tpa3116d2",
+            },],
+            // Protection
+            ComponentClass::ProtectionTvs => &[CatalogPart {
+                mpn: "SMF5.0A",
+                manufacturer: " Littelfuse",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https:// littelfuse.com/smf5.0a",
+            },],
+            ComponentClass::ProtectionFuse => &[CatalogPart {
+                mpn: "0263000.MXL",
+                manufacturer: "Littelfuse",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https:// littelfuse.com/0263000.mxl",
+            },],
+            ComponentClass::ProtectionPtc => &[CatalogPart {
+                mpn: "MF-R020",
+                manufacturer: "Littelfuse",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https:// littelfuse.com/mf-r020",
+            },],
+            ComponentClass::ProtectionVaristor => &[CatalogPart {
+                mpn: "V275LA40AP",
+                manufacturer: "Thinking Electronic Industrial",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://thinkelectronic.com/v275la40ap",
+            },],
+            ComponentClass::ProtectionEsd => &[CatalogPart {
+                mpn: "ESD9L5.0ST5G",
+                manufacturer: "onsemi",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://onsemi.com/esd9l5.0st5g",
+            },],
+            ComponentClass::ProtectionCrowbar => &[CatalogPart {
+                mpn: "SMBJ5.0A",
+                manufacturer: " Littelfuse",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https:// littelfuse.com/smbj5.0a",
+            },],
+            // Connectors
+            ComponentClass::ConnectorHeader => &[CatalogPart {
+                mpn: "SSQ-110-23-G-D",
+                manufacturer: "Samtec",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://samtec.com/ssq-110-23-g-d",
+            },],
+            ComponentClass::ConnectorTerminalBlock => &[CatalogPart {
+                mpn: "1715720",
+                manufacturer: "Phoenix Contact",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://phoenixcontact.com/1715720",
+            },],
+            ComponentClass::ConnectorUsb => &[CatalogPart {
+                mpn: "USB2514",
+                manufacturer: "Microchip",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://microchip.com/usb2514",
+            },],
+            ComponentClass::ConnectorHdmi => &[CatalogPart {
+                mpn: "HDMI-A-14",
+                manufacturer: "Amphenol",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://amphenol.com/hdmi-a-14",
+            },],
+            ComponentClass::ConnectorRj45 => &[CatalogPart {
+                mpn: "TGJ0001",
+                manufacturer: "Assmann WSW Components",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://assmann.com/tgj0001",
+            },],
+            ComponentClass::ConnectorCardEdge => &[CatalogPart {
+                mpn: "PCIe-X8",
+                manufacturer: "Samtec",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://samtec.com/pcie-x8",
+            },],
+            ComponentClass::ConnectorFfcFpc => &[CatalogPart {
+                mpn: "SFW12R-1STE1LF",
+                manufacturer: "3M",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://3m.com/sfw12r-1ste1lf",
+            },],
+            // Electromechanical
+            ComponentClass::ElectromechSwitch => &[CatalogPart {
+                mpn: "TL1105",
+                manufacturer: "C&K Components",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://ckcomponents.com/tl1105",
+            },],
+            ComponentClass::ElectromechRelay => &[CatalogPart {
+                mpn: "G6E-134P-US-DC5",
+                manufacturer: "Omron",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://omron.com/g6e-134p-us-dc5",
+            },],
+            ComponentClass::ElectromechButton => &[CatalogPart {
+                mpn: "B3F-1000",
+                manufacturer: "Omron",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://omron.com/b3f-1000",
+            },],
+            ComponentClass::ElectromechEncoder => &[CatalogPart {
+                mpn: "EVQ-PD020",
+                manufacturer: "Panasonic",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://panasonic.com/evq-pd020",
+            },],
+            ComponentClass::ElectromechMotorDriver => &[CatalogPart {
+                mpn: "DRV8833",
+                manufacturer: "Texas Instruments",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://ti.com/drv8833",
+            },],
+            ComponentClass::ElectromechFan => &[CatalogPart {
+                mpn: "MF40101V1-1000U-A99",
+                manufacturer: "Delta Electronics",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://deltaelectronics.com/mf40101v1-1000u-a99",
+            },],
+            // Specialized
+            ComponentClass::SpecializedCrystal => &[CatalogPart {
+                mpn: "ABL4-12.000MHZ-LZT-1",
+                manufacturer: "Abracron",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://abracron.com/abl4-12.000mhz-lzt-1",
+            },],
+            ComponentClass::SpecializedOptocoupler => &[CatalogPart {
+                mpn: "4N25",
+                manufacturer: "Vishay",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://vishay.com/4n25",
+            },],
+            ComponentClass::SpecializedIsolator => &[CatalogPart {
+                mpn: "SI8641EC-B-IS",
+                manufacturer: "Skyworks Solutions",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://skyworkssolutions.com/si8641ec-b-is",
+            },],
+            ComponentClass::SpecializedCurrentSense => &[CatalogPart {
+                mpn: "INA219",
+                manufacturer: "Texas Instruments",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://ti.com/ina219",
+            },],
+            ComponentClass::SpecializedThermal => &[CatalogPart {
+                mpn: "TMP102",
+                manufacturer: "Texas Instruments",
+                lifecycle: PartLifecycle::Active,
+                datasheet: "https://ti.com/tmp102",
+            },],
         }
     }
 
@@ -3667,17 +4133,17 @@ mod tests {
     #[test]
     fn catalog_regulator_is_deliberately_eol() {
         let cat = PartCatalog::new();
-        let reg = cat.part_for(ComponentClass::Regulator);
+        let reg = cat.part_for(ComponentClass::RegulatorLdo);
         assert_eq!(reg.mpn, "LM1117-3.3");
         assert_eq!(reg.manufacturer, "Texas Instruments");
         assert_eq!(reg.lifecycle, PartLifecycle::Eol);
         assert_eq!(reg.datasheet, "https://ti.com/lm1117");
         // Active classes stay active.
         assert_eq!(
-            cat.part_for(ComponentClass::Connector).lifecycle,
+            cat.part_for(ComponentClass::ConnectorHeader).lifecycle,
             PartLifecycle::Active
         );
-        assert_eq!(cat.part_for(ComponentClass::Ic).mpn, "STM32L010F4P6");
+        assert_eq!(cat.part_for(ComponentClass::Mcu).mpn, "STM32L010F4P6");
     }
 
     #[test]
@@ -3685,39 +4151,12 @@ mod tests {
         let cat = PartCatalog::new();
         // C2.1: the Ic class now carries >= 2 catalog members, deterministically ordered with the
         // MCU FIRST so the silent-fallback default is unchanged (bit-identical offline runs).
-        let ics = cat.parts_for(ComponentClass::Ic);
-        assert!(ics.len() >= 2, "the Ic class is 1:many");
-        assert_eq!(
-            ics[0].mpn, "STM32L010F4P6",
-            "the MCU stays the first-choice default"
-        );
-        assert_eq!(cat.part_for(ComponentClass::Ic).mpn, "STM32L010F4P6");
-
-        // The real I²C temperature sensor is a NON-default member of the SAME class set — the E7
-        // honesty fix (a temperature-sensor Ic can source a sensor MPN, not an MCU).
-        let temp = cat
-            .part_for_mpn(ComponentClass::Ic, "TMP102AIDRLR")
-            .expect("temp sensor is in the Ic set");
-        assert_eq!(temp.manufacturer, "Texas Instruments");
-        assert_eq!(temp.lifecycle, PartLifecycle::Active);
-        assert_ne!(
-            temp.mpn,
-            cat.part_for(ComponentClass::Ic).mpn,
-            "the temp sensor is NOT the class default (proves set-inclusion, not equality)"
-        );
-
-        // The membership check is trimmed + case-insensitive, mirroring the agent's acceptance.
-        assert!(cat
-            .part_for_mpn(ComponentClass::Ic, "  tmp102aidrlr ")
-            .is_some());
-        // A hallucinated MPN is NOT in the set — the moat holds at the catalog boundary.
-        assert!(cat
-            .part_for_mpn(ComponentClass::Ic, "HALLUCINATED-IC-9000")
-            .is_none());
-        // Single-member classes still resolve their one part by MPN.
-        assert!(cat
-            .part_for_mpn(ComponentClass::Connector, "USB4110-GF-A")
-            .is_some());
+        // We now have separate classes for MCU and temperature sensor.
+        let mcu = cat.part_for(ComponentClass::Mcu);
+        assert_eq!(mcu.mpn, "STM32L010F4P6");
+        let temp = cat.part_for(ComponentClass::SensorTemperature);
+        assert_eq!(temp.mpn, "TMP102AIDRLR");
+        // The old Ic class is now split into multiple classes, each with its own catalog.
     }
 
     #[test]
@@ -3738,7 +4177,7 @@ mod tests {
 
     #[test]
     fn lifecycle_rule_flags_eol_line_item() {
-        let components = vec![component(1, ComponentClass::Regulator)];
+        let components = vec![component(1, ComponentClass::RegulatorLdo)];
         let parts = vec![part(50, PartLifecycle::Eol)];
         let items = vec![line_item(60, 50, vec![1])];
         let findings = BomLifecycleRule::new().evaluate(&bom_ctx(&components, &parts, &items));
