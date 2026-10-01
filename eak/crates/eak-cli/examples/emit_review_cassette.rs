@@ -46,7 +46,12 @@ fn main() {
     let records = core.log().read_all().expect("read committed log");
     let mut file = fs::File::create(Path::new(&out)).expect("open output");
     for record in &records {
-        writeln!(file, "{}", serde_json::to_string(record).expect("serialize event")).expect("write");
+        writeln!(
+            file,
+            "{}",
+            serde_json::to_string(record).expect("serialize event")
+        )
+        .expect("write");
     }
     eprintln!("wrote {} events -> {out}", records.len());
 }

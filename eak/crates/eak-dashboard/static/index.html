@@ -1,0 +1,1114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EAK Multi-Model Dashboard</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: #1a1a2e;
+            color: #eaeaea;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid #2a2a4a;
+        }
+        
+        .header h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #fff;
+        }
+        
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+        
+        .status-badge.healthy { background: #0f3460; color: #4ade80; }
+        .status-badge.degraded { background: #3d2a0f; color: #fbbf24; }
+        .status-badge.ratelimited { background: #3d0f0f; color: #f87171; }
+        .status-badge.offline { background: #1f1f1f; color: #9ca3af; }
+        .status-badge.unknown { background: #1f1f1f; color: #6b7280; }
+        
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 20px;
+        }
+        
+        .card {
+            background: #16213e;
+            border: 1px solid #2a2a4a;
+            border-radius: 12px;
+            padding: 20px;
+        }
+        
+        .card h2 {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .card h2::before {
+            content: '';
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #4ade80;
+        }
+        
+        .model-card {
+            border-left: 4px solid #4ade80;
+        }
+        
+        .model-card.ratelimited {
+            border-left-color: #f87171;
+        }
+        
+        .model-card.degraded {
+            border-left-color: #fbbf24;
+        }
+        
+        .model-card.offline {
+            border-left-color: #9ca3af;
+        }
+        
+        .metric-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #2a2a4a;
+        }
+        
+        .metric-row:last-child {
+            border-bottom: none;
+        }
+        
+        .metric-label {
+            color: #9ca3af;
+            font-size: 0.9rem;
+        }
+        
+        .metric-value {
+            font-weight: 600;
+            color: #fff;
+        }
+        
+        .metric-value.warning {
+            color: #fbbf24;
+        }
+        
+        .metric-value.error {
+            color: #f87171;
+        }
+        
+        .metric-value.success {
+            color: #4ade80;
+        }
+        
+        .global-stats {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+        }
+        
+        .stat-box {
+            background: #0f3460;
+            border-radius: 8px;
+            padding: 16px;
+            text-align: center;
+        }
+        
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #4ade80;
+        }
+        
+        .stat-label {
+            font-size: 0.75rem;
+            color: #9ca3af;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        
+        .requests-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+        }
+        
+        .requests-table th {
+            text-align: left;
+            padding: 10px 12px;
+            color: #9ca3af;
+            font-weight: 500;
+            border-bottom: 1px solid #2a2a4a;
+            background: #0f3460;
+        }
+        
+        .requests-table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #1f1f3a;
+        }
+        
+        .requests-table tr:hover {
+            background: #1a2a4a;
+        }
+        
+        .status-cell {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+        
+        .status-cell.success { background: #064e3b; color: #4ade80; }
+        .status-cell.failed { background: #7f1d1d; color: #f87171; }
+        .status-cell.ratelimited { background: #7f1d1d; color: #fbbf24; }
+        .status-cell.timeout { background: #7f1d1d; color: #fbbf24; }
+        
+        .refresh-btn {
+            background: #0f3460;
+            border: 1px solid #2a2a4a;
+            color: #4ade80;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: all 0.2s;
+        }
+        
+        .refresh-btn:hover {
+            background: #1a2a4a;
+            border-color: #4ade80;
+        }
+        
+        .refresh-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .loading {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #2a2a4a;
+            border-top-color: #4ade80;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .hidden {
+            display: none;
+        }
+        
+        .timestamp {
+            font-size: 0.75rem;
+            color: #6b7280;
+        }
+        
+        .provider-section {
+            margin-top: 20px;
+        }
+        
+        .provider-card {
+            background: #0f3460;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 12px;
+        }
+        
+        .provider-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+        
+        .provider-name {
+            font-weight: 600;
+            color: #fff;
+        }
+        
+        .models-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 8px;
+        }
+        
+        .model-tag {
+            background: #1a2a4a;
+            padding: 4px 10px;
+            border-radius: 16px;
+            font-size: 0.75rem;
+            color: #cbd5e1;
+        }
+        
+        .model-card.working {
+            border-left-color: #4ade80;
+        }
+        
+        .task-display {
+            margin-top: 16px;
+            padding: 12px;
+            background: #0f3460;
+            border-radius: 8px;
+            border: 1px solid #2a2a4a;
+        }
+        
+        .task-display .metric-row {
+            padding: 4px 0;
+            border-bottom: 1px solid #2a2a4a;
+        }
+        
+        .task-display .metric-row:last-child {
+            border-bottom: none;
+        }
+        
+        .task-display .metric-label {
+            color: #9ca3af;
+            font-size: 0.8rem;
+        }
+        
+        .task-display .metric-value {
+            font-size: 0.85rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>EAK Multi-Model Dashboard</h1>
+        <div>
+            <span id="providerStatus" class="status-badge unknown">Provider: Unknown</span>
+            <span id="wsStatus" class="status-badge offline">Live: Disconnected</span>
+            <button id="refreshBtn" class="refresh-btn" onclick="loadInitialData()">
+                <span class="loading hidden" id="loadingSpinner"></span>
+                <span id="refreshText">Refresh</span>
+            </button>
+        </div>
+    </div>
+    
+    <div class="grid">
+        <div class="card">
+            <h2>Global Statistics</h2>
+            <div class="global-stats" id="globalStats">
+                <div class="stat-box">
+                    <div class="stat-value" id="totalRequests">-</div>
+                    <div class="stat-label">Total Requests</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value success" id="successfulRequests">-</div>
+                    <div class="stat-label">Successful</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value error" id="failedRequests">-</div>
+                    <div class="stat-label">Failed</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value warning" id="rateLimitEvents">-</div>
+                    <div class="stat-label">Rate Limits</div>
+                </div>
+            </div>
+            <div style="margin-top: 16px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;">
+                <div class="stat-box">
+                    <div class="stat-value" id="totalTokens">-</div>
+                    <div class="stat-label">Total Tokens</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value" id="activeModels">-</div>
+                    <div class="stat-label">Active Models</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value" id="errorRate">-</div>
+                    <div class="stat-label">Error Rate</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h2>Provider Status</h2>
+            <div id="providerStates" class="provider-section">
+                <div class="provider-card">
+                    <div class="provider-header">
+                        <span class="provider-name">Loading...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="grid" style="margin-top: 20px;">
+        <div class="card model-card" id="modelUltra" data-model="nemotron-3-ultra-550b-a55b">
+            <h2>EAK-Architect (Ultra 550B)</h2>
+            <div class="metric-row">
+                <span class="metric-label">Status</span>
+                <span class="metric-value" id="ultraStatus">Loading...</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Total Requests</span>
+                <span class="metric-value" id="ultraTotalRequests">-</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Successful</span>
+                <span class="metric-value success" id="ultraSuccess">-</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Failed</span>
+                <span class="metric-value error" id="ultraFailed">-</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Rate Limits</span>
+                <span class="metric-value warning" id="ultraRateLimits">-</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Avg Latency</span>
+                <span class="metric-value" id="ultraLatency">-</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Total Retries</span>
+                <span class="metric-value" id="ultraRetries">-</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Cooldown</span>
+                <span class="metric-value" id="ultraCooldown">-</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Tokens (In/Out)</span>
+                <span class="metric-value" id="ultraTokens">-</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Last Request</span>
+                <span class="metric-value timestamp" id="ultraLastRequest">-</span>
+            </div>
+            <div id="modelUltraTask" class="task-display"></div>
+        </div>
+        
+        <div class="card model-card" id="modelSuper" data-model="nemotron-3-super-120b-a12b">
+            <h2>EAK-Engineer (Super 120B)</h2>
+            <div class="metric-row">
+                <span class="metric-label">Status</span>
+                <span class="metric-value" id="superStatus">Loading...</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Total Requests</span>
+                <span class="metric-value" id="superTotalRequests">-</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Successful</span>
+                <span class="metric-value success" id="superSuccess">-</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Failed</span>
+                <span class="metric-value error" id="superFailed">-</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Rate Limits</span>
+                <span class="metric-value warning" id="superRateLimits">-</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Avg Latency</span>
+                <span class="metric-value" id="superLatency">-</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Total Retries</span>
+                <span class="metric-value" id="superRetries">-</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Cooldown</span>
+                <span class="metric-value" id="superCooldown">-</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Tokens (In/Out)</span>
+                <span class="metric-value" id="superTokens">-</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Last Request</span>
+                <span class="metric-value timestamp" id="superLastRequest">-</span>
+            </div>
+        </div>
+        
+        <div class="card model-card" id="modelDeepSeek" data-model="deepseek-v4-flash-0731">
+            <h2>EAK-Reviewer (DeepSeek V4 Flash)</h2>
+            <div class="metric-row">
+                <span class="metric-label">Status</span>
+                <span class="metric-value" id="deepseekStatus">Loading...</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Total Requests</span>
+                <span class="metric-value" id="deepseekTotalRequests">-</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Successful</span>
+                <span class="metric-value success" id="deepseekSuccess">-</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Failed</span>
+                <span class="metric-value error" id="deepseekFailed">-</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Rate Limits</span>
+                <span class="metric-value warning" id="deepseekRateLimits">-</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Avg Latency</span>
+                <span class="metric-value" id="deepseekLatency">-</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Total Retries</span>
+                <span class="metric-value" id="deepseekRetries">-</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Cooldown</span>
+                <span class="metric-value" id="deepseekCooldown">-</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Tokens (In/Out)</span>
+                <span class="metric-value" id="deepseekTokens">-</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Last Request</span>
+                <span class="metric-value timestamp" id="deepseekLastRequest">-</span>
+            </div>
+            <div id="modelDeepSeekTask" class="task-display"></div>
+        </div>
+        
+        <div class="card model-card" id="modelLightning" data-model="nemotron-3.5-lightning-30b-a3b">
+            <h2>EAK-Fast (Lightning 30B)</h2>
+            <div class="metric-row">
+                <span class="metric-label">Status</span>
+                <span class="metric-value" id="lightningStatus">Loading...</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Total Requests</span>
+                <span class="metric-value" id="lightningTotalRequests">-</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Successful</span>
+                <span class="metric-value success" id="lightningSuccess">-</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Failed</span>
+                <span class="metric-value error" id="lightningFailed">-</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Rate Limits</span>
+                <span class="metric-value warning" id="lightningRateLimits">-</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Avg Latency</span>
+                <span class="metric-value" id="lightningLatency">-</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Total Retries</span>
+                <span class="metric-value" id="lightningRetries">-</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Cooldown</span>
+                <span class="metric-value" id="lightningCooldown">-</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Tokens (In/Out)</span>
+                <span class="metric-value" id="lightningTokens">-</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Last Request</span>
+                <span class="metric-value timestamp" id="lightningLastRequest">-</span>
+            </div>
+            <div id="modelLightningTask" class="task-display"></div>
+        </div>
+    </div>
+    
+    <div class="card" style="margin-top: 20px;">
+        <h2>Recent Requests</h2>
+        <table class="requests-table" id="requestsTable">
+            <thead>
+                <tr>
+                    <th>Time</th>
+                    <th>Agent</th>
+                    <th>Model</th>
+                    <th>Status</th>
+                    <th>Latency</th>
+                    <th>Retries</th>
+                    <th>Tokens</th>
+                    <th>Error</th>
+                </tr>
+            </thead>
+            <tbody id="requestsBody">
+                <tr><td colspan="8" style="text-align: center; color: #6b7280;">Loading...</td></tr>
+            </tbody>
+        </table>
+    </div>
+    
+    <script>
+        const MODEL_CONFIG = {
+            'nemotron-3-ultra-550b-a55b': { 
+                id: 'modelUltra', 
+                role: 'EAK-Architect',
+                prefixes: ['ultra']
+            },
+            'nemotron-3-super-120b-a12b': { 
+                id: 'modelSuper', 
+                role: 'EAK-Engineer',
+                prefixes: ['super']
+            },
+            'deepseek-v4-flash-0731': { 
+                id: 'modelDeepSeek', 
+                role: 'EAK-Reviewer',
+                prefixes: ['deepseek']
+            },
+            'nemotron-3.5-lightning-30b-a3b': { 
+                id: 'modelLightning', 
+                role: 'EAK-Fast',
+                prefixes: ['lightning', 'nemotron-3.5']
+            }
+        };
+        
+        // WebSocket connection
+        let ws = null;
+        let wsReconnectAttempts = 0;
+        const MAX_RECONNECT_ATTEMPTS = 10;
+        const RECONNECT_DELAY = 2000;
+        
+        function connectWebSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/ws`;
+            
+            ws = new WebSocket(wsUrl);
+            
+            ws.onopen = () => {
+                console.log('WebSocket connected');
+                wsReconnectAttempts = 0;
+                updateConnectionStatus(true);
+            };
+            
+            ws.onmessage = (event) => {
+                try {
+                    const msg = JSON.parse(event.data);
+                    handleWebSocketMessage(msg);
+                } catch (e) {
+                    console.error('Failed to parse WebSocket message:', e);
+                }
+            };
+            
+            ws.onclose = () => {
+                console.log('WebSocket disconnected');
+                updateConnectionStatus(false);
+                if (wsReconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+                    wsReconnectAttempts++;
+                    setTimeout(connectWebSocket, RECONNECT_DELAY * wsReconnectAttempts);
+                }
+            };
+            
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+            };
+        }
+        
+        function updateConnectionStatus(connected) {
+            const indicator = document.getElementById('wsStatus');
+            if (indicator) {
+                indicator.className = 'status-badge ' + (connected ? 'healthy' : 'offline');
+                indicator.innerHTML = `
+                    <span class="loading" style="width: 8px; height: 8px; border-width: 1.5px;"></span>
+                    Live: ${connected ? 'Connected' : 'Disconnected'}
+                `;
+            }
+        }
+        
+        function handleWebSocketMessage(msg) {
+            switch (msg.type) {
+                case 'agent_update':
+                    handleAgentUpdate(msg);
+                    break;
+                case 'session_update':
+                    handleSessionUpdate(msg);
+                    break;
+                case 'global_stats':
+                    handleGlobalStats(msg);
+                    break;
+                case 'model_health':
+                    handleModelHealth(msg);
+                    break;
+                case 'task_update':
+                    handleTaskUpdate(msg);
+                    break;
+                case 'rate_limit':
+                    handleRateLimit(msg);
+                    break;
+                case 'heartbeat':
+                    // Heartbeat received
+                    break;
+                case 'error':
+                    console.error('Server error:', msg);
+                    break;
+            }
+        }
+        
+        function handleAgentUpdate(msg) {
+            const data = msg;
+            updateAgentCard(data);
+            updateGlobalStatsFromAgent(data);
+        }
+        
+        function handleSessionUpdate(msg) {
+            // Update session list if needed
+        }
+        
+        function handleGlobalStats(msg) {
+            const data = msg;
+            document.getElementById('totalRequests').textContent = data.total_requests.toLocaleString();
+            document.getElementById('successfulRequests').textContent = data.successful_requests.toLocaleString();
+            document.getElementById('failedRequests').textContent = data.failed_requests.toLocaleString();
+            document.getElementById('rateLimitEvents').textContent = data.rate_limit_events.toLocaleString();
+            
+            if (data.total_tokens === 0 && data.total_requests === 0) {
+                document.getElementById('totalTokens').textContent = 'Unknown';
+            } else {
+                document.getElementById('totalTokens').textContent = data.total_tokens.toLocaleString();
+            }
+            
+            document.getElementById('activeModels').textContent = data.active_models;
+            document.getElementById('errorRate').textContent = (data.error_rate * 100).toFixed(1) + '%';
+        }
+        
+        function handleModelHealth(msg) {
+            msg.forEach(model => {
+                updateModelCardFromHealth(model);
+            });
+        }
+        
+        function handleTaskUpdate(msg) {
+            updateTaskInAgentCard(msg);
+        }
+        
+        function handleRateLimit(msg) {
+            showRateLimitAlert(msg);
+            updateAgentRateLimit(msg);
+        }
+        
+        function updateAgentCard(data) {
+            const config = MODEL_CONFIG[data.model_id];
+            if (!config) return;
+            
+            const card = document.getElementById(config.id);
+            if (!card) return;
+            
+            // Update status class
+            card.className = 'card model-card';
+            if (data.status === 'RateLimited') card.classList.add('ratelimited');
+            else if (data.status === 'Degraded') card.classList.add('degraded');
+            else if (data.status === 'Offline') card.classList.add('offline');
+            else if (data.status === 'Working' || data.status === 'ToolExecution') card.classList.add('working');
+            
+            const el = (id) => document.getElementById(id);
+            
+            if (config.prefixes.includes('ultra')) {
+                el('ultraStatus').innerHTML = formatStatus(data.status);
+                el('ultraTotalRequests').textContent = data.total_requests.toLocaleString();
+                el('ultraSuccess').textContent = data.successful_requests.toLocaleString();
+                el('ultraFailed').textContent = data.failed_requests.toLocaleString();
+                el('ultraRateLimits').textContent = data.rate_limit_count.toLocaleString();
+                el('ultraLatency').textContent = formatLatency(data.avg_latency_ms);
+                el('ultraRetries').textContent = data.total_retries.toLocaleString();
+                el('ultraCooldown').textContent = formatCooldown(data.current_cooldown);
+                el('ultraTokens').textContent = formatTokens(data.total_tokens);
+                el('ultraLastRequest').textContent = formatTimestamp(data.last_activity);
+            } else if (config.prefixes.includes('super')) {
+                el('superStatus').innerHTML = formatStatus(data.status);
+                el('superTotalRequests').textContent = data.total_requests.toLocaleString();
+                el('superSuccess').textContent = data.successful_requests.toLocaleString();
+                el('superFailed').textContent = data.failed_requests.toLocaleString();
+                el('superRateLimits').textContent = data.rate_limit_count.toLocaleString();
+                el('superLatency').textContent = formatLatency(data.avg_latency_ms);
+                el('superRetries').textContent = data.total_retries.toLocaleString();
+                el('superCooldown').textContent = formatCooldown(data.current_cooldown);
+                el('superTokens').textContent = formatTokens(data.total_tokens);
+                el('superLastRequest').textContent = formatTimestamp(data.last_activity);
+            } else if (config.prefixes.includes('deepseek')) {
+                el('deepseekStatus').innerHTML = formatStatus(data.status);
+                el('deepseekTotalRequests').textContent = data.total_requests.toLocaleString();
+                el('deepseekSuccess').textContent = data.successful_requests.toLocaleString();
+                el('deepseekFailed').textContent = data.failed_requests.toLocaleString();
+                el('deepseekRateLimits').textContent = data.rate_limit_count.toLocaleString();
+                el('deepseekLatency').textContent = formatLatency(data.avg_latency_ms);
+                el('deepseekRetries').textContent = data.total_retries.toLocaleString();
+                el('deepseekCooldown').textContent = formatCooldown(data.current_cooldown);
+                el('deepseekTokens').textContent = formatTokens(data.total_tokens);
+                el('deepseekLastRequest').textContent = formatTimestamp(data.last_activity);
+            } else if (config.prefixes.some(p => data.model_id.includes(p))) {
+                el('lightningStatus').innerHTML = formatStatus(data.status);
+                el('lightningTotalRequests').textContent = data.total_requests.toLocaleString();
+                el('lightningSuccess').textContent = data.successful_requests.toLocaleString();
+                el('lightningFailed').textContent = data.failed_requests.toLocaleString();
+                el('lightningRateLimits').textContent = data.rate_limit_count.toLocaleString();
+                el('lightningLatency').textContent = formatLatency(data.avg_latency_ms);
+                el('lightningRetries').textContent = data.total_retries.toLocaleString();
+                el('lightningCooldown').textContent = formatCooldown(data.current_cooldown);
+                el('lightningTokens').textContent = formatTokens(data.total_tokens);
+                el('lightningLastRequest').textContent = formatTimestamp(data.last_activity);
+            }
+            
+            // Update current task info
+            if (data.current_task) {
+                updateTaskDisplay(config.id, data.current_task);
+            }
+        }
+        
+        function updateModelCardFromHealth(model) {
+            // Convert model health format to agent update format
+            const data = {
+                model_id: model.model_id,
+                status: model.status,
+                total_requests: model.total_requests,
+                successful_requests: model.successful_requests,
+                failed_requests: model.failed_requests,
+                rate_limit_count: model.rate_limit_count,
+                total_retries: model.total_retries,
+                avg_latency_ms: model.avg_latency_ms,
+                current_cooldown: model.current_cooldown,
+                total_tokens: model.tokens,
+                last_activity: model.last_request,
+                last_error: model.last_error,
+            };
+            updateAgentCard(data);
+        }
+        
+        function updateTaskDisplay(cardId, task) {
+            const taskEl = document.getElementById(cardId + 'Task');
+            if (taskEl) {
+                taskEl.innerHTML = `
+                    <div class="metric-row">
+                        <span class="metric-label">Current Task</span>
+                        <span class="metric-value">${task.description}</span>
+                    </div>
+                    <div class="metric-row">
+                        <span class="metric-label">Activity</span>
+                        <span class="metric-value">${task.current_activity}</span>
+                    </div>
+                    <div class="metric-row">
+                        <span class="metric-label">Elapsed</span>
+                        <span class="metric-value">${task.elapsed_seconds}s</span>
+                    </div>
+                `;
+            }
+        }
+        
+        function updateTaskInAgentCard(msg) {
+            // Update task display for the agent
+            const config = MODEL_CONFIG[msg.model_id];
+            if (config) {
+                updateTaskDisplay(config.id, {
+                    description: msg.description,
+                    current_activity: msg.current_activity,
+                    elapsed_seconds: msg.elapsed_seconds,
+                });
+            }
+        }
+        
+        function updateAgentRateLimit(msg) {
+            const config = MODEL_CONFIG[msg.model_id];
+            if (config) {
+                const el = (id) => document.getElementById(id);
+                if (config.prefixes.includes('ultra')) {
+                    el('ultraRateLimits').textContent = msg.retry_count.toLocaleString();
+                    el('ultraCooldown').textContent = formatCooldown(msg.cooldown_seconds);
+                    el('ultraStatus').innerHTML = formatStatus('RateLimited');
+                } else if (config.prefixes.includes('super')) {
+                    el('superRateLimits').textContent = msg.retry_count.toLocaleString();
+                    el('superCooldown').textContent = formatCooldown(msg.cooldown_seconds);
+                    el('superStatus').innerHTML = formatStatus('RateLimited');
+                } else if (config.prefixes.includes('deepseek')) {
+                    el('deepseekRateLimits').textContent = msg.retry_count.toLocaleString();
+                    el('deepseekCooldown').textContent = formatCooldown(msg.cooldown_seconds);
+                    el('deepseekStatus').innerHTML = formatStatus('RateLimited');
+                } else if (config.prefixes.some(p => msg.model_id.includes(p))) {
+                    el('lightningRateLimits').textContent = msg.retry_count.toLocaleString();
+                    el('lightningCooldown').textContent = formatCooldown(msg.cooldown_seconds);
+                    el('lightningStatus').innerHTML = formatStatus('RateLimited');
+                }
+            }
+        }
+        
+        function showRateLimitAlert(msg) {
+            // Could show a toast notification
+            console.warn(`Rate limit for ${msg.agent_name}: ${msg.retry_count} retries, cooldown ${msg.cooldown_seconds}s`);
+        }
+        
+        function updateGlobalStatsFromAgent(data) {
+            // Update global stats from agent updates
+            // This is a simplified version - in reality we'd aggregate from all agents
+        }
+        
+        function formatStatus(status) {
+            const statusMap = {
+                'Idle': { class: 'healthy', text: 'Idle' },
+                'Working': { class: 'healthy', text: 'Working' },
+                'ToolExecution': { class: 'healthy', text: 'Tool Execution' },
+                'Waiting': { class: 'degraded', text: 'Waiting' },
+                'Retrying': { class: 'warning', text: 'Retrying' },
+                'RateLimited': { class: 'ratelimited', text: 'Rate Limited' },
+                'Cooldown': { class: 'warning', text: 'Cooldown' },
+                'Completed': { class: 'success', text: 'Completed' },
+                'Failed': { class: 'failed', text: 'Failed' },
+                'Unknown': { class: 'unknown', text: 'Unknown' }
+            };
+            const s = statusMap[status] || statusMap['Unknown'];
+            return `<span class="status-badge ${s.class}">${s.text}</span>`;
+        }
+        
+        function formatRequestStatus(status) {
+            const statusMap = {
+                'Success': { class: 'success', text: 'Success' },
+                'Failed': { class: 'failed', text: 'Failed' },
+                'RateLimited': { class: 'ratelimited', text: 'Rate Limited' },
+                'Timeout': { class: 'timeout', text: 'Timeout' }
+            };
+            const s = statusMap[status] || { class: '', text: status };
+            return `<span class="status-cell ${s.class}">${s.text}</span>`;
+        }
+        
+        function formatLatency(ms) {
+            if (ms < 1000) return `${ms}ms`;
+            return `${(ms / 1000).toFixed(1)}s`;
+        }
+        
+        function formatCooldown(seconds) {
+            if (!seconds || seconds === 0) return 'None';
+            if (seconds < 60) return `${seconds}s`;
+            if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+            return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
+        }
+        
+        function formatTokens(usage) {
+            if (!usage || usage.total === 0) return 'Unknown';
+            return `${usage.total_input.toLocaleString()} / ${usage.total_output.toLocaleString()} (${usage.total.toLocaleString()})`;
+        }
+        
+        function formatTimestamp(isoString) {
+            if (!isoString) return 'Never';
+            const date = new Date(isoString);
+            return date.toLocaleString();
+        }
+        
+        // Initialize all four model cards with "No Data" state
+        function initializeModelCards() {
+            const knownModels = [
+                { id: 'nemotron-3-ultra-550b-a55b', configId: 'modelUltra' },
+                { id: 'nemotron-3-super-120b-a12b', configId: 'modelSuper' },
+                { id: 'deepseek-v4-flash-0731', configId: 'modelDeepSeek' },
+                { id: 'nemotron-3.5-lightning-30b-a3b', configId: 'modelLightning' }
+            ];
+            
+            knownModels.forEach(model => {
+                const noData = {
+                    model_id: model.id,
+                    current_status: 'Unknown',
+                    total_requests: 0,
+                    successful_requests: 0,
+                    failed_requests: 0,
+                    rate_limit_count: 0,
+                    total_retries: 0,
+                    avg_latency_ms: 0,
+                    current_cooldown_seconds: null,
+                    token_usage: { total_input: 0, total_output: 0, total: 0, provider_reported: false },
+                    last_request: null,
+                    last_success: null,
+                    last_error: null
+                };
+                updateModelCard(model.id, noData);
+            });
+        }
+        
+        function updateModelCard(modelId, data) {
+            const config = MODEL_CONFIG[modelId];
+            if (!config) return;
+            
+            const card = document.getElementById(config.id);
+            if (!card) return;
+            
+            // Update status class
+            card.className = 'card model-card';
+            if (data.current_status === 'RateLimited') card.classList.add('ratelimited');
+            else if (data.current_status === 'Degraded') card.classList.add('degraded');
+            else if (data.current_status === 'Offline') card.classList.add('offline');
+            else if (data.current_status === 'Working' || data.current_status === 'ToolExecution') card.classList.add('working');
+            
+            const el = (id) => document.getElementById(id);
+            
+            if (config.prefixes.includes('ultra')) {
+                el('ultraStatus').innerHTML = formatStatus(data.current_status);
+                el('ultraTotalRequests').textContent = data.total_requests.toLocaleString();
+                el('ultraSuccess').textContent = data.successful_requests.toLocaleString();
+                el('ultraFailed').textContent = data.failed_requests.toLocaleString();
+                el('ultraRateLimits').textContent = data.rate_limit_count.toLocaleString();
+                el('ultraLatency').textContent = formatLatency(data.avg_latency_ms);
+                el('ultraRetries').textContent = data.total_retries.toLocaleString();
+                el('ultraCooldown').textContent = formatCooldown(data.current_cooldown_seconds);
+                el('ultraTokens').textContent = formatTokens(data.token_usage);
+                el('ultraLastRequest').textContent = formatTimestamp(data.last_request);
+            } else if (config.prefixes.includes('super')) {
+                el('superStatus').innerHTML = formatStatus(data.current_status);
+                el('superTotalRequests').textContent = data.total_requests.toLocaleString();
+                el('superSuccess').textContent = data.successful_requests.toLocaleString();
+                el('superFailed').textContent = data.failed_requests.toLocaleString();
+                el('superRateLimits').textContent = data.rate_limit_count.toLocaleString();
+                el('superLatency').textContent = formatLatency(data.avg_latency_ms);
+                el('superRetries').textContent = data.total_retries.toLocaleString();
+                el('superCooldown').textContent = formatCooldown(data.current_cooldown_seconds);
+                el('superTokens').textContent = formatTokens(data.token_usage);
+                el('superLastRequest').textContent = formatTimestamp(data.last_request);
+            } else if (config.prefixes.includes('deepseek')) {
+                el('deepseekStatus').innerHTML = formatStatus(data.current_status);
+                el('deepseekTotalRequests').textContent = data.total_requests.toLocaleString();
+                el('deepseekSuccess').textContent = data.successful_requests.toLocaleString();
+                el('deepseekFailed').textContent = data.failed_requests.toLocaleString();
+                el('deepseekRateLimits').textContent = data.rate_limit_count.toLocaleString();
+                el('deepseekLatency').textContent = formatLatency(data.avg_latency_ms);
+                el('deepseekRetries').textContent = data.total_retries.toLocaleString();
+                el('deepseekCooldown').textContent = formatCooldown(data.current_cooldown_seconds);
+                el('deepseekTokens').textContent = formatTokens(data.token_usage);
+                el('deepseekLastRequest').textContent = formatTimestamp(data.last_request);
+            } else if (config.prefixes.some(p => modelId.includes(p))) {
+                el('lightningStatus').innerHTML = formatStatus(data.current_status);
+                el('lightningTotalRequests').textContent = data.total_requests.toLocaleString();
+                el('lightningSuccess').textContent = data.successful_requests.toLocaleString();
+                el('lightningFailed').textContent = data.failed_requests.toLocaleString();
+                el('lightningRateLimits').textContent = data.rate_limit_count.toLocaleString();
+                el('lightningLatency').textContent = formatLatency(data.avg_latency_ms);
+                el('lightningRetries').textContent = data.total_retries.toLocaleString();
+                el('lightningCooldown').textContent = formatCooldown(data.current_cooldown_seconds);
+                el('lightningTokens').textContent = formatTokens(data.token_usage);
+                el('lightningLastRequest').textContent = formatTimestamp(data.last_request);
+            }
+        }
+        
+        // Initialize on load
+        initializeModelCards();
+        
+        // Connect WebSocket
+        connectWebSocket();
+        
+        // Fallback: also poll REST API every 10 seconds for initial load
+        async function loadInitialData() {
+            try {
+                const [models, global, providers, requests] = await Promise.all([
+                    fetch('/api/models').then(r => r.json()),
+                    fetch('/api/global').then(r => r.json()),
+                    fetch('/api/providers').then(r => r.json()),
+                    fetch('/api/requests/recent?limit=50').then(r => r.json()),
+                ]);
+                
+                if (models.length > 0) {
+                    models.forEach(model => updateModelCard(model.model_id, model));
+                }
+                
+                document.getElementById('totalRequests').textContent = global.total_requests.toLocaleString();
+                document.getElementById('successfulRequests').textContent = global.successful_requests.toLocaleString();
+                document.getElementById('failedRequests').textContent = global.failed_requests.toLocaleString();
+                document.getElementById('rateLimitEvents').textContent = global.rate_limit_events.toLocaleString();
+                
+                if (global.total_tokens === 0 && global.total_requests === 0) {
+                    document.getElementById('totalTokens').textContent = 'Unknown';
+                } else {
+                    document.getElementById('totalTokens').textContent = global.total_tokens.toLocaleString();
+                }
+                
+                document.getElementById('activeModels').textContent = global.active_models;
+                document.getElementById('errorRate').textContent = (global.error_rate * 100).toFixed(1) + '%';
+                
+                // Providers
+                const providerContainer = document.getElementById('providerStates');
+                if (providers.length === 0) {
+                    providerContainer.innerHTML = '<div class="provider-card"><div class="provider-header"><span class="provider-name">NVIDIA</span><span class="status-badge unknown">UNKNOWN</span></div><div class="metric-row"><span class="metric-label">Status</span><span class="metric-value">No provider telemetry recorded</span></div></div>';
+                } else {
+                    providerContainer.innerHTML = providers.map(provider => `
+                        <div class="provider-card">
+                            <div class="provider-header">
+                                <span class="provider-name">${provider.provider}</span>
+                                <span class="status-badge ${provider.status.toLowerCase() === 'ratelimited' ? 'ratelimited' : 'healthy'}">${provider.status}</span>
+                            </div>
+                            <div class="metric-row">
+                                <span class="metric-label">Rate Limit Count</span>
+                                <span class="metric-value ${provider.rate_limit_count > 0 ? 'warning' : ''}">${provider.rate_limit_count}</span>
+                            </div>
+                            <div class="metric-row">
+                                <span class="metric-label">Max Retries Exhausted</span>
+                                <span class="metric-value ${provider.max_retries_exhausted ? 'error' : ''}">${provider.max_retries_exhausted ? 'Yes' : 'No'}</span>
+                            </div>
+                            ${provider.cooldown_until ? `
+                            <div class="metric-row">
+                                <span class="metric-label">Cooldown Until</span>
+                                <span class="metric-value">${new Date(provider.cooldown_until).toLocaleString()}</span>
+                            </div>
+                            ` : ''}
+                            <div class="models-list">
+                                ${provider.models.map(m => `<span class="model-tag">${m}</span>`).join('')}
+                            </div>
+                        </div>
+                    `).join('');
+                }
+                
+                // Recent requests
+                const tbody = document.getElementById('requestsBody');
+                if (requests.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: #6b7280;">No requests recorded</td></tr>';
+                } else {
+                    tbody.innerHTML = requests.map(req => `
+                        <tr>
+                            <td>${new Date(req.timestamp).toLocaleTimeString()}</td>
+                            <td>${req.agent}</td>
+                            <td>${req.model_id}</td>
+                            <td>${formatRequestStatus(req.status)}</td>
+                            <td>${formatLatency(req.latency_ms)}</td>
+                            <td>${req.retry_count > 0 ? '<span class="metric-value warning">' + req.retry_count + '</span>' : '0'}</td>
+                            <td>${req.total_tokens ? req.total_tokens.toLocaleString() : 'Unknown'}</td>
+                            <td>${req.error_message ? req.error_message.substring(0, 50) + '...' : '-'}</td>
+                        </tr>
+                    `).join('');
+                }
+            } catch (e) {
+                console.error('Failed to load initial data:', e);
+            }
+        }
+        
+        // Load initial data
+        loadInitialData();
+        
+        // Keep polling as fallback
+        setInterval(loadInitialData, 10000);
+    </script>
+</body>
+</html>
