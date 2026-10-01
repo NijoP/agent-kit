@@ -4,7 +4,7 @@ use crate::database::TelemetryDatabase;
 use crate::models::*;
 use crate::provider_state::ProviderStateManager;
 use crate::retry::RetryPolicy;
-use crate::{Result, TelemetryError};
+use crate::Result;
 use chrono::Utc;
 use regex::Regex;
 use std::sync::Arc;

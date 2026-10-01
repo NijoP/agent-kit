@@ -20,7 +20,7 @@ impl ProviderStateManager {
         };
 
         // Load from database if available
-        if let Some(_db) = if let Some(db) = &manager.database {manager.database {
+        if let Some(_db) = &manager.database {
             // Could load all provider states here
         }
 
@@ -167,7 +167,7 @@ impl ProviderStateManager {
         }
     }
 
-    fn persist(fn persist(&self, provider: &str, state: &ProviderState) {self, _provider: fn persist(&self, provider: &str, state: &ProviderState) {str, state: fn persist(&self, provider: &str, state: &ProviderState) {ProviderState) {
+    fn persist(&self, _provider: &str, state: &ProviderState) {
         if let Some(db) = &self.database {
             let _ = db.upsert_provider_state(state);
         }

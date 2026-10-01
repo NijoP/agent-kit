@@ -234,6 +234,7 @@ const READINESS_WEIGHTS: ReadinessWeights = ReadinessWeights {
 /// Readiness scoring weights configuration.
 #[derive(Debug, Clone, Copy)]
 #[allow(dead_code)]
+#[allow(dead_code)]
 struct ReadinessWeights {
     has_mpn: f64,
     has_manufacturer: f64,
