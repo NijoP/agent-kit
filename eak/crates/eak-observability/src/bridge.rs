@@ -361,9 +361,7 @@ impl ObservabilityBridge {
     }
 }
 
-async fn run_opencode_process(
-    params: RunOpenCodeParams,
-) -> Result<()> {
+async fn run_opencode_process(params: RunOpenCodeParams) -> Result<()> {
     // Build OpenCode command
     let mut cmd = Command::new("opencode");
     cmd.arg("run")
