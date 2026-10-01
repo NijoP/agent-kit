@@ -24,10 +24,15 @@
 //!
 //! See `docs/state-machines/bom-planning.md` and the reference agent `agent.rs`.
 
-use eak_domain::{BomLineItem, ComponentClass, EntityId, Part, ProvenanceLink, RelationType};
+use eak_domain::{
+    BomLineItem, ComponentClass, ComponentFamily, ComponentMetadata,
+    ComponentMetadataCommon, DiodesMetadata, EntityId, Part,
+    PassivesMetadata, ProvenanceLink, RelationType,
+};
 use eak_engines::{CatalogPart, PartCatalog};
 use eak_ports::ReasoningRequest;
 use eak_runtime::{Agent, AgentActivation, AgentContext, AgentOutcome, CapabilityRequest};
+use eak_units::{PhysicalQuantity, Unit};
 
 /// The outcome of validating one class's proposed part against the catalog.
 enum Selection {
@@ -109,7 +114,27 @@ impl Agent for PartSelectionAgent {
         // Cache of MPN -> committed part id, seeded with any already-committed parts, so a part
         // reused across classes (same MPN) is ordered once (P13) — as in the pre-C2 machine.
         let mut part_ids: Vec<(String, EntityId)> =
-            ctx.parts().iter().map(|p| (p.mpn.clone(), p.id)).collect();
+            ctx.parts().iter().map(|p| {
+                let mpn = match &p.metadata {
+                    ComponentMetadata::Passives(m) => m.common.mpn.clone(),
+                    ComponentMetadata::Diodes(m) => m.common.mpn.clone(),
+                    ComponentMetadata::Transistors(m) => m.common.mpn.clone(),
+                    ComponentMetadata::AnalogIcs(m) => m.common.mpn.clone(),
+                    ComponentMetadata::PowerManagement(m) => m.common.mpn.clone(),
+                    ComponentMetadata::DigitalLogic(m) => m.common.mpn.clone(),
+                    ComponentMetadata::Mcus(m) => m.common.mpn.clone(),
+                    ComponentMetadata::Memory(m) => m.common.mpn.clone(),
+                    ComponentMetadata::Communication(m) => m.common.mpn.clone(),
+                    ComponentMetadata::Sensors(m) => m.common.mpn.clone(),
+                    ComponentMetadata::RfWireless(m) => m.common.mpn.clone(),
+                    ComponentMetadata::Audio(m) => m.common.mpn.clone(),
+                    ComponentMetadata::Protection(m) => m.common.mpn.clone(),
+                    ComponentMetadata::Connectors(m) => m.common.mpn.clone(),
+                    ComponentMetadata::Electromechanical(m) => m.common.mpn.clone(),
+                    ComponentMetadata::Specialized(m) => m.common.mpn.clone(),
+                };
+                (mpn, p.id)
+            }).collect();
         let mut committed = 0usize;
         let mut rejected: Vec<(ComponentClass, String)> = Vec::new();
 
@@ -130,12 +155,128 @@ impl Agent for PartSelectionAgent {
                         *id
                     } else {
                         let pid = ctx.fresh_id();
+                        let metadata = match *class {
+                            ComponentClass::Resistor | ComponentClass::Capacitor | ComponentClass::Inductor =>
+                                ComponentMetadata::Passives(PassivesMetadata {
+                                    common: ComponentMetadataCommon {
+                                        component_id: cp.mpn.to_string(),
+                                        mpn: cp.mpn.into(),
+                                        manufacturer: cp.manufacturer.into(),
+                                        family: ComponentFamily::Passives,
+                                        subfamily: "Resistor".into(),
+                                        component_class: *class,
+                                        package: "".into(),
+                                        pin_count: 2,
+                                        lifecycle_status: cp.lifecycle,
+                                        compliance: Default::default(),
+                                        automotive_qualified: false,
+                                        provenance: Default::default(),
+                                        has_symbol: true,
+                                        has_footprint: true,
+                                        has_3d_model: false,
+                                        footprint_standard: Default::default(),
+                                        footprint_verified: true,
+                                        operating_temperature: PhysicalQuantity::new(25.0, Unit::DegreeCelsius),
+                                        max_operating_voltage: None,
+                                        max_power_dissipation: None,
+                                        tags: vec![],
+                                        description: "".into(),
+                                        datasheet_url: Some(cp.datasheet.into()),
+                                    },
+                                    resistance: None,
+                                    power_rating: None,
+                                    max_working_voltage: None,
+                                    temperature_coefficient: None,
+                                    voltage_coefficient: None,
+                                    noise_index: None,
+                                    pulse_withstand: None,
+                                    capacitance: None,
+                                    voltage_rating: None,
+                                    esr: None,
+                                    esl: None,
+                                    dielectric_type: None,
+                                }),
+                            ComponentClass::DiodeRectifier | ComponentClass::DiodeSchottky | ComponentClass::DiodeZener | ComponentClass::DiodeTvs | ComponentClass::DiodeLed =>
+                                ComponentMetadata::Diodes(DiodesMetadata {
+                                    common: ComponentMetadataCommon {
+                                        component_id: cp.mpn.to_string(),
+                                        mpn: cp.mpn.into(),
+                                        manufacturer: cp.manufacturer.into(),
+                                        family: ComponentFamily::Diodes,
+                                        subfamily: "Diode".into(),
+                                        component_class: *class,
+                                        package: "".into(),
+                                        pin_count: 2,
+                                        lifecycle_status: cp.lifecycle,
+                                        compliance: Default::default(),
+                                        automotive_qualified: false,
+                                        provenance: Default::default(),
+                                        has_symbol: true,
+                                        has_footprint: true,
+                                        has_3d_model: false,
+                                        footprint_standard: Default::default(),
+                                        footprint_verified: true,
+                                        operating_temperature: PhysicalQuantity::new(25.0, Unit::DegreeCelsius),
+                                        max_operating_voltage: None,
+                                        max_power_dissipation: None,
+                                        tags: vec![],
+                                        description: "".into(),
+                                        datasheet_url: Some(cp.datasheet.into()),
+                                    },
+                                    forward_voltage: None,
+                                    reverse_voltage: None,
+                                    reverse_current: None,
+                                    recovery_time: None,
+                                    junction_capacitance: None,
+                                    peak_forward_current: None,
+                                    surge_current: None,
+                                    power_dissipation: None,
+                                }),
+                            _ =>
+                                ComponentMetadata::Passives(PassivesMetadata {
+                                    common: ComponentMetadataCommon {
+                                        component_id: cp.mpn.to_string(),
+                                        mpn: cp.mpn.into(),
+                                        manufacturer: cp.manufacturer.into(),
+                                        family: ComponentFamily::Passives,
+                                        subfamily: "Unknown".into(),
+                                        component_class: *class,
+                                        package: "".into(),
+                                        pin_count: 2,
+                                        lifecycle_status: cp.lifecycle,
+                                        compliance: Default::default(),
+                                        automotive_qualified: false,
+                                        provenance: Default::default(),
+                                        has_symbol: true,
+                                        has_footprint: true,
+                                        has_3d_model: false,
+                                        footprint_standard: Default::default(),
+                                        footprint_verified: true,
+                                        operating_temperature: PhysicalQuantity::new(25.0, Unit::DegreeCelsius),
+                                        max_operating_voltage: None,
+                                        max_power_dissipation: None,
+                                        tags: vec![],
+                                        description: "".into(),
+                                        datasheet_url: Some(cp.datasheet.into()),
+                                    },
+                                    resistance: None,
+                                    power_rating: None,
+                                    max_working_voltage: None,
+                                    temperature_coefficient: None,
+                                    voltage_coefficient: None,
+                                    noise_index: None,
+                                    pulse_withstand: None,
+                                    capacitance: None,
+                                    voltage_rating: None,
+                                    esr: None,
+                                    esl: None,
+                                    dielectric_type: None,
+                                }),
+                        };
                         let part = Part {
                             id: pid,
-                            mpn: cp.mpn.into(),
-                            manufacturer: cp.manufacturer.into(),
-                            lifecycle: cp.lifecycle,
-                            datasheet: cp.datasheet.into(),
+                            class: *class,
+                            metadata,
                         };
                         // Through the real capability seam: the runtime re-validates the part (P3).
                         if ctx

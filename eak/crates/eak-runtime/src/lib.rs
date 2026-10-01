@@ -52,12 +52,15 @@ mod kernel_tests {
     use super::*;
     use eak_domain::{
         Alternative, Assumption, AssumptionCriticality, AssumptionStatus, Board, BoardSide,
-        BomLineItem, ClockDomain, Component, ComponentClass, ComponentOrigin, Contract, Decision,
-        Discharge, DischargeResolution, EntityId, FidelityMethod, FunctionalBlock, Interface,
-        LayerStack, ModelFidelity, Net, NetClass, NetOrigin, Objective, Part, PartLifecycle, Pin,
-        PinAssignment, PinCapability, PinElectricalType, Placement, PowerDomain, Priority,
-        Requirement, RequirementCategory, RequirementStatus, ReturnPath, Risk, RiskLikelihood,
-        RiskSeverity, RiskStatus, Signal, Track, Tradeoff,
+        BomLineItem, ClockDomain, Component, ComponentClass, ComponentFamily,
+        ComponentMetadata, ComponentMetadataCommon, ComponentOrigin, Contract, Decision,
+        Discharge, DischargeResolution, EntityId, FidelityMethod, FunctionalBlock,
+        Interface, LayerStack, ModelFidelity, Net, NetClass, NetOrigin, Objective,
+        Part, PartLifecycle, PassivesMetadata, Pin, PinAssignment, PinCapability,
+        PinElectricalType, Placement, PowerDomain, PowerManagementMetadata,
+        Priority, Provenance, Requirement, RequirementCategory, RequirementStatus,
+        ReturnPath, Risk, RiskLikelihood, RiskSeverity, RiskStatus, Signal, Track,
+        Tradeoff,
     };
     use eak_ports::{
         Event, EventLog, EventRecord, ReasoningEngine, ReasoningError, ReasoningRequest,
@@ -554,12 +557,48 @@ mod kernel_tests {
         .unwrap();
 
         // The BOM layer: a concrete part, then a line binding it to the real component.
+        let mpn = "LM1117-3.3".to_string();
         let part = Part {
             id: core.fresh_id(),
-            mpn: "LM1117-3.3".into(),
-            manufacturer: "Texas Instruments".into(),
-            lifecycle: PartLifecycle::Eol,
-            datasheet: "https://ti.com/lm1117".into(),
+            class: ComponentClass::RegulatorLdo,
+            metadata: ComponentMetadata::PowerManagement(PowerManagementMetadata {
+                common: ComponentMetadataCommon {
+                    component_id: mpn.clone(),
+                    mpn,
+                    manufacturer: "Texas Instruments".into(),
+                    family: ComponentFamily::PowerManagement,
+                    subfamily: "RegulatorLdo".to_string(),
+                    component_class: ComponentClass::RegulatorLdo,
+                    package: "".into(),
+                    pin_count: 3,
+                    lifecycle_status: PartLifecycle::Eol,
+                    compliance: Default::default(),
+                    automotive_qualified: false,
+                    provenance: Default::default(),
+                    has_symbol: true,
+                    has_footprint: true,
+                    has_3d_model: false,
+                    footprint_standard: Default::default(),
+                    footprint_verified: true,
+                    operating_temperature: PhysicalQuantity::new(25.0, Unit::DegreeCelsius),
+                    max_operating_voltage: None,
+                    max_power_dissipation: None,
+                    tags: vec![],
+                    description: "".into(),
+                    datasheet_url: Some("https://ti.com/lm1117".into()),
+                },
+                output_voltage: None,
+                output_current: None,
+                input_voltage_min: None,
+                input_voltage_max: None,
+                efficiency: None,
+                switching_frequency: None,
+                dropout_voltage: None,
+                quiescent_current: None,
+                battery_cells: None,
+                charge_current: None,
+                on_resistance: None,
+            }),
         };
         let part_id = part.id;
         core.invoke(CapabilityRequest::CreatePart {
@@ -725,13 +764,50 @@ mod kernel_tests {
         );
 
         // A committed part to isolate the component-integrity check below.
+        let mpn = "RC0402FR-0710KL".to_string();
         core.invoke(CapabilityRequest::CreatePart {
             part: Part {
                 id: pid,
-                mpn: "RC0402FR-0710KL".into(),
-                manufacturer: "Yageo".into(),
-                lifecycle: PartLifecycle::Active,
-                datasheet: "https://yageo.com/rc0402".into(),
+                class: ComponentClass::Resistor,
+                metadata: ComponentMetadata::Passives(PassivesMetadata {
+                    common: ComponentMetadataCommon {
+                        component_id: mpn.clone(),
+                        mpn,
+                        manufacturer: "Yageo".into(),
+                        family: ComponentFamily::Passives,
+                        subfamily: "Resistor".to_string(),
+                        component_class: ComponentClass::Resistor,
+                        package: "".into(),
+                        pin_count: 2,
+                        lifecycle_status: PartLifecycle::Active,
+                        compliance: Default::default(),
+                        automotive_qualified: false,
+                        provenance: Default::default(),
+                        has_symbol: true,
+                        has_footprint: true,
+                        has_3d_model: false,
+                        footprint_standard: Default::default(),
+                        footprint_verified: true,
+                        operating_temperature: PhysicalQuantity::new(25.0, Unit::DegreeCelsius),
+                        max_operating_voltage: None,
+                        max_power_dissipation: None,
+                        tags: vec![],
+                        description: "".into(),
+                        datasheet_url: Some("https://yageo.com/rc0402".into()),
+                    },
+                    resistance: None,
+                    power_rating: None,
+                    max_working_voltage: None,
+                    temperature_coefficient: None,
+                    voltage_coefficient: None,
+                    noise_index: None,
+                    pulse_withstand: None,
+                    capacitance: None,
+                    voltage_rating: None,
+                    esr: None,
+                    esl: None,
+                    dielectric_type: None,
+                }),
             },
             links: vec![],
         })

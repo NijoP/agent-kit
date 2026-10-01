@@ -287,8 +287,9 @@ impl FunctionalBlock {
 
 /// The coarse kind of a [`Component`]. Drives ERC expectations (e.g. a regulator is a
 /// power source, a connector may be a sink).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 pub enum ComponentClass {
+    #[default]
     // Passives
     Resistor,
     Capacitor,
@@ -387,6 +388,399 @@ pub enum ComponentClass {
     SpecializedIsolator,
     SpecializedCurrentSense,
     SpecializedThermal,
+}
+
+// ============ Phase 2: Component Family & Metadata ============
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+pub enum ComponentFamily {
+    #[default] Passives,
+    Diodes,
+    Transistors,
+    AnalogIcs,
+    PowerManagement,
+    DigitalLogic,
+    Mcus,
+    Memory,
+    Communication,
+    Sensors,
+    RfWireless,
+    Audio,
+    Protection,
+    Connectors,
+    Electromechanical,
+    Specialized,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Compliance {
+    pub rohs: bool,
+    pub reach: bool,
+    pub halogen_free: bool,
+    pub conflict_minerals: bool,
+}
+impl Default for Compliance {
+    fn default() -> Self {
+        Self { rohs: false, reach: false, halogen_free: false, conflict_minerals: false }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Provenance {
+    pub source_url: String,
+    pub source_hash: String,
+    pub acquired_at: String,
+    pub verified_by: String,
+    pub validation_notes: Option<String>,
+}
+impl Default for Provenance {
+    fn default() -> Self {
+        Self { source_url: String::new(), source_hash: String::new(), acquired_at: String::new(), verified_by: String::new(), validation_notes: None }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+pub enum FootprintStandard {
+    #[default] Ipc7351A,
+    Ipc7351B,
+    Ipc7351C,
+    Jedeic,
+    Custom,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ComponentMetadataCommon {
+    pub component_id: String,
+    pub mpn: String,
+    pub manufacturer: String,
+    pub family: ComponentFamily,
+    pub subfamily: String,
+    pub component_class: ComponentClass,
+    pub package: String,
+    pub pin_count: u32,
+    pub lifecycle_status: PartLifecycle,
+    pub compliance: Compliance,
+    pub automotive_qualified: bool,
+    pub provenance: Provenance,
+    pub has_symbol: bool,
+    pub has_footprint: bool,
+    pub has_3d_model: bool,
+    pub footprint_standard: FootprintStandard,
+    pub footprint_verified: bool,
+    pub operating_temperature: PhysicalQuantity,
+    pub max_operating_voltage: Option<PhysicalQuantity>,
+    pub max_power_dissipation: Option<PhysicalQuantity>,
+    pub tags: Vec<String>,
+    pub description: String,
+    pub datasheet_url: Option<String>,
+}
+
+impl Default for ComponentMetadataCommon {
+    fn default() -> Self {
+        Self {
+            component_id: String::new(),
+            mpn: String::new(),
+            manufacturer: String::new(),
+            family: ComponentFamily::default(),
+            subfamily: String::new(),
+            component_class: ComponentClass::default(),
+            package: String::new(),
+            pin_count: 0,
+            lifecycle_status: PartLifecycle::default(),
+            compliance: Compliance::default(),
+            automotive_qualified: false,
+            provenance: Provenance::default(),
+            has_symbol: false,
+            has_footprint: false,
+            has_3d_model: false,
+            footprint_standard: FootprintStandard::default(),
+            footprint_verified: false,
+            operating_temperature: PhysicalQuantity::new(25.0, Unit::DegreeCelsius),
+            max_operating_voltage: None,
+            max_power_dissipation: None,
+            tags: Vec::new(),
+            description: String::new(),
+            datasheet_url: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct PassivesMetadata {
+    pub common: ComponentMetadataCommon,
+    pub resistance: Option<PhysicalQuantity>,
+    pub power_rating: Option<PhysicalQuantity>,
+    pub max_working_voltage: Option<PhysicalQuantity>,
+    pub temperature_coefficient: Option<PhysicalQuantity>,
+    pub voltage_coefficient: Option<PhysicalQuantity>,
+    pub noise_index: Option<PhysicalQuantity>,
+    pub pulse_withstand: Option<PhysicalQuantity>,
+    pub capacitance: Option<PhysicalQuantity>,
+    pub voltage_rating: Option<PhysicalQuantity>,
+    pub esr: Option<PhysicalQuantity>,
+    pub esl: Option<PhysicalQuantity>,
+    pub dielectric_type: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct DiodesMetadata {
+    pub common: ComponentMetadataCommon,
+    pub forward_voltage: Option<PhysicalQuantity>,
+    pub reverse_voltage: Option<PhysicalQuantity>,
+    pub reverse_current: Option<PhysicalQuantity>,
+    pub recovery_time: Option<PhysicalQuantity>,
+    pub junction_capacitance: Option<PhysicalQuantity>,
+    pub peak_forward_current: Option<PhysicalQuantity>,
+    pub surge_current: Option<PhysicalQuantity>,
+    pub power_dissipation: Option<PhysicalQuantity>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct TransistorsMetadata {
+    pub common: ComponentMetadataCommon,
+    pub drain_source_voltage: Option<PhysicalQuantity>,
+    pub gate_source_voltage: Option<PhysicalQuantity>,
+    pub drain_current: Option<PhysicalQuantity>,
+    pub gate_charge: Option<PhysicalQuantity>,
+    pub on_resistance: Option<PhysicalQuantity>,
+    pub threshold_voltage: Option<PhysicalQuantity>,
+    pub power_dissipation: Option<PhysicalQuantity>,
+    pub current_gain: Option<PhysicalQuantity>,
+    pub transition_frequency: Option<PhysicalQuantity>,
+    pub collector_emitter_voltage: Option<PhysicalQuantity>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct AnalogIcsMetadata {
+    pub common: ComponentMetadataCommon,
+    pub gain_bandwidth_product: Option<PhysicalQuantity>,
+    pub slew_rate: Option<PhysicalQuantity>,
+    pub input_offset_voltage: Option<PhysicalQuantity>,
+    pub input_bias_current: Option<PhysicalQuantity>,
+    pub supply_voltage: Option<PhysicalQuantity>,
+    pub supply_current: Option<PhysicalQuantity>,
+    pub cmrr: Option<PhysicalQuantity>,
+    pub psrr: Option<PhysicalQuantity>,
+    pub output_current: Option<PhysicalQuantity>,
+    pub resolution: Option<PhysicalQuantity>,
+    pub sample_rate: Option<PhysicalQuantity>,
+    pub reference_voltage: Option<PhysicalQuantity>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct PowerManagementMetadata {
+    pub common: ComponentMetadataCommon,
+    pub output_voltage: Option<PhysicalQuantity>,
+    pub output_current: Option<PhysicalQuantity>,
+    pub input_voltage_min: Option<PhysicalQuantity>,
+    pub input_voltage_max: Option<PhysicalQuantity>,
+    pub efficiency: Option<PhysicalQuantity>,
+    pub switching_frequency: Option<PhysicalQuantity>,
+    pub dropout_voltage: Option<PhysicalQuantity>,
+    pub quiescent_current: Option<PhysicalQuantity>,
+    pub battery_cells: Option<u32>,
+    pub charge_current: Option<PhysicalQuantity>,
+    pub on_resistance: Option<PhysicalQuantity>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct DigitalLogicMetadata {
+    pub common: ComponentMetadataCommon,
+    pub propagation_delay: Option<PhysicalQuantity>,
+    pub supply_voltage: Option<PhysicalQuantity>,
+    pub output_current: Option<PhysicalQuantity>,
+    pub fan_out: Option<u32>,
+    pub input_threshold: Option<PhysicalQuantity>,
+    pub setup_time: Option<PhysicalQuantity>,
+    pub hold_time: Option<PhysicalQuantity>,
+    pub clock_frequency: Option<PhysicalQuantity>,
+    pub data_rate: Option<PhysicalQuantity>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct McusMetadata {
+    pub common: ComponentMetadataCommon,
+    pub core_architecture: Option<String>,
+    pub core_count: Option<u32>,
+    pub max_frequency: Option<PhysicalQuantity>,
+    pub flash_size: Option<PhysicalQuantity>,
+    pub ram_size: Option<PhysicalQuantity>,
+    pub peripheral_count: Option<u32>,
+    pub supply_voltage: Option<PhysicalQuantity>,
+    pub operating_temp_min: Option<PhysicalQuantity>,
+    pub operating_temp_max: Option<PhysicalQuantity>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct MemoryMetadata {
+    pub common: ComponentMetadataCommon,
+    pub memory_type: Option<String>,
+    pub capacity: Option<PhysicalQuantity>,
+    pub organization: Option<String>,
+    pub supply_voltage: Option<PhysicalQuantity>,
+    pub access_time: Option<PhysicalQuantity>,
+    pub clock_frequency: Option<PhysicalQuantity>,
+    pub data_width: Option<u32>,
+    pub endurance: Option<PhysicalQuantity>,
+    pub retention_time: Option<PhysicalQuantity>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct CommunicationMetadata {
+    pub common: ComponentMetadataCommon,
+    pub protocol: Option<String>,
+    pub data_rate: Option<PhysicalQuantity>,
+    pub supply_voltage: Option<PhysicalQuantity>,
+    pub interface_count: Option<u32>,
+    pub isolation_voltage: Option<PhysicalQuantity>,
+    pub frequency_range: Option<PhysicalQuantity>,
+    pub modulation: Option<String>,
+    pub range: Option<PhysicalQuantity>,
+    pub antenna_impedance: Option<PhysicalQuantity>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct SensorsMetadata {
+    pub common: ComponentMetadataCommon,
+    pub measurement_range_min: Option<PhysicalQuantity>,
+    pub measurement_range_max: Option<PhysicalQuantity>,
+    pub sensitivity: Option<PhysicalQuantity>,
+    pub accuracy: Option<PhysicalQuantity>,
+    pub resolution: Option<PhysicalQuantity>,
+    pub response_time: Option<PhysicalQuantity>,
+    pub supply_voltage: Option<PhysicalQuantity>,
+    pub current_consumption: Option<PhysicalQuantity>,
+    pub output_type: Option<String>,
+    pub operating_temp_min: Option<PhysicalQuantity>,
+    pub operating_temp_max: Option<PhysicalQuantity>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct RfWirelessMetadata {
+    pub common: ComponentMetadataCommon,
+    pub frequency_min: Option<PhysicalQuantity>,
+    pub frequency_max: Option<PhysicalQuantity>,
+    pub output_power: Option<PhysicalQuantity>,
+    pub sensitivity: Option<PhysicalQuantity>,
+    pub bandwidth: Option<PhysicalQuantity>,
+    pub supply_voltage: Option<PhysicalQuantity>,
+    pub current_tx: Option<PhysicalQuantity>,
+    pub current_rx: Option<PhysicalQuantity>,
+    pub modulation_schemes: Option<String>,
+    pub antenna_type: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct AudioMetadata {
+    pub common: ComponentMetadataCommon,
+    pub sample_rate: Option<PhysicalQuantity>,
+    pub bit_depth: Option<u32>,
+    pub channels: Option<u32>,
+    pub supply_voltage: Option<PhysicalQuantity>,
+    pub output_power: Option<PhysicalQuantity>,
+    pub thd_n: Option<PhysicalQuantity>,
+    pub snr: Option<PhysicalQuantity>,
+    pub frequency_response_min: Option<PhysicalQuantity>,
+    pub frequency_response_max: Option<PhysicalQuantity>,
+    pub input_impedance: Option<PhysicalQuantity>,
+    pub output_impedance: Option<PhysicalQuantity>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct ProtectionMetadata {
+    pub common: ComponentMetadataCommon,
+    pub protection_type: Option<String>,
+    pub working_voltage: Option<PhysicalQuantity>,
+    pub breakdown_voltage: Option<PhysicalQuantity>,
+    pub clamping_voltage: Option<PhysicalQuantity>,
+    pub peak_pulse_current: Option<PhysicalQuantity>,
+    pub peak_pulse_power: Option<PhysicalQuantity>,
+    pub hold_current: Option<PhysicalQuantity>,
+    pub trip_current: Option<PhysicalQuantity>,
+    pub trip_time: Option<PhysicalQuantity>,
+    pub reset_type: Option<String>,
+    pub response_time: Option<PhysicalQuantity>,
+    pub leakage_current: Option<PhysicalQuantity>,
+    pub capacitance: Option<PhysicalQuantity>,
+    pub isolation_voltage: Option<PhysicalQuantity>,
+    pub bidirectional: Option<bool>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct ConnectorsMetadata {
+    pub common: ComponentMetadataCommon,
+    pub connector_type: Option<String>,
+    pub pitch: Option<PhysicalQuantity>,
+    pub positions: Option<u32>,
+    pub rows: Option<u32>,
+    pub current_per_contact: Option<PhysicalQuantity>,
+    pub voltage_rating: Option<PhysicalQuantity>,
+    pub mating_cycles: Option<u32>,
+    pub mounting_style: Option<String>,
+    pub orientation: Option<String>,
+    pub locking_mechanism: Option<String>,
+    pub shielding: Option<bool>,
+    pub impedance_controlled: Option<bool>,
+    pub differential_pairs: Option<u32>,
+    pub operating_temperature: Option<PhysicalQuantity>,
+    pub flange_mount: Option<bool>,
+    pub panel_mount: Option<bool>,
+    pub cable_accommodation: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct ElectromechanicalMetadata {
+    pub common: ComponentMetadataCommon,
+    pub device_type: Option<String>,
+    pub actuation_force: Option<PhysicalQuantity>,
+    pub actuation_travel: Option<PhysicalQuantity>,
+    pub mechanical_life: Option<u32>,
+    pub electrical_life: Option<u32>,
+    pub contact_rating: Option<PhysicalQuantity>,
+    pub coil_voltage: Option<PhysicalQuantity>,
+    pub coil_power: Option<PhysicalQuantity>,
+    pub contact_form: Option<String>,
+    pub resolution: Option<PhysicalQuantity>,
+    pub detent: Option<bool>,
+    pub airflow: Option<PhysicalQuantity>,
+    pub static_pressure: Option<PhysicalQuantity>,
+    pub torque: Option<PhysicalQuantity>,
+    pub speed: Option<PhysicalQuantity>,
+    pub feedback_type: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct SpecializedMetadata {
+    pub common: ComponentMetadataCommon,
+    pub application_domain: Option<String>,
+    pub qualification_standard: Option<String>,
+    pub radiation_tolerance: Option<PhysicalQuantity>,
+    pub operating_temperature_extreme: Option<PhysicalQuantity>,
+    pub hermetic_sealing: Option<bool>,
+    pub biocompatibility: Option<String>,
+    pub vacuum_compatible: Option<bool>,
+    pub magnetic_field_immunity: Option<PhysicalQuantity>,
+    pub special_requirements: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum ComponentMetadata {
+    Passives(PassivesMetadata),
+    Diodes(DiodesMetadata),
+    Transistors(TransistorsMetadata),
+    AnalogIcs(AnalogIcsMetadata),
+    PowerManagement(PowerManagementMetadata),
+    DigitalLogic(DigitalLogicMetadata),
+    Mcus(McusMetadata),
+    Memory(MemoryMetadata),
+    Communication(CommunicationMetadata),
+    Sensors(SensorsMetadata),
+    RfWireless(RfWirelessMetadata),
+    Audio(AudioMetadata),
+    Protection(ProtectionMetadata),
+    Connectors(ConnectorsMetadata),
+    Electromechanical(ElectromechanicalMetadata),
+    Specialized(SpecializedMetadata),
 }
 
 /// The electrical role of a [`Pin`]. Drives ERC drive/sink analysis (P9): a power net must
@@ -573,8 +967,9 @@ impl Net {
 /// Procurement lifecycle of a [`Part`]. An [`Eol`](PartLifecycle::Eol) part can no longer be
 /// sourced and must block; an [`Nrnd`](PartLifecycle::Nrnd) (not-recommended-for-new-designs)
 /// part is a warning the designer should heed.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 pub enum PartLifecycle {
+    #[default]
     Active,
     Nrnd,
     Eol,
@@ -583,13 +978,11 @@ pub enum PartLifecycle {
 /// A concrete, orderable part identified by its manufacturer part number. Bound to the
 /// abstract [`Component`]s it realizes through a [`BomLineItem`], so the BOM stays traceable
 /// back to the schematic (P3).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Part {
     pub id: EntityId,
-    pub mpn: String,
-    pub manufacturer: String,
-    pub lifecycle: PartLifecycle,
-    pub datasheet: String,
+    pub class: ComponentClass,
+    pub metadata: ComponentMetadata,
 }
 
 impl Part {
@@ -597,10 +990,98 @@ impl Part {
     /// the part cannot be ordered (P13). Manufacturer/datasheet completeness is a softer
     /// concern checked downstream, not a hard domain invariant.
     pub fn validate(&self) -> Result<(), DomainError> {
-        if self.mpn.trim().is_empty() {
+        if self.mpn().trim().is_empty() {
             return Err(DomainError::EmptyField("manufacturer part number"));
         }
         Ok(())
+    }
+
+    /// Get the manufacturer part number from metadata
+    pub fn mpn(&self) -> &str {
+        match &self.metadata {
+            ComponentMetadata::Passives(m) => &m.common.mpn,
+            ComponentMetadata::Diodes(m) => &m.common.mpn,
+            ComponentMetadata::Transistors(m) => &m.common.mpn,
+            ComponentMetadata::AnalogIcs(m) => &m.common.mpn,
+            ComponentMetadata::PowerManagement(m) => &m.common.mpn,
+            ComponentMetadata::DigitalLogic(m) => &m.common.mpn,
+            ComponentMetadata::Mcus(m) => &m.common.mpn,
+            ComponentMetadata::Memory(m) => &m.common.mpn,
+            ComponentMetadata::Communication(m) => &m.common.mpn,
+            ComponentMetadata::Sensors(m) => &m.common.mpn,
+            ComponentMetadata::RfWireless(m) => &m.common.mpn,
+            ComponentMetadata::Audio(m) => &m.common.mpn,
+            ComponentMetadata::Protection(m) => &m.common.mpn,
+            ComponentMetadata::Connectors(m) => &m.common.mpn,
+            ComponentMetadata::Electromechanical(m) => &m.common.mpn,
+            ComponentMetadata::Specialized(m) => &m.common.mpn,
+        }
+    }
+
+    /// Get the manufacturer from metadata
+    pub fn manufacturer(&self) -> &str {
+        match &self.metadata {
+            ComponentMetadata::Passives(m) => &m.common.manufacturer,
+            ComponentMetadata::Diodes(m) => &m.common.manufacturer,
+            ComponentMetadata::Transistors(m) => &m.common.manufacturer,
+            ComponentMetadata::AnalogIcs(m) => &m.common.manufacturer,
+            ComponentMetadata::PowerManagement(m) => &m.common.manufacturer,
+            ComponentMetadata::DigitalLogic(m) => &m.common.manufacturer,
+            ComponentMetadata::Mcus(m) => &m.common.manufacturer,
+            ComponentMetadata::Memory(m) => &m.common.manufacturer,
+            ComponentMetadata::Communication(m) => &m.common.manufacturer,
+            ComponentMetadata::Sensors(m) => &m.common.manufacturer,
+            ComponentMetadata::RfWireless(m) => &m.common.manufacturer,
+            ComponentMetadata::Audio(m) => &m.common.manufacturer,
+            ComponentMetadata::Protection(m) => &m.common.manufacturer,
+            ComponentMetadata::Connectors(m) => &m.common.manufacturer,
+            ComponentMetadata::Electromechanical(m) => &m.common.manufacturer,
+            ComponentMetadata::Specialized(m) => &m.common.manufacturer,
+        }
+    }
+
+    /// Get the lifecycle status from metadata
+    pub fn lifecycle(&self) -> PartLifecycle {
+        match &self.metadata {
+            ComponentMetadata::Passives(m) => m.common.lifecycle_status,
+            ComponentMetadata::Diodes(m) => m.common.lifecycle_status,
+            ComponentMetadata::Transistors(m) => m.common.lifecycle_status,
+            ComponentMetadata::AnalogIcs(m) => m.common.lifecycle_status,
+            ComponentMetadata::PowerManagement(m) => m.common.lifecycle_status,
+            ComponentMetadata::DigitalLogic(m) => m.common.lifecycle_status,
+            ComponentMetadata::Mcus(m) => m.common.lifecycle_status,
+            ComponentMetadata::Memory(m) => m.common.lifecycle_status,
+            ComponentMetadata::Communication(m) => m.common.lifecycle_status,
+            ComponentMetadata::Sensors(m) => m.common.lifecycle_status,
+            ComponentMetadata::RfWireless(m) => m.common.lifecycle_status,
+            ComponentMetadata::Audio(m) => m.common.lifecycle_status,
+            ComponentMetadata::Protection(m) => m.common.lifecycle_status,
+            ComponentMetadata::Connectors(m) => m.common.lifecycle_status,
+            ComponentMetadata::Electromechanical(m) => m.common.lifecycle_status,
+            ComponentMetadata::Specialized(m) => m.common.lifecycle_status,
+        }
+    }
+
+    /// Get the datasheet URL from metadata
+    pub fn datasheet(&self) -> Option<&str> {
+        match &self.metadata {
+            ComponentMetadata::Passives(m) => m.common.datasheet_url.as_deref(),
+            ComponentMetadata::Diodes(m) => m.common.datasheet_url.as_deref(),
+            ComponentMetadata::Transistors(m) => m.common.datasheet_url.as_deref(),
+            ComponentMetadata::AnalogIcs(m) => m.common.datasheet_url.as_deref(),
+            ComponentMetadata::PowerManagement(m) => m.common.datasheet_url.as_deref(),
+            ComponentMetadata::DigitalLogic(m) => m.common.datasheet_url.as_deref(),
+            ComponentMetadata::Mcus(m) => m.common.datasheet_url.as_deref(),
+            ComponentMetadata::Memory(m) => m.common.datasheet_url.as_deref(),
+            ComponentMetadata::Communication(m) => m.common.datasheet_url.as_deref(),
+            ComponentMetadata::Sensors(m) => m.common.datasheet_url.as_deref(),
+            ComponentMetadata::RfWireless(m) => m.common.datasheet_url.as_deref(),
+            ComponentMetadata::Audio(m) => m.common.datasheet_url.as_deref(),
+            ComponentMetadata::Protection(m) => m.common.datasheet_url.as_deref(),
+            ComponentMetadata::Connectors(m) => m.common.datasheet_url.as_deref(),
+            ComponentMetadata::Electromechanical(m) => m.common.datasheet_url.as_deref(),
+            ComponentMetadata::Specialized(m) => m.common.datasheet_url.as_deref(),
+        }
     }
 }
 
@@ -2099,12 +2580,48 @@ mod tests {
 
     #[test]
     fn part_rejects_blank_mpn() {
+        let mpn = "   ".to_string();
         let p = Part {
             id: EntityId(1),
-            mpn: "   ".into(),
-            manufacturer: "Texas Instruments".into(),
-            lifecycle: PartLifecycle::Active,
-            datasheet: "https://ti.com/lm1117".into(),
+            class: ComponentClass::RegulatorLdo,
+            metadata: ComponentMetadata::PowerManagement(PowerManagementMetadata {
+                common: ComponentMetadataCommon {
+                    component_id: mpn.clone(),
+                    mpn,
+                    manufacturer: "Texas Instruments".into(),
+                    family: ComponentFamily::PowerManagement,
+                    subfamily: "RegulatorLdo".to_string(),
+                    component_class: ComponentClass::RegulatorLdo,
+                    package: "".into(),
+                    pin_count: 3,
+                    lifecycle_status: PartLifecycle::Active,
+                    compliance: Default::default(),
+                    automotive_qualified: false,
+                    provenance: Default::default(),
+                    has_symbol: true,
+                    has_footprint: true,
+                    has_3d_model: false,
+                    footprint_standard: Default::default(),
+                    footprint_verified: true,
+                    operating_temperature: PhysicalQuantity::new(25.0, Unit::DegreeCelsius),
+                    max_operating_voltage: None,
+                    max_power_dissipation: None,
+                    tags: vec![],
+                    description: "".into(),
+                    datasheet_url: Some("https://ti.com/lm1117".into()),
+                },
+                output_voltage: None,
+                output_current: None,
+                input_voltage_min: None,
+                input_voltage_max: None,
+                efficiency: None,
+                switching_frequency: None,
+                dropout_voltage: None,
+                quiescent_current: None,
+                battery_cells: None,
+                charge_current: None,
+                on_resistance: None,
+            }),
         };
         assert_eq!(
             p.validate(),
@@ -2114,12 +2631,48 @@ mod tests {
 
     #[test]
     fn well_formed_part_validates() {
+        let mpn = "LM1117-3.3".to_string();
         let p = Part {
             id: EntityId(1),
-            mpn: "LM1117-3.3".into(),
-            manufacturer: "Texas Instruments".into(),
-            lifecycle: PartLifecycle::Eol,
-            datasheet: "https://ti.com/lm1117".into(),
+            class: ComponentClass::RegulatorLdo,
+            metadata: ComponentMetadata::PowerManagement(PowerManagementMetadata {
+                common: ComponentMetadataCommon {
+                    component_id: mpn.clone(),
+                    mpn,
+                    manufacturer: "Texas Instruments".into(),
+                    family: ComponentFamily::PowerManagement,
+                    subfamily: "RegulatorLdo".to_string(),
+                    component_class: ComponentClass::RegulatorLdo,
+                    package: "".into(),
+                    pin_count: 3,
+                    lifecycle_status: PartLifecycle::Eol,
+                    compliance: Default::default(),
+                    automotive_qualified: false,
+                    provenance: Default::default(),
+                    has_symbol: true,
+                    has_footprint: true,
+                    has_3d_model: false,
+                    footprint_standard: Default::default(),
+                    footprint_verified: true,
+                    operating_temperature: PhysicalQuantity::new(25.0, Unit::DegreeCelsius),
+                    max_operating_voltage: None,
+                    max_power_dissipation: None,
+                    tags: vec![],
+                    description: "".into(),
+                    datasheet_url: Some("https://ti.com/lm1117".into()),
+                },
+                output_voltage: None,
+                output_current: None,
+                input_voltage_min: None,
+                input_voltage_max: None,
+                efficiency: None,
+                switching_frequency: None,
+                dropout_voltage: None,
+                quiescent_current: None,
+                battery_cells: None,
+                charge_current: None,
+                on_resistance: None,
+            }),
         };
         assert!(p.validate().is_ok());
     }

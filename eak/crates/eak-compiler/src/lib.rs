@@ -5,10 +5,11 @@
 //! [`SchematicIr`] projections (transformation P1) at the engineering and schematic seams.
 
 use eak_domain::{
-    Board, BomLineItem, Bus, ClockDomain, Component, ComponentOrigin, Constraint, Contract,
-    DesignIntent, EntityId, FunctionalBlock, Interface, Net, Part, Pin, PinAssignment,
-    PinCapability, Placement, PowerDomain, ProvenanceLink, Requirement, RequirementStatus,
-    ReturnPath, Signal, Subsystem, Track,
+    Board, BomLineItem, Bus, ClockDomain, Component, ComponentMetadata,
+    ComponentOrigin, Constraint, Contract, DesignIntent, EntityId,
+    FunctionalBlock, Interface, Net, Part, Pin, PinAssignment,
+    PinCapability, Placement, PowerDomain, ProvenanceLink, Requirement,
+    RequirementStatus, ReturnPath, Signal, Subsystem, Track,
 };
 use serde::{Deserialize, Serialize};
 
@@ -589,10 +590,28 @@ impl ManufacturingIr {
                 .iter()
                 .find(|p| p.id == line.part)
                 .ok_or(IrError::UnknownPart(line.part))?;
+            let mpn = match &part.metadata {
+                ComponentMetadata::Passives(m) => m.common.mpn.clone(),
+                ComponentMetadata::Diodes(m) => m.common.mpn.clone(),
+                ComponentMetadata::Transistors(m) => m.common.mpn.clone(),
+                ComponentMetadata::AnalogIcs(m) => m.common.mpn.clone(),
+                ComponentMetadata::PowerManagement(m) => m.common.mpn.clone(),
+                ComponentMetadata::DigitalLogic(m) => m.common.mpn.clone(),
+                ComponentMetadata::Mcus(m) => m.common.mpn.clone(),
+                ComponentMetadata::Memory(m) => m.common.mpn.clone(),
+                ComponentMetadata::Communication(m) => m.common.mpn.clone(),
+                ComponentMetadata::Sensors(m) => m.common.mpn.clone(),
+                ComponentMetadata::RfWireless(m) => m.common.mpn.clone(),
+                ComponentMetadata::Audio(m) => m.common.mpn.clone(),
+                ComponentMetadata::Protection(m) => m.common.mpn.clone(),
+                ComponentMetadata::Connectors(m) => m.common.mpn.clone(),
+                ComponentMetadata::Electromechanical(m) => m.common.mpn.clone(),
+                ComponentMetadata::Specialized(m) => m.common.mpn.clone(),
+            };
             assignments.push(PartAssignment {
                 component: component.id,
                 refdes: component.refdes.clone(),
-                mpn: part.mpn.clone(),
+                mpn,
             });
         }
         Ok(Self {
@@ -612,7 +631,9 @@ impl ManufacturingIr {
 mod tests {
     use super::*;
     use eak_domain::{
-        BoardSide, ComponentClass, LayerStack, NetClass, NetOrigin, PartLifecycle,
+        BoardSide, ComponentClass, ComponentFamily, ComponentMetadata,
+        ComponentMetadataCommon, EntityId, Part, PartLifecycle,
+        PowerManagementMetadata, LayerStack, NetClass, NetOrigin,
         PinElectricalType, Priority, RequirementCategory,
     };
     use eak_units::{PhysicalQuantity, Unit};
@@ -779,12 +800,48 @@ mod tests {
     }
 
     fn part(id: u128) -> Part {
+        let mpn = format!("MPN-{id}");
         Part {
             id: EntityId(id),
-            mpn: "LM1117-3.3".into(),
-            manufacturer: "Texas Instruments".into(),
-            lifecycle: PartLifecycle::Active,
-            datasheet: "https://ti.com/lm1117".into(),
+            class: ComponentClass::RegulatorLdo,
+            metadata: ComponentMetadata::PowerManagement(PowerManagementMetadata {
+                common: ComponentMetadataCommon {
+                    component_id: mpn.clone(),
+                    mpn,
+                    manufacturer: "Texas Instruments".into(),
+                    family: ComponentFamily::PowerManagement,
+                    subfamily: "RegulatorLdo".to_string(),
+                    component_class: ComponentClass::RegulatorLdo,
+                    package: "".into(),
+                    pin_count: 3,
+                    lifecycle_status: PartLifecycle::Active,
+                    compliance: Default::default(),
+                    automotive_qualified: false,
+                    provenance: Default::default(),
+                    has_symbol: true,
+                    has_footprint: true,
+                    has_3d_model: false,
+                    footprint_standard: Default::default(),
+                    footprint_verified: true,
+                    operating_temperature: PhysicalQuantity::new(25.0, Unit::DegreeCelsius),
+                    max_operating_voltage: None,
+                    max_power_dissipation: None,
+                    tags: vec![],
+                    description: "".into(),
+                    datasheet_url: Some("https://ti.com/lm1117".into()),
+                },
+                output_voltage: None,
+                output_current: None,
+                input_voltage_min: None,
+                input_voltage_max: None,
+                efficiency: None,
+                switching_frequency: None,
+                dropout_voltage: None,
+                quiescent_current: None,
+                battery_cells: None,
+                charge_current: None,
+                on_resistance: None,
+            }),
         }
     }
     fn line_item(id: u128, part: EntityId, components: Vec<EntityId>) -> BomLineItem {

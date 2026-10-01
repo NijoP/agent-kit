@@ -195,7 +195,7 @@ fn hero_flow_releases_manufacturing_ir_and_replays_byte_identically() {
     // honesty fix — the I²C temperature sensor itself (a NON-default, in-catalog Ic member), NOT the
     // MCU. So a temperature-sensor design now sources a temperature-sensor MPN, validated by catalog
     // set-inclusion (the model proposed the sensor; the kernel confirmed it is in the Ic set).
-    let mpns: Vec<&str> = report.state.parts.iter().map(|p| p.mpn.as_str()).collect();
+    let mpns: Vec<&str> = report.state.parts.iter().map(|p| p.mpn()).collect();
     assert!(
         mpns.contains(&"USB4110-GF-A"),
         "the BOM sources the USB-C receptacle part"

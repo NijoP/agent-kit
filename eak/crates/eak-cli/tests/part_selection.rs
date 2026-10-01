@@ -174,7 +174,7 @@ fn valid_part_proposal_is_accepted_and_lands_via_the_seam_and_releases() {
     let committed_mpns: Vec<&str> = records
         .iter()
         .filter_map(|r| match &r.event {
-            Event::PartCommitted { part } => Some(part.mpn.as_str()),
+            Event::PartCommitted { part } => Some(part.mpn()),
             _ => None,
         })
         .collect();
@@ -185,9 +185,9 @@ fn valid_part_proposal_is_accepted_and_lands_via_the_seam_and_releases() {
     // The committed parts are catalogued MPNs the model proposed (e.g. the USB-C receptacle / MCU).
     for p in &report.state.parts {
         assert!(
-            committed_mpns.contains(&p.mpn.as_str()),
+            committed_mpns.contains(&p.mpn()),
             "part {} in state came from a PartCommitted seam event",
-            p.mpn
+            p.mpn()
         );
     }
 
@@ -234,30 +234,30 @@ fn non_default_but_in_catalog_part_is_accepted_via_set_inclusion() {
     // canonical default.
     assert!(
         records.iter().any(|r| matches!(&r.event,
-            Event::PartCommitted { part } if part.mpn == TEMP_SENSOR_MPN)),
+            Event::PartCommitted { part } if part.mpn() == TEMP_SENSOR_MPN)),
         "the non-default temp-sensor part was committed via the capability seam"
     );
     let sensor = report
         .state
         .parts
         .iter()
-        .find(|p| p.mpn == TEMP_SENSOR_MPN)
+        .find(|p| p.mpn() == TEMP_SENSOR_MPN)
         .expect("the temp sensor is in engineering state");
     // The committed part is the TRUSTED CatalogPart (manufacturer from the catalog record, NOT model
     // free text — the proposal carried no manufacturer at all). The moat holds on the accept path.
     assert_eq!(
-        sensor.manufacturer, "Texas Instruments",
+        sensor.manufacturer(), "Texas Instruments",
         "the committed part is built from the trusted catalog record, not the proposal text"
     );
     // Because the model chose the sensor, the class DEFAULT (the MCU) was NOT sourced — this is a
     // genuine set-member choice, not a fallback to the canonical part.
     assert!(
-        !report.state.parts.iter().any(|p| p.mpn == "STM32L010F4P6"),
+        !report.state.parts.iter().any(|p| p.mpn() == "STM32L010F4P6"),
         "the non-default choice replaced the canonical/default Ic part"
     );
     // The un-proposed Connector class fell back to its catalog part and was still sourced.
     assert!(
-        report.state.parts.iter().any(|p| p.mpn == "USB4110-GF-A"),
+        report.state.parts.iter().any(|p| p.mpn() == "USB4110-GF-A"),
         "the un-proposed Connector class fell back to its catalog part"
     );
 
@@ -291,11 +291,11 @@ fn hallucinated_part_proposal_is_rejected_and_never_enters_state() {
     // reconstructed state. The kernel refused it at validation; nothing was appended for it.
     assert!(
         !records.iter().any(|r| matches!(&r.event,
-            Event::PartCommitted { part } if part.mpn == HALLUCINATED_MPN)),
+            Event::PartCommitted { part } if part.mpn() == HALLUCINATED_MPN)),
         "no PartCommitted event ever carried the hallucinated MPN"
     );
     assert!(
-        !report.state.parts.iter().any(|p| p.mpn == HALLUCINATED_MPN),
+        !report.state.parts.iter().any(|p| p.mpn() == HALLUCINATED_MPN),
         "the hallucinated MPN is absent from engineering state"
     );
 
@@ -332,7 +332,7 @@ fn hallucinated_part_proposal_is_rejected_and_never_enters_state() {
     // (3) The Connector class, which the model did NOT mispropose, fell back to its catalog part and
     // WAS sourced — so the rejection is scoped to the bad proposal, not a blanket failure.
     assert!(
-        report.state.parts.iter().any(|p| p.mpn == "USB4110-GF-A"),
+        report.state.parts.iter().any(|p| p.mpn() == "USB4110-GF-A"),
         "the un-misproposed Connector class still sourced its catalog part"
     );
 

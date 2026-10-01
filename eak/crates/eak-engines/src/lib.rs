@@ -7,11 +7,13 @@
 //! Phase 5 adds the [`ComponentIntelligence`] search and ranking engine.
 
 use eak_domain::{
-    Board, BoardSide, BomLineItem, Bus, BusTopology, ClockDomain, Component, ComponentClass,
-    Constraint, ConstraintKind, Contract, EntityId, Interface, Layer, LayerStack, Net, NetClass,
-    Part, PartLifecycle, Pin, PinAssignment, PinCapability, PinElectricalType, Placement,
-    PowerDomain, Requirement, RequirementCategory, ReturnPath, Signal, Subsystem, Track, Violation,
-    ViolationSeverity,
+    Board, BoardSide, BomLineItem, Bus, BusTopology, ClockDomain, Component,
+    ComponentClass, ComponentFamily, ComponentMetadata, ComponentMetadataCommon,
+    Compliance, Constraint, ConstraintKind, Contract, EntityId, FootprintStandard,
+    Interface, Layer, LayerStack, Net, NetClass, Part, PartLifecycle,
+    Pin, PinAssignment, PinCapability, PinElectricalType, Placement,
+    PowerDomain, Provenance, Requirement, RequirementCategory,
+    ReturnPath, Signal, Subsystem, Track, Violation, ViolationSeverity,
 };
 use eak_units::{Dimension, PhysicalQuantity, Unit, UnitError};
 use std::cmp::Ordering;
@@ -1813,10 +1815,29 @@ impl Rule for BomLifecycleRule {
             let Some(part) = ctx.parts.iter().find(|p| p.id == item.part) else {
                 continue;
             };
+            // Extract lifecycle and MPN from metadata
+            let (lifecycle, mpn) = match &part.metadata {
+                ComponentMetadata::Passives(m) => (m.common.lifecycle_status, m.common.mpn.clone()),
+                ComponentMetadata::Diodes(m) => (m.common.lifecycle_status, m.common.mpn.clone()),
+                ComponentMetadata::Transistors(m) => (m.common.lifecycle_status, m.common.mpn.clone()),
+                ComponentMetadata::AnalogIcs(m) => (m.common.lifecycle_status, m.common.mpn.clone()),
+                ComponentMetadata::PowerManagement(m) => (m.common.lifecycle_status, m.common.mpn.clone()),
+                ComponentMetadata::DigitalLogic(m) => (m.common.lifecycle_status, m.common.mpn.clone()),
+                ComponentMetadata::Mcus(m) => (m.common.lifecycle_status, m.common.mpn.clone()),
+                ComponentMetadata::Memory(m) => (m.common.lifecycle_status, m.common.mpn.clone()),
+                ComponentMetadata::Communication(m) => (m.common.lifecycle_status, m.common.mpn.clone()),
+                ComponentMetadata::Sensors(m) => (m.common.lifecycle_status, m.common.mpn.clone()),
+                ComponentMetadata::RfWireless(m) => (m.common.lifecycle_status, m.common.mpn.clone()),
+                ComponentMetadata::Audio(m) => (m.common.lifecycle_status, m.common.mpn.clone()),
+                ComponentMetadata::Protection(m) => (m.common.lifecycle_status, m.common.mpn.clone()),
+                ComponentMetadata::Connectors(m) => (m.common.lifecycle_status, m.common.mpn.clone()),
+                ComponentMetadata::Electromechanical(m) => (m.common.lifecycle_status, m.common.mpn.clone()),
+                ComponentMetadata::Specialized(m) => (m.common.lifecycle_status, m.common.mpn.clone()),
+            };
             // One match over the lifecycle: Active lines are fine and skipped; every other
             // variant maps to its (severity, label) pair. Single source of truth, so there is
             // no unreachable! arm to drift out of sync on a future refactor.
-            let (severity, state) = match part.lifecycle {
+            let (severity, state) = match lifecycle {
                 PartLifecycle::Eol => (ViolationSeverity::Error, "end-of-life"),
                 PartLifecycle::Nrnd => (
                     ViolationSeverity::Warning,
@@ -1831,7 +1852,7 @@ impl Rule for BomLifecycleRule {
                 message: format!(
                     "BOM line {} orders part \"{}\" which is {}",
                     item.id.short(),
-                    part.mpn,
+                    mpn,
                     state
                 ),
             });
@@ -3085,10 +3106,12 @@ impl Rule for EmcAntennaLengthRule {
 mod tests {
     use super::*;
     use eak_domain::{
-        BoardSide, ComponentOrigin, ConstraintStatus, LayerStack, NetOrigin, Priority,
-        RequirementStatus,
+        BoardSide, ComponentFamily, ComponentMetadata, EntityId, Part,
+        ComponentMetadataCommon, ComponentOrigin, ConstraintStatus, LayerStack,
+        NetOrigin, PartLifecycle, PassivesMetadata,
+        Priority, RequirementStatus,
     };
-    use eak_units::Unit;
+    use eak_units::{Dimension, PhysicalQuantity, Unit, UnitError};
 
     #[test]
     fn plan_is_linear_and_nonempty() {
@@ -4083,12 +4106,49 @@ mod tests {
     }
 
     fn part(id: u128, lifecycle: PartLifecycle) -> Part {
+        let mpn = format!("MPN-{id}");
         Part {
             id: EntityId(id),
-            mpn: format!("MPN-{id}"),
-            manufacturer: "ACME".to_string(),
-            lifecycle,
-            datasheet: format!("https://acme/{id}"),
+            class: ComponentClass::Resistor,
+            metadata: ComponentMetadata::Passives(PassivesMetadata {
+                common: ComponentMetadataCommon {
+                    component_id: mpn.clone(),
+                    mpn,
+                    manufacturer: "ACME".to_string(),
+                    family: ComponentFamily::Passives,
+                    subfamily: "Resistor".to_string(),
+                    component_class: ComponentClass::Resistor,
+                    package: "".to_string(),
+                    pin_count: 2,
+                    lifecycle_status: lifecycle,
+                    compliance: Default::default(),
+                    automotive_qualified: false,
+                    provenance: Default::default(),
+                    has_symbol: true,
+                    has_footprint: true,
+                    has_3d_model: false,
+                    footprint_standard: Default::default(),
+                    footprint_verified: true,
+                    operating_temperature: PhysicalQuantity::new(25.0, Unit::DegreeCelsius),
+                    max_operating_voltage: None,
+                    max_power_dissipation: None,
+                    tags: vec![],
+                    description: "".to_string(),
+                    datasheet_url: Some(format!("https://acme/{id}")),
+                },
+                resistance: None,
+                power_rating: None,
+                max_working_voltage: None,
+                temperature_coefficient: None,
+                voltage_coefficient: None,
+                noise_index: None,
+                pulse_withstand: None,
+                capacitance: None,
+                voltage_rating: None,
+                esr: None,
+                esl: None,
+                dielectric_type: None,
+            }),
         }
     }
 

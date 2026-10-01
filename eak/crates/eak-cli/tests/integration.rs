@@ -678,7 +678,7 @@ fn bom_eol_part_is_caught_routed_back_and_left_traceable() {
             .state
             .part(item.part)
             .expect("line item orders a known part");
-        assert_eq!(part.lifecycle, PartLifecycle::Eol);
+        assert_eq!(part.lifecycle(), PartLifecycle::Eol);
 
         // ... and binds it to real components, each traceable back to the captured intent.
         assert!(!item.components.is_empty(), "the line covers components");
