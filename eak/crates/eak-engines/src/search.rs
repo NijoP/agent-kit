@@ -4,13 +4,10 @@
 //! over the component library. Uses SQLite FTS5 for full-text search and structured metadata
 //! for parametric filtering.
 
-use crate::PartCatalog;
 use eak_domain::{ComponentClass, PartLifecycle};
-use eak_units::{Dimension, PhysicalQuantity, Unit};
 use once_cell::sync::Lazy;
-use rusqlite::{params, params_from_iter, Connection, OptionalExtension, Result, Row};
+use rusqlite::{params, Connection, OptionalExtension, Result, Row};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Mutex;
@@ -236,6 +233,7 @@ const READINESS_WEIGHTS: ReadinessWeights = ReadinessWeights {
 
 /// Readiness scoring weights configuration.
 #[derive(Debug, Clone, Copy)]
+#[allow(dead_code)]
 struct ReadinessWeights {
     has_mpn: f64,
     has_manufacturer: f64,
@@ -489,8 +487,6 @@ fn component_class_to_category(class: ComponentClass) -> String {
         ComponentClass::Capacitor => "Capacitor".to_string(),
         ComponentClass::Ic => "IC".to_string(), // Would need mapping
         ComponentClass::Regulator => "Regulator".to_string(),
-        ComponentClass::Connector => "Connector".to_string(),
-        _ => "Unknown".to_string(),
     }
 }
 
@@ -506,7 +502,7 @@ fn row_to_result(row: &Row) -> Result<ComponentIntelligenceResult> {
     let resistance_ohm: Option<f64> = row.get("resistance_ohm")?;
     let inductance_h: Option<f64> = row.get("inductance_h")?;
     let tolerance: Option<String> = row.get("tolerance")?;
-    let temp_coeff: Option<String> = row.get("temp_coeff")?;
+    let _temp_coeff: Option<String> = row.get("temp_coeff")?;
     let power_w: Option<f64> = row.get("power_w")?;
     let description: Option<String> = row.get("description")?;
     let keywords: Option<String> = row.get("keywords")?;
@@ -626,9 +622,9 @@ fn extract_physical_quantities(
     quantities: &mut HashMap<String, PhysicalQuantityValue>,
 ) {
     if let Some(core) = metadata.get("core") {
-        if let Some(obj) = core.as_object() {
+        if let Some(_obj) = core.as_object() {
             for (key, value) in obj {
-                if let Some(obj) = value.as_object() {
+                if let Some(_obj) = value.as_object() {
                     if let (Some(mag), Some(unit), Some(dim)) = (
                         value.get("magnitude").and_then(|v| v.as_f64()),
                         value.get("unit").and_then(|v| v.as_str()),
@@ -654,9 +650,9 @@ fn extract_physical_quantities(
 
     if let Some(family) = metadata.get("family") {
         if let Some(data) = family.get("data") {
-            if let Some(obj) = data.as_object() {
+            if let Some(_obj) = data.as_object() {
                 for (key, value) in obj {
-                    if let Some(obj) = value.as_object() {
+                    if let Some(_obj) = value.as_object() {
                         if let (Some(mag), Some(unit), Some(dim)) = (
                             value.get("magnitude").and_then(|v| v.as_f64()),
                             value.get("unit").and_then(|v| v.as_str()),
