@@ -84,7 +84,24 @@ cargo test --workspace                       # unit + integration + contract + g
 cargo fmt --workspace --check
 ```
 
-## Run (CLI)
+## CLI (CLI)
+
+The `eak` binary provides the following subcommands:
+
+- `eak run` — Run Requirement Planning (+ Engineering Analysis stub) on a design intent.
+- `eak replay` — Replay an event log and print the reconstructed state.
+- `eak trace` — Print the provenance chain for a requirement (by short or full id).
+- `eak list-providers` — List all configured providers.
+- `eak list-models` — List available models for a provider.
+- `eak test-connection` — Test connectivity to a provider.
+- `eak configure-provider` — Add or update a provider configuration.
+- `eak asset-parse` — Parse a datasheet PDF and extract structured facts.
+- `eak asset-facts` — List extracted facts for a datasheet asset.
+- `eak asset-compare` — Cross-check datasheet facts against component metadata.
+- `eak asset-verify-identity` — Verify datasheet identity matches component record.
+- `eak export` — Export manufacturing artifacts (KiCad, Gerber, BOM). *(Planned)*
+
+### Examples
 
 ```sh
 # Offline, deterministic (built-in fixture): run pipeline, write event log
@@ -98,8 +115,8 @@ cargo run --bin eak -- replay --log /tmp/eak.jsonl
 # Show provenance chain for an entity (short id from run output)
 cargo run --bin eak -- trace --log /tmp/eak.jsonl <entity-id>
 
-# Export manufacturing artifacts
-cargo run --bin eak -- export --format kicad --log /tmp/eak.jsonl --output ./kicad-project
+# Export manufacturing artifacts (planned)
+# cargo run --bin eak -- export --format kicad --log /tmp/eak.jsonl --output ./kicad-project
 ```
 
 ### Live Reasoning (Real Model, Recorded Then Replayable)

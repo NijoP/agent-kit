@@ -123,10 +123,17 @@ Engineer reviews verification results (ERC, DRC, power, SI, EMC, DFM) with confi
 - `Capability` traits — validated entry points for AI proposals
 
 ### CLI (`eak` binary)
-- `eak run --intent <text> --log <path> [--deterministic|--live]`
-- `eak replay --log <path>`
-- `eak trace --log <path> <entity-id>`
-- `eak export --format <kicad|gerber|bom> --log <path> --output <dir>`
+- `eak run` — Run Requirement Planning (+ Engineering Analysis stub) on a design intent.
+- `eak replay` — Replay an event log and print the reconstructed state.
+- `eak trace` — Print the provenance chain for a requirement (by short or full id).
+- `eak list-providers` — List all configured providers.
+- `eak list-models` — List available models for a provider.
+- `eak test-connection` — Test connectivity to a provider.
+- `eak configure-provider` — Add or update a provider configuration.
+- `eak asset-parse` — Parse a datasheet PDF and extract structured facts.
+- `eak asset-facts` — List extracted facts for a datasheet asset.
+- `eak asset-compare` — Cross-check datasheet facts against component metadata.
+- `eak asset-verify-identity` — Verify datasheet identity matches component record.
 
 ### IPC (Tauri)
 - `start_run(intent, config)` — returns stream of `EventRecord`
