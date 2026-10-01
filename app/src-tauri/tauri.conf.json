@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Tauri App",
+  "productName": "Electronics Agent Kit",
   "version": "0.1.0",
-  "identifier": "com.tauri.dev",
+  "identifier": "org.electronics-agent-kit.eak",
   "build": {
     "frontendDist": "../dist",
     "beforeDevCommand": "npm run dev",
@@ -11,9 +11,9 @@
   "app": {
     "windows": [
       {
-        "title": "Tauri",
-        "width": 800,
-        "height": 600,
+        "title": "Electronics Agent Kit",
+        "width": 1200,
+        "height": 800,
         "resizable": true,
         "fullscreen": false
       }
@@ -34,6 +34,40 @@
     ],
     "android": {
       "debugApplicationIdSuffix": ".debug"
+    },
+    "publisher": "NijoP",
+    "category": "Development",
+    "shortDescription": "Electronics Agent Kit - AI-powered electronics design assistant",
+    "longDescription": "A desktop application for AI-assisted electronics design, component search, and datasheet analysis.",
+    "windows": {
+      "certificateThumbprint": null,
+      "digestAlgorithm": "sha256",
+      "timestampUrl": ""
+    },
+    "macOS": {
+      "entitlements": null,
+      "exceptionDomain": "",
+      "frameworks": [],
+      "minimumSystemVersion": "10.15",
+      "signingIdentity": null,
+      "providerShortName": null
+    }
+  },
+  "plugins": {
+    "shell": {
+      "open": true
+    },
+    "fs": {
+      "all": true,
+      "scope": [
+        "$APPDATA/*",
+        "$HOME/*"
+      ]
+    },
+    "dialog": {
+      "all": true,
+      "open": true,
+      "save": true
     }
   }
 }

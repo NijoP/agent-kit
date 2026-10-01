@@ -9,6 +9,7 @@ on:
 env:
   RUSTFLAGS: "-D warnings"
   CARGO_TERM_COLOR: always
+  CLIPPY_CONF_DIR: ${{ github.workspace }}/repo/eak
 
 jobs:
   check:
