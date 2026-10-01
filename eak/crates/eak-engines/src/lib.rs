@@ -4,6 +4,7 @@
 //! [`ConstraintConsistencyRule`], catches mutually-unsatisfiable constraints. ERC/DRC/DFM
 //! are future rules over the same framework. All engines are pure and deterministic.
 //! See `docs/engineering/constraint-engine.md` and `docs/engineering/verification-engine.md`.
+//! Phase 5 adds the [`ComponentIntelligence`] search and ranking engine.
 
 use eak_domain::{
     Board, BoardSide, BomLineItem, Bus, BusTopology, ClockDomain, Component, ComponentClass,
@@ -15,6 +16,8 @@ use eak_domain::{
 use eak_units::{Dimension, PhysicalQuantity, Unit, UnitError};
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
+
+pub mod search;
 
 /// One step in an agent's elicitation reasoning-plan.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -4940,3 +4943,11 @@ mod tests {
         assert_eq!(findings[0].subjects, vec![EntityId(710)]); // the offending requirement
     }
 }
+
+// Re-export search module
+pub use search::{
+    get_component_intelligence, get_search_db, init_search_db, search, search_by_category,
+    search_by_manufacturer, search_by_mpn, search_by_parameter, set_search_db,
+    ComponentIntelligenceResult, PhysicalQuantityValue, ProvenanceInfo, SearchQuery, SearchResults,
+    SortField,
+};

@@ -12,14 +12,10 @@
     "windows": [
       {
         "title": "Electronics Agent Kit",
-        "width": 1400,
-        "height": 900,
-        "minWidth": 1000,
-        "minHeight": 700,
+        "width": 1200,
+        "height": 800,
         "resizable": true,
-        "fullscreen": false,
-        "decorations": true,
-        "transparent": false
+        "fullscreen": false
       }
     ],
     "security": {
@@ -36,26 +32,40 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "publisher": "EAK Contributors",
-    "copyright": "MIT OR Apache-2.0",
+    "android": {
+      "debugApplicationIdSuffix": ".debug"
+    },
+    "publisher": "NijoP",
     "category": "Development",
-    "shortDescription": "AI-native electronics engineering runtime",
-    "longDescription": "Electronics Agent Kit (EAK) — An open-source, AI-native electronics engineering system. Intent in. Engineering model out. Verified engineering artifacts out."
+    "shortDescription": "Electronics Agent Kit - AI-powered electronics design assistant",
+    "longDescription": "A desktop application for AI-assisted electronics design, component search, and datasheet analysis.",
+    "windows": {
+      "certificateThumbprint": null,
+      "digestAlgorithm": "sha256",
+      "timestampUrl": ""
+    },
+    "macOS": {
+      "entitlements": null,
+      "exceptionDomain": "",
+      "frameworks": [],
+      "minimumSystemVersion": "10.15",
+      "signingIdentity": null,
+      "providerShortName": null
+    }
   },
   "plugins": {
     "shell": {
       "open": true
     },
     "fs": {
-      "scope": {
-        "allowed": [
-          "$APPDATA/*",
-          "$HOME/*",
-          "$TEMP/*"
-        ]
-      }
+      "all": true,
+      "scope": [
+        "$APPDATA/*",
+        "$HOME/*"
+      ]
     },
     "dialog": {
+      "all": true,
       "open": true,
       "save": true
     }
