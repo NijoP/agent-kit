@@ -43,7 +43,7 @@ impl TelemetryRecorder {
         model_id: &str,
         provider: &str,
         request_type: RequestType,
-        mut operation: F,
+        operation: F,
     ) -> Result<T>
     where
         F: FnMut() -> std::result::Result<T, E>,
