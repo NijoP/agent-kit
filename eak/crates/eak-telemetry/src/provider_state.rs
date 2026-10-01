@@ -14,13 +14,13 @@ pub struct ProviderStateManager {
 
 impl ProviderStateManager {
     pub fn new(database: Option<crate::database::TelemetryDatabase>) -> Self {
-        let mut manager = Self {
+        let manager = Self {
             states: Arc::new(RwLock::new(HashMap::new())),
             database,
         };
 
         // Load from database if available
-        if let Some(db) = &manager.database {
+        if let Some(_db) = if let Some(db) = &manager.database {manager.database {
             // Could load all provider states here
         }
 
@@ -167,7 +167,7 @@ impl ProviderStateManager {
         }
     }
 
-    fn persist(&self, provider: &str, state: &ProviderState) {
+    fn persist(fn persist(&self, provider: &str, state: &ProviderState) {self, _provider: fn persist(&self, provider: &str, state: &ProviderState) {str, state: fn persist(&self, provider: &str, state: &ProviderState) {ProviderState) {
         if let Some(db) = &self.database {
             let _ = db.upsert_provider_state(state);
         }

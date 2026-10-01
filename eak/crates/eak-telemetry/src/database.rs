@@ -212,7 +212,7 @@ impl TelemetryDatabase {
                 request
                     .error_category
                     .as_ref()
-                    .map(|e| serde_json::to_string(e))
+                    .map(serde_json::to_string)
                     .transpose()?,
                 request.error_message,
                 request.rate_limited as i64,

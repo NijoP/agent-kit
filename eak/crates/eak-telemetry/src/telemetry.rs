@@ -56,7 +56,7 @@ impl TelemetryRecorder {
         // Execute with retry logic
         let result = self
             .retry_policy
-            .execute_with_retry(provider, &self.provider_state, || operation());
+            .execute_with_retry(provider, &self.provider_state, operation)
 
         let latency = start.elapsed().as_millis() as u64;
 

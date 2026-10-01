@@ -6,7 +6,7 @@
 
 use eak_domain::{ComponentClass, PartLifecycle};
 use once_cell::sync::Lazy;
-use rusqlite::{params, Connection, Result, Row};
+use rusqlite::{Connection, Result, Row};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
@@ -896,7 +896,7 @@ pub fn search_by_parameter(
                 "Unknown parameter: {}",
                 param
             ))
-            .into())
+            ) )
         }
     }
 
