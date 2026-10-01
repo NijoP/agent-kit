@@ -897,7 +897,7 @@ pub fn search_by_parameter(
                 "Unknown parameter: {}",
                 param
             ))
-            ) )
+            )
         }
     }
 
