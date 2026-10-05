@@ -1,95 +1,297 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>EAK Development Roadmap</title>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EAK V1 Roadmap — KiCad + Agent Terminals</title>
 <style>
-:root{--b:#080c10;--p:#0e151b;--p2:#111b22;--l:#293640;--t:#e7edf2;--m:#81909c;--c:#60d8ef;--g:#61d6a2;--a:#e1b469;--r:#eb767e}
-*{box-sizing:border-box}html,body{margin:0;height:100%;background:var(--b);color:var(--t);font:12px Inter,system-ui,sans-serif}body{overflow:hidden}
-.app{height:100vh;display:grid;grid-template-rows:44px 1fr 23px}.top,.foot{display:flex;align-items:center;gap:10px;padding:0 12px;background:#080b0f;border-bottom:1px solid var(--l)}.foot{border-top:1px solid var(--l);border-bottom:0;color:#697883;font-size:8px}.sp{flex:1}
-.logo{font-weight:850;font-size:15px}.logo i{color:var(--c);font-style:normal}.badge{font-size:8px;letter-spacing:1px;text-transform:uppercase;border:1px solid #35424c;padding:4px 6px;border-radius:4px;color:#8c9aa5}.btn{border:1px solid #35434e;background:#12191f;color:#ccd5dc;padding:6px 9px;border-radius:5px;cursor:pointer}.btn:hover{background:#19232b}.primary{background:#17333d;border-color:#426a78}
-.ws{min-height:0;display:grid;grid-template-columns:235px minmax(0,1fr) 315px}.side,.details{background:var(--p);overflow:auto}.side{border-right:1px solid var(--l)}.details{border-left:1px solid var(--l)}
-.head{height:37px;display:flex;align-items:center;justify-content:space-between;padding:0 10px;border-bottom:1px solid var(--l);font-size:9px;font-weight:750}.ey{font-size:8px;text-transform:uppercase;letter-spacing:1px;color:#6d7b86}
-.sidebody,.dbody{padding:10px}.filters{display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px}.filters button{background:#10171d;border:1px solid transparent;color:#73818c;border-radius:4px;padding:5px;cursor:pointer;font-size:8px}.filters button.on{background:#19232b;border-color:#36444f;color:#fff}
-.nav{margin-top:10px;display:grid;gap:3px}.nav button{background:transparent;border:1px solid transparent;color:#9caab5;text-align:left;padding:7px;border-radius:5px;cursor:pointer}.nav button.on,.nav button:hover{background:#172129;border-color:#2f3d48;color:#fff}.nav span{color:#65747f;margin-right:6px}.nav em{float:right;font-size:8px;color:#667580;font-style:normal}
-.note{margin-top:12px;border:1px solid #2b3943;background:#0b1116;border-radius:6px;padding:8px}.note b{font-size:8px}.note p{font-size:8px;line-height:1.45;color:#75838d;margin:4px 0 0}
-.status,.log{background:#0c1318;border:1px solid #30404b;border-radius:7px;margin:12px 0}.status{padding:9px}.sttop{display:flex;gap:8px;align-items:center;font-size:8px}.pill{border:1px solid #315b4d;color:var(--g);padding:3px 6px;border-radius:8px;font-size:7px}.time{margin-left:auto;color:#71808c}.stats{display:grid;grid-template-columns:1.4fr .7fr .7fr .7fr .7fr;gap:6px;margin-top:8px}.stat{border:1px solid #293640;background:#0a1015;border-radius:5px;padding:7px}.stat b{display:block;font-size:14px}.stat span{color:#6f7d88;font-size:7px}.stat.c b{color:var(--c)}.stat.g b{color:var(--g)}.stat.a b{color:var(--a)}.stat.r b{color:var(--r)}
-.log{overflow:hidden}.log h3{font-size:8px;margin:0;padding:8px;border-bottom:1px solid var(--l)}.entry{display:grid;grid-template-columns:100px 1fr 45px;gap:8px;padding:7px 8px;border-bottom:1px dashed #25323b;font-size:8px}.entry:last-child{border:0}.when{color:#66747f}.what{color:#98a5ae}.ph{text-align:right;color:var(--c)}
-.road{position:relative}.road:before{content:"";position:absolute;left:16px;top:3px;bottom:8px;width:1px;background:linear-gradient(var(--c),#3a4650 55%,var(--r))}
-.phase{position:relative;padding-left:40px;margin-bottom:8px}.node{position:absolute;left:7px;top:12px;width:19px;height:19px;border-radius:50%;background:#0e161c;border:2px solid #41505b;z-index:2;display:grid;place-items:center;font-size:6px}.done .node{border-color:var(--g);color:var(--g)}.active .node{border-color:var(--c);color:var(--c)}
-.card{border:1px solid var(--l);border-radius:7px;background:#0c1217;overflow:hidden}.phead{display:grid;grid-template-columns:44px 1fr auto 12px;gap:8px;align-items:center;padding:10px;cursor:pointer}.pno{font:8px monospace;color:#697883}.pname{font-size:10px;font-weight:760}.psub{font-size:8px;color:#74828d;margin-top:3px}.tag{font-size:7px;border:1px solid #34414b;padding:3px 6px;border-radius:8px;color:#8896a0}.tag.c{color:var(--c);border-color:#315967}.tag.g{color:var(--g);border-color:#315847}.tag.a{color:var(--a);border-color:#5c4c30}
-.body{display:none;border-top:1px solid var(--l);padding:8px;background:#0a1015}.open .body{display:block}.tasks{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}.task{border:1px solid #293640;background:#0f161c;border-radius:5px;padding:7px;cursor:pointer}.task:hover{border-color:#465761}.task b{display:block;font-size:8px}.task span{display:block;font-size:7px;color:#74828d;margin-top:4px;line-height:1.4}.gate{margin-top:7px;border:1px dashed #34414b;border-radius:5px;padding:7px;font-size:7px;color:#7a8893}.gate b{color:#697782;text-transform:uppercase;letter-spacing:.7px;margin-right:6px}
-.dtitle{font-size:14px;font-weight:780;margin-top:4px}.dsub{font-size:8px;color:#7a8993;line-height:1.45;margin-top:3px}.sec{margin-top:13px}.sec h4{font-size:8px;color:#6d7c87;text-transform:uppercase;letter-spacing:1px;margin:0 0 5px}.kv{display:grid;grid-template-columns:1fr auto;gap:7px;padding:5px 0;border-bottom:1px dashed #26333c;font-size:8px}.kv span:first-child{color:#6d7b86}.kv span:last-child{color:#ccd5db}.code{border:1px solid #2a3741;background:#090e13;border-radius:5px;padding:8px;font:7px/1.6 monospace;color:#91a0ab;white-space:pre-wrap}
-.modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:#000b;z-index:20}.modal.show{display:flex}.box{width:min(680px,92vw);background:#0e151b;border:1px solid #3c4b56;border-radius:8px;padding:13px;box-shadow:0 30px 100px #000}.box h2{font-size:13px;margin:0 25px 8px 0}.box p{font-size:8px;color:#87959f;line-height:1.55}.close{float:right;border:0;background:transparent;color:#76848f;font-size:16px;cursor:pointer}
-@media(max-width:1000px){.ws{grid-template-columns:205px minmax(0,1fr)}.details{display:none}.stats{grid-template-columns:1fr 1fr}.stat:first-child{grid-column:1/-1}}@media(max-width:760px){.side{display:none}.tasks{grid-template-columns:1fr}}
-</style></head><body><div class="app">
-<header class="top"><div class="logo">EAK<i>◆</i></div><div class="badge">Development Roadmap</div><div class="ey">mature repo → installable product</div><div class="sp"></div><button class="btn" onclick="allOpen(1)">Expand</button><button class="btn" onclick="allOpen(0)">Collapse</button><button class="btn primary" onclick="finalGate()">Final gate</button></header>
-<div class="ws">
-<aside class="side"><div class="head"><span>ROADMAP NAV</span><span class="ey">R2</span></div><div class="sidebody"><div class="filters"><button class="on" onclick="filter('all',this)">ALL</button><button onclick="filter('core',this)">CORE</button><button onclick="filter('release',this)">RELEASE</button></div><div class="nav" id="nav"></div><div class="note"><b>30-MINUTE UPDATE CONTRACT</b><p>Firstmate must inspect the real repository every 30 minutes, update status, append a history snapshot, commit this HTML and push it to main.</p></div><div class="note"><b>CONTEXT RECOVERY</b><p>At about 60% model context: persist state, start a fresh session, read active state + latest commit, then continue.</p></div></div></aside>
-<main class="main"><div class="wrap">
-<div class="hero"><div><div class="ey">EAK execution control map</div><h1>Mature repository → final product → installation</h1><p>Click every phase to open its sub-blocks. A phase is complete only when implementation and repeatable proof exist in the repository.</p></div><div class="acts"><button class="btn" onclick="refs()">References</button><button class="btn" onclick="updateRule()">Update rule</button></div></div>
-<section class="status"><div class="sttop"><b>LIVE DEVELOPMENT STATUS</b><span class="pill">FIRSTMATE · EVERY 30 MIN</span><span class="time">Last update <b id="last"></b> · next <b id="next"></b></span></div><div class="stats"><div class="stat c"><b id="overall"></b><span>OVERALL PROGRESS</span></div><div class="stat g"><b id="doneCount"></b><span>COMPLETED BLOCKS</span></div><div class="stat a"><b id="openCount"></b><span>OPEN WORKSTREAMS</span></div><div class="stat r"><b id="blockCount"></b><span>BLOCKED ITEMS</span></div><div class="stat"><b id="commitCount"></b><span>RECENT COMMITS</span></div></div></section>
-<section class="log"><h3>30-MINUTE DEVELOPMENT LOG — FIRSTMATE APPENDS SNAPSHOTS</h3><div id="log"></div></section>
-<div class="road" id="road"></div>
-</div></main>
-<aside class="details"><div class="head"><span>SELECTED PHASE</span><span class="ey" id="selNo">01</span></div><div class="dbody"><div class="ey">Execution focus</div><div class="dtitle" id="selTitle"></div><div class="dsub" id="selSub"></div><div class="sec"><h4>Live state</h4><div class="kv"><span>Overall</span><span id="dOverall"></span></div><div class="kv"><span>Blocked</span><span id="dBlock"></span></div><div class="kv"><span>Next action</span><span id="dNext"></span></div></div><div class="sec"><h4>Required loop</h4><div class="code">inspect → implement → build/test
-→ inspect diff → update status
-→ git commit → git push → continue</div></div><div class="sec"><h4>Model</h4><div class="kv"><span>Primary</span><span>NVIDIA NIMTRON 550B</span></div><div class="kv"><span>Session handoff</span><span>~60%</span></div><div class="kv"><span>Roadmap cadence</span><span>30 min</span></div></div></div></aside>
+:root{color-scheme:dark;--bg:#080c10;--panel:#0e151b;--line:#293640;--text:#e7edf2;--muted:#a3b1bc;--cyan:#60d8ef;--green:#61d6a2;--amber:#e1b469}
+*{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:80px}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.6 system-ui,sans-serif}a{color:var(--cyan);overflow-wrap:anywhere}button{font:inherit;cursor:pointer}button:focus-visible,a:focus-visible,summary:focus-visible{outline:3px solid var(--cyan);outline-offset:4px}
+header{position:sticky;top:0;z-index:2;background:#080c10f5;border-bottom:1px solid var(--line);padding:12px 24px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}header strong{font-size:20px}header span{color:var(--muted);font-size:13px}.actions{display:flex;gap:8px;margin-left:auto}button{background:#15232d;color:var(--text);border:1px solid #435563;border-radius:6px;padding:6px 12px}button[aria-pressed="true"]{border-color:var(--cyan);color:var(--cyan)}
+.layout{display:grid;grid-template-columns:245px minmax(0,1fr);max-width:1550px;margin:auto}nav{padding:24px 18px;position:sticky;top:75px;align-self:start;max-height:calc(100vh - 90px);overflow:auto}nav a{display:block;padding:5px 0;text-decoration:none;font-size:13px}nav h2{font-size:12px;text-transform:uppercase;color:var(--muted);letter-spacing:1px}main{min-width:0;padding:24px 32px 60px;border-left:1px solid var(--line)}h1{font-size:clamp(27px,3vw,42px);line-height:1.2;margin:8px 0 18px}h2{font-size:23px;line-height:1.3;margin:32px 0 14px}h3{font-size:17px;margin:0 0 8px}p{margin:8px 0 14px}.eyebrow{color:var(--cyan);letter-spacing:1.2px;font-size:12px;text-transform:uppercase}.muted,small{color:var(--muted)}
+.callout,.card,details{background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:18px;margin:14px 0}.callout{border-left:4px solid var(--cyan)}.warning{border-left-color:var(--amber)}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.grid .card{margin:0}.metric{font-size:25px;display:block;color:var(--cyan)}.badge{display:inline-block;border:1px solid #586776;border-radius:20px;padding:2px 9px;font-size:11px;color:var(--muted);white-space:nowrap}.badge.ready{color:var(--green);border-color:#39765b}.badge.pending{color:var(--amber);border-color:#7e673a}
+ul,ol{padding-left:23px}li{margin:7px 0}code,pre{font:13px/1.65 ui-monospace,Consolas,monospace}code{overflow-wrap:anywhere}pre{padding:16px;background:#080c10;border:1px solid var(--line);border-radius:6px;white-space:pre-wrap;overflow-wrap:anywhere}.table-wrap{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:11px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line)}th{color:var(--cyan)}td:first-child{min-width:130px}summary{cursor:pointer;line-height:1.4;font-weight:700}summary .badge{margin-left:8px}details[open] summary{padding-bottom:12px;border-bottom:1px solid var(--line)}.phase-meta{color:var(--muted);font-size:13px;margin-top:12px}.tasks{padding-left:22px}.gate{border-left:3px solid var(--green);padding:8px 12px;background:#101e1b}.filters{display:flex;gap:8px;flex-wrap:wrap;margin:16px 0}.source-list li{font-size:13px}footer{color:var(--muted);border-top:1px solid var(--line);padding:18px 24px;font-size:12px}[hidden]{display:none!important}
+@media(max-width:1000px){.layout{grid-template-columns:190px minmax(0,1fr)}main{padding:20px}.grid{grid-template-columns:1fr}}
+@media(max-width:700px){header{position:static;padding:14px}.layout{display:block}nav{position:static;max-height:none;padding:16px;display:flex;flex-wrap:wrap;gap:8px 18px}nav h2{width:100%;margin:0}main{border:0;padding:16px}.actions{margin-left:0}html{scroll-padding-top:12px}th,td{padding:8px}}
+@media print{header{position:static}nav,.actions,.filters{display:none}.layout{display:block}main{border:0}body{font-size:11px}.card,details{break-inside:avoid}a{color:inherit}}
+</style>
+</head>
+<body>
+<header><strong>EAK ◆</strong><span>V1 development roadmap · R3</span><div class="actions"><button type="button" id="expand">Expand phases</button><button type="button" id="collapse">Collapse phases</button></div></header>
+<div class="layout">
+<nav aria-label="Roadmap navigation">
+<h2>Product &amp; evidence</h2>
+<a href="#vision">V1 user experience</a><a href="#baseline">Verified baseline</a><a href="#findings">Upstream findings</a><a href="#architecture">Integration architecture</a><a href="#formats">Import / export parity</a><a href="#phases">Implementation phases</a><a href="#acceptance">V1 acceptance</a><a href="#preview">48-hour preview</a><a href="#sources">Source references</a><a href="#history">Change history</a>
+<h2>Execution order</h2>
+<a href="#p00">00 · Build baseline</a><a href="#p01">01 · Native UI proof</a><a href="#p02">02 · Shared project state</a><a href="#p03">03 · Persistent terminals</a><a href="#p04">04 · Agent tool bridge</a><a href="#p05">05 · Schematic editing</a><a href="#p06">06 · PCB placement</a><a href="#p07">07 · PCB routing</a><a href="#p08">08 · 3D inspection</a><a href="#p09">09 · KiCad I/O parity</a><a href="#p10">10 · Verification &amp; recovery</a><a href="#p11">11 · Packaging &amp; licenses</a><a href="#p12">12 · End-to-end acceptance</a>
+</nav>
+<main>
+<section id="vision">
+<div class="eyebrow">KiCad editing experience + Herdr-style agent workspace</div>
+<h1>Design by hand.<br>Design with your coding agent.<br>Keep one engineering project.</h1>
+<p><strong>V1 product requirement:</strong> EAK combines KiCad's real schematic, PCB, and 3D experience with persistent terminals. Users run their preferred coding agent in a terminal and ask it to add, edit, move, rotate, place, and route design objects through EAK. Users can also edit manually and access all import/export options available in the selected KiCad build.</p>
+<div class="grid">
+<article class="card"><h3>Electronics workspace</h3><p>Actual KiCad editing tools, selection, properties, libraries, connectivity, interactive routing, undo/redo, and 3D inspection—not a read-only SVG approximation.</p></article>
+<article class="card"><h3>AI &amp; terminals workspace</h3><p>Real PTYs, tabs, splits, resize, detach/reconnect, and user-installed coding agents. No mandatory model, provider, or EAK-hosted chat service.</p></article>
+<article class="card"><h3>Shared design &amp; outputs</h3><p>Manual and agent operations address the same objects and revision. Inspect changes, retain recovery points, run checks, and export through KiCad's native capabilities.</p></article>
 </div>
-<footer class="foot"><span>ROADMAP R2</span><span>13 phases</span><span>status is repository-backed</span><span class="sp"></span><span>final gate = tested installation</span></footer>
+<div class="callout"><strong>Example journey:</strong> Open a project → start a coding agent → “Add this connector and wire its power pins” → inspect the proposed change → apply → “Move J1 to the left edge and rotate it 90°” → manually refine placement → ask for a route → inspect DRC and 3D → export the fabrication package.</div>
+<p class="muted">This roadmap updates the V1 implementation priority. It does not claim those capabilities already exist, replace every older architecture document, or authorize a product-code rewrite. Preserve useful EAK validation, provenance, units, and history while making real editing the first deliverable. Reconcile older provider-first and projection-only specifications during Phase 00.</p>
+</section>
+<section id="baseline">
+<h2>Evidence snapshot, not a live progress feed</h2>
+<div class="grid">
+<div class="card"><span class="metric">Source review</span><span>Inspection recorded 2026-10-05 UTC. No upstream builds or live integration tests were run for this roadmap.</span></div>
+<div class="card"><span class="metric">13 planned phases</span><span>Completion is intentionally unverified. A source review or roadmap edit does not complete a product phase.</span></div>
+<div class="card"><span class="metric">No model lock-in</span><span>Terminal agents are the primary V1 interaction. Internal provider integrations are optional, not a prerequisite.</span></div>
 </div>
-<div class="modal" id="modal"><div class="box"><button class="close" onclick="closeM()">×</button><h2 id="mt"></h2><p id="mb"></p></div></div>
-<script>
-const phases=[
-['00','Baseline lock & architecture recovery','Start from the actual repository, preserve good kernel work, and establish a persistent development-state handoff.','core','FOUNDATION',['Audit main + relevant branches','Keep EAK Engineering IR canonical','Create/update EAK_ACTIVE_STATE.md'],'known baseline + recoverable handoff'],
-['01','Build, test & CI recovery','Repair real compilation/format issues and restore meaningful quality gates.','core','ACTIVE',['Fix current compiler errors','Re-enable cargo check / clippy / test','Make Tauri build reproducible'],'green Rust + CI baseline'],
-['02','Live model / NIMTRON 550B','Wire a real provider boundary and make NVIDIA 550B the primary model path.','core','LIVE AI',['Provider abstraction','NIMTRON 550B configuration','Remove fixture dependency from production path'],'real user intent reaches live runtime'],
-['03','Project lifecycle & persistence','Create, open, reopen, version and recover real projects.','core','CORE',['create/open/status/run','persist state + events + proposals','replay/recovery'],'close → reopen → resume'],
-['04','Herdr-class terminal workspace','Build large, real, persistent developer terminals.','core','TERMINAL',['persistent PTY sessions','split/resize/maximize/restore','attach Claude Code / Codex / OpenCode / pi / bash'],'three live persistent terminals'],
-['05','Agent bus + proposal protocol','Connect terminals, agents and engineering state with structured messages.','core','BRIDGE',['crew runtime','terminal ↔ agent bus','semantic proposal + validation protocol'],'intent → proposal → revision'],
-['06','Real electronics engineering state','Complete a bounded, genuine V1 electrical/physical model.','core','ELECTRONICS',['define supported V1 scope','components/pins/nets/placements/tracks/vias/constraints','deterministic projections'],'supported board exists without mock data'],
-['07','Real KiCad schematic / PCB / 3D','Use KiCad as the engineering backend/peripheral where appropriate and replace demo visuals with real state.','core','KICAD',['real schematic integration','real PCB geometry/control integration','real 3D projection/models'],'one change updates 3 views'],
-['08','Verification + recovery loop','Make engineering validation real, visible and recoverable.','core','GATE',['ERC / DRC / DFM','failure → agent loop-back','UI derives state from runtime'],'bad change rejected and recoverable'],
-['09','BOM + manufacturing','Compile validated state into reproducible fabrication/assembly deliverables.','release','MFG',['real BOM','Gerber + Excellon drill','PnP + manifest'],'real release package'],
-['10','React/Tauri product UI','Rebuild the exact local HTML design in React/Tauri while wiring the UI to real state.','release','UI',['visual reference: /home/dev/Downloads/eak_two_layer_workspace (1).html','Electronics section','AI & Terminals section'],'reference-equivalent UI + live data'],
-['11','CLI + cross-platform packaging','Produce actual Linux, Windows and macOS artifacts and tested installation paths.','release','INSTALL',['real eak CLI','3 OS artifacts','tested installation docs'],'clean machine installs + eak --version'],
-['12','FINAL ACCEPTANCE — INSTALLABLE EAK','Prove the complete golden-board journey and publish only tested commands.','release','FINAL',['fresh install','intent → AI/terminal → engineering → verify → manufacturing','docs match artifacts'],'INSTALL → LAUNCH → DESIGN → MANUFACTURE']
-];
-const EAK_STATUS={lastUpdated:'2026-10-03T03:30:00+05:30',overall:35,done:5,open:10,blocked:1,commits:'edf0884',blocker:'Tauri app compile blocked by duplicate ComponentClass definition in eak-domain',next:'Fix duplicate ComponentClass in eak-domain, restore clean Tauri build, continue Phase 01.',history:[['2026-10-03 03:30 IST','Foundation solid; cargo check passes; Tauri compile blocked by duplicate ComponentClass definition.','P01',35],['2026-10-03 03:00 IST','Roadmap pushed to main; repo status verified.','P00',34]]};
-const ROADMAP_PHASE_STATUS={
- '00':{state:'done',tasks:['done','done','done']},
- '01':{state:'blocked',tasks:['work','todo','blocked']},
- '02':{state:'todo',tasks:['todo','todo','todo']},
- '03':{state:'todo',tasks:['todo','todo','todo']},
- '04':{state:'todo',tasks:['todo','todo','todo']},
- '05':{state:'todo',tasks:['todo','todo','todo']},
- '06':{state:'todo',tasks:['todo','todo','todo']},
- '07':{state:'todo',tasks:['todo','todo','todo']},
- '08':{state:'todo',tasks:['todo','todo','todo']},
- '09':{state:'todo',tasks:['todo','todo','todo']},
- '10':{state:'todo',tasks:['todo','todo','todo']},
- '11':{state:'todo',tasks:['todo','todo','todo']},
- '12':{state:'todo',tasks:['todo','todo','todo']}
-};
-function statusText(s){return s==='done'?'COMPLETED':s==='work'?'IN PROGRESS':s==='blocked'?'BLOCKED':'INCOMPLETE'}
-function phaseTag(s){return s==='done'?'g':s==='work'?'c':s==='blocked'?'r':''}
-function taskStateClass(s){return s==='done'?'done':s==='work'?'work':s==='blocked'?'blocked':'todo'}
+<div class="table-wrap"><table><thead><tr><th>Repository</th><th>Inspected revision</th><th>What this establishes</th></tr></thead><tbody>
+<tr><td>EAK</td><td><code>9f5756b3614d8fb2f7623b8e3e65c5c012c422d5</code></td><td>Existing Rust model/history, React projection UI, fixture-backed desktop run, and limited KiCad adapter. CI has compilation, Clippy, and tests commented out; current build health was not reproduced.</td></tr>
+<tr><td>Herdr</td><td><code>49848effb0d292a380ef4b8b7f2dce8e9d588058</code></td><td>Server-owned terminal runtime, session APIs, separate presentation state, PTY ownership, and documented restore semantics. Development-source capabilities must be checked against the installed release.</td></tr>
+<tr><td>KiCad source mirror</td><td><code>dffc61437573d7fccfc5bbf5ec321eb4493d0bb7</code></td><td>Native editor modules, command/export surfaces, and schematic/PCB API implementations. This is development source, not a promise that every method exists in a stable package.</td></tr>
+</tbody></table></div>
+<p><strong>Current EAK gaps:</strong> the desktop only registers <code>start_run</code>; it uses a fixture engine. The schematic generator uses fixed pin templates; routing connects placement centres. The existing KiCad exporter uses scaffold pad geometry and cannot be the lossless serializer for this V1. These are integration gaps, not reasons to discard the entire kernel.</p>
+<p><strong>Do not carry forward the old “35% complete” estimate or duplicate-ComponentClass diagnosis as verified current state.</strong> Establish a fresh build/test report before recording progress.</p>
+</section>
+<section id="findings">
+<h2>What to reuse from KiCad and Herdr</h2>
+<div class="table-wrap"><table><thead><tr><th>Source / repository</th><th>Role in EAK V1</th><th>Boundary and finding</th></tr></thead><tbody>
+<tr><td><a href="https://github.com/KiCad/kicad-source-mirror">KiCad source mirror</a><br><code>eeschema/</code></td><td>Schematic UI and editing</td><td>Symbols, wires, labels, hierarchical sheets, properties, ERC and native import/export. The canonical development repository is <a href="https://gitlab.com/kicad/code/kicad">GitLab</a>; the GitHub repository is its mirror.</td></tr>
+<tr><td>Same repository<br><code>pcbnew/</code></td><td>PCB UI, placement and routing</td><td>Footprints, pads, tracks, vias, zones, layers, DRC and interactive routing. These are not separate frontend packages.</td></tr>
+<tr><td>Same repository<br><code>3d-viewer/</code>, <code>plugins/</code></td><td>Real board 3D inspection</td><td>Reuse board geometry and resolved models. A STEP export or a static image alone is not the interactive KiCad 3D experience.</td></tr>
+<tr><td>Same repository<br><code>common/</code>, <code>include/kiway.h</code>, <code>libs/</code></td><td>Native host integration</td><td>C++/wxWidgets, shared graphics/tools and KIWAY/KIFACE module communication. These internal interfaces are not a stable Tauri/web embedding SDK.</td></tr>
+<tr><td>Same repository<br><code>api/proto/</code>, editor API handlers, <code>kicad/cli/</code></td><td>Agent operations and output jobs</td><td>Prefer supported IPC methods for live edits and the CLI for jobs. Inspected development source has schematic and PCB handlers; test the exact installed version and each item type. Do not assume PCB-only forever or universal schematic support in every release.</td></tr>
+<tr><td><a href="https://gitlab.com/kicad/libraries/kicad-symbols">kicad-symbols</a></td><td>Schematic symbols and pin definitions</td><td>Use real library identities and pin mappings. Its GitHub README redirects to GitLab; do not use an old mirror as the release library baseline.</td></tr>
+<tr><td><a href="https://gitlab.com/kicad/libraries/kicad-footprints">kicad-footprints</a></td><td>Physical footprints and pads</td><td>Keep library versions, paths, units and symbol-to-footprint assignments reproducible.</td></tr>
+<tr><td><a href="https://gitlab.com/kicad/libraries/kicad-packages3D">kicad-packages3D</a></td><td>Board component models</td><td>Resolve model transforms and missing assets explicitly. The related <a href="https://github.com/KiCad/kicad-packages3D-source">model-source repository</a> is for generating models, not the editor UI; verify its current upstream before adoption.</td></tr>
+<tr><td><a href="https://github.com/KiCad/kicad-templates">kicad-templates</a>, <a href="https://gitlab.com/kicad/services/kicad-doc">kicad-doc</a></td><td>Project templates and workflow/format references</td><td>Supporting resources, not editor implementations. Pin current upstream content and licenses when shipping.</td></tr>
+<tr><td><a href="https://github.com/herdrdev/herdr">Herdr</a><br><code>src/app/</code>, <code>src/terminal/</code>, <code>src/pane.rs</code>, <code>src/api/</code>, <code>src/client/</code></td><td>Persistent terminal workspace</td><td>Server/runtime owns PTYs and terminal identity; clients own presentation. CLI and socket APIs expose workspaces, tabs, panes, agent state and events. Rust + Ratatui + portable-pty + Ghostty VT is not an existing embeddable React terminal component.</td></tr>
+</tbody></table></div>
+<div class="callout warning"><strong>Avoid the wrong Python repository:</strong> <a href="https://github.com/KiCad/kicad-python">KiCad/kicad-python</a> declares itself deprecated. Select the IPC client/protocol documented for the chosen KiCad version, rather than adopting that historical package by name.</div>
+</section>
+<section id="architecture">
+<h2>Recommended integration architecture</h2>
+<pre>USER
+ ├─ Manual KiCad schematic / PCB / 3D tools
+ └─ Terminal → user-chosen coding agent → EAK CLI / optional MCP tools
+                                              ↓
+                              EAK project service and edit coordinator
+                              project + document + revision + object IDs
+                              preview / approval / validation / audit
+                                              ↓
+                              Versioned KiCad adapter → native editors
+                                              ↓
+                              KiCad CLI / native import-export dialogs
 
-const road=document.getElementById('road'),nav=document.getElementById('nav');
-phases.forEach(p=>{
- const ps=ROADMAP_PHASE_STATUS[p[0]]||{state:'todo',tasks:['todo','todo','todo']};
- const e=document.createElement('section');
- e.className='phase '+(ps.state==='done'?'done ':'')+(ps.state==='work'?'active ':'')+(ps.state==='blocked'?'blocked ':'');
- e.dataset.cat=p[3];e.id='p'+p[0];
- e.innerHTML=`<div class="node">${p[0]}</div><div class="card"><div class="phead" onclick="toggle('${e.id}')"><div class="pno">PHASE ${p[0]}</div><div><div class="pname">${p[1]}</div><div class="psub">${p[2]}</div></div><span class="tag ${phaseTag(ps.state)}">${statusText(ps.state)}</span><span class="chev">⌄</span></div><div class="body"><div class="tasks">${p[5].map((t,j)=>{const ts=ps.tasks[j]||'todo';return `<div class="task ${taskStateClass(ts)}" onclick="task('${t}','${p[1]}')"><h4>${String.fromCharCode(65+j)} · ${t}</h4><p>Implement against the live repository. Verify with build/tests/integration evidence.</p><div class="state">${statusText(ts)}</div></div>`}).join('')}</div><div class="gateRow"><div class="gate"><b>Exit gate</b><p>${p[6]}</p></div><div class="gate"><b>Commit gate</b><p>Meaningful commit + push after this coherent milestone. Never leave completed work uncommitted.</p></div></div></div>`;
- road.appendChild(e);
- const n=document.createElement('button');n.dataset.id=e.id;n.innerHTML=`<span>${p[0]}</span>${p[1]}<em>→</em>`;n.onclick=()=>focusPhase(e.id);nav.appendChild(n)
-});document.getElementById('p01').classList.add('open');
-function toggle(id){document.getElementById(id).classList.toggle('open');focus(id)}function focus(id){const p=phases.find(x=>'p'+x[0]===id);if(!p)return;document.getElementById(id).scrollIntoView({behavior:'smooth',block:'center'});document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('on',b.dataset.id===id));document.getElementById('selNo').textContent=p[0];document.getElementById('selTitle').textContent=p[1];document.getElementById('selSub').textContent=p[2];document.getElementById('dOverall').textContent=EAK_STATUS.overall+'%';document.getElementById('dBlock').textContent=EAK_STATUS.blocker;document.getElementById('dNext').textContent=EAK_STATUS.next}
-function allOpen(v){document.querySelectorAll('.phase').forEach(x=>x.classList.toggle('open',!!v))}
-function filter(k,b){document.querySelectorAll('.filters button').forEach(x=>x.classList.remove('on'));b.classList.add('on');document.querySelectorAll('.phase').forEach(x=>x.style.display=k==='all'||x.dataset.cat===k?'block':'none')}
-function task(t,p){openModal(t+' — '+p,'Execute the block against the real repository. Completion requires implementation, integration proof and tests. Then update the status object in this HTML, commit the roadmap, and push to main.')}
-function openModal(t,b){document.getElementById('mt').textContent=t;document.getElementById('mb').innerHTML=b;document.getElementById('modal').classList.add('show')}function closeM(){document.getElementById('modal').classList.remove('show')}
-function finalGate(){openModal('FINAL ACCEPTANCE — INSTALLABLE EAK','The final gate is a tested fresh-machine installation. The user can install EAK, run <b>eak --version</b>, launch it, create/open a project, connect real terminals/agents, submit electronics intent, produce validated canonical engineering state, see real Schematic/PCB/3D/BOM/Verification state, and generate a real manufacturing package.')}
-function refs(){openModal('Authoritative references','EAK: https://github.com/NijoP/agent-kit<br><br>KiCad: https://github.com/KiCad/kicad-source-mirror<br><br>Herdr: https://github.com/herdrdev/herdr<br><br>UI reference: <b>/home/dev/Downloads/eak_two_layer_workspace (1).html</b>')}
-function updateRule(){openModal('30-minute roadmap update rule','Every 30 minutes Firstmate must inspect the actual repository, determine completed/open/blocked work, update <b>EAK_STATUS</b>, append a timestamped entry to <b>history</b>, commit the HTML, and push it to <b>main</b>. Never report progress from memory or stale screenshots.')}
-function render(){const d=new Date(EAK_STATUS.lastUpdated),n=new Date(d.getTime()+1800000),f=x=>x.toLocaleString('en-IN',{dateStyle:'medium',timeStyle:'short',hour12:false,timeZone:'Asia/Kolkata'})+' IST';document.getElementById('last').textContent=f(d);document.getElementById('next').textContent=n.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:false,timeZone:'Asia/Kolkata'})+' IST';document.getElementById('overall').textContent=EAK_STATUS.overall+'%';document.getElementById('doneCount').textContent=EAK_STATUS.done;document.getElementById('openCount').textContent=EAK_STATUS.open;document.getElementById('blockCount').textContent=EAK_STATUS.blocked;document.getElementById('commitCount').textContent=EAK_STATUS.commits;document.getElementById('log').innerHTML=EAK_STATUS.history.map(h=>`<div class="entry"><div class="when">${h[0]}</div><div class="what">${h[1]}</div><div class="ph">${h[2]} · ${h[3]}%</div></div>`).join('');focus('p01')}
-document.getElementById('modal').addEventListener('click',e=>{if(e.target.id==='modal')closeM()});document.addEventListener('keydown',e=>{if(e.key==='Escape')closeM()});render();
-</script></body></html>
+Herdr-compatible terminal service owns processes and sessions.
+EAK owns accepted engineering revisions, provenance and operation history.
+KiCad owns the live editable document representation inside each editor.
+Reconciliation connects these responsibilities; two independent writers do not.</pre>
+<h3>1. Prove native UI integration before committing to the shell</h3>
+<p>The final target is the actual editable KiCad experience inside the EAK workspace. Start with a coordinated EAK + native KiCad process prototype to prove commands and synchronization. This is an <strong>intermediate integration demonstration, not completion of the in-workspace UI requirement</strong>.</p>
+<p>For the integrated product, evaluate a thin KiCad-derived native host/dock with a terminal frontend, retaining the Rust EAK service out of process. Compare it with a proven supported native-host approach before retaining Tauri as the main shell. Do not promise that reparenting a wxWidgets window into a webview works across Windows, Linux/Wayland and macOS. Keep the native-host patch small; do not reimplement all three editors in React.</p>
+<p><strong>Phase 01 must demonstrate:</strong> editing, focus/shortcuts, menus/dialogs, clipboard, DPI, accessibility, undo, 3D acceleration and lifecycle on each claimed platform. If only companion windows work, label that build a preview and record the remaining integration work.</p>
+<h3>2. Keep terminal transport separate from engineering commands</h3>
+<p>Prefer a version-pinned Herdr process adapter using its public CLI/API over copying its runtime into EAK. Prove a real terminal presentation path separately: the socket control API is not automatically a lossless PTY byte-stream API. Use a supported attach/client path or explicitly implement and test the needed client adapter. Do not scrape screen text to reconstruct the circuit.</p>
+<p>Expose a discoverable EAK CLI with structured JSON inputs/results, plus optional MCP wrappers for agents that support them. A terminal can host arbitrary commands; automatic agent detection/resume and EAK tool use require a tested compatibility path. No promise that every agent supports every optional integration.</p>
+<h3>3. Coordinate manual and agent changes without data loss</h3>
+<ul>
+<li>Resolve project/document IDs and stable KiCad object UUIDs; include sheet-instance paths, units, angles, layer and coordinate frame. Repeated sheet instances and duplicate reference labels must not target the wrong object.</li>
+<li>Every agent request carries a request ID and expected revision; reject stale edits, show a semantic preview and group the accepted edit for undo. Destructive changes require explicit approval.</li>
+<li>Use KiCad's staged edit APIs where supported; inspect <em>per-item</em> results even if the overall request succeeds. Read back the applied state before reporting success. Do not assume a batch is atomic without testing partial failures and cancellation.</li>
+<li>Track manual edits and undo/redo through supported notifications or authoritative reconciliation reads. Unsaved editor changes must be included; file watching alone cannot see them. Pause agent writes when synchronization is uncertain.</li>
+<li>Retain complete native documents and assets as revision artifacts. EAK's partial model must never rewrite away unknown KiCad fields. Imported or manually edited states can be recorded with findings; accepted history does not mean manufacturing approval.</li>
+<li>Journal cross-process operations and recover interrupted edits; never claim an atomic transaction across KiCad and EAK merely because both have local undo/history.</li>
+<li>Constrain EAK tools to the selected project, validate paths and arguments, and keep credentials out of logs. A coding agent with unrestricted shell access is <strong>not sandboxed</strong> by these tools; direct file edits are external changes to reconcile, not trusted EAK operations.</li>
+</ul>
+<h3>4. Respect the real upstream boundaries</h3>
+<ul>
+<li><strong>KiCad:</strong> most source is GPL-3.0-or-later. Reusing/linking its editors in a combined distributed application requires a GPL-compatible distribution and corresponding-source/notices review; do not label copied KiCad code MIT/Apache. Process separation is an architectural option, not a blanket legal exemption.</li>
+<li><strong>Herdr:</strong> Apache-2.0 at the inspected revision; retain its license/notices and review vendored dependencies if redistributed. No Herdr source is copied by this roadmap.</li>
+<li><strong>Libraries:</strong> inspect the exact symbol/footprint/model licenses and exceptions before bundling. Code licensing does not automatically cover datasheets, models or third-party component data.</li>
+<li><strong>Version contract:</strong> freeze tested KiCad/Herdr releases or explicitly identified development builds. Capability probes must distinguish unavailable, unsupported, untested and failed operations.</li>
+<li><strong>Routing:</strong> adding track objects is not equivalent to invoking KiCad's interactive router or a full autorouter. <code>RunAction</code> explicitly warns that internal action names are not stable APIs; do not base production routing on undocumented action strings.</li>
+<li><strong>Persistence:</strong> Herdr detach can preserve running processes while the server lives. A server/machine restart restores layout and may resume supported agent sessions; it does not preserve arbitrary running processes.</li>
+</ul>
+</section>
+<section id="formats">
+<h2>All KiCad import/export options: a versioned parity requirement</h2>
+<p><strong>V1 must expose every applicable import/export operation and option of the selected KiCad distribution.</strong> The following is a source-derived starting inventory, not a claim of an exhaustive tested list. Enumerate actual CLI help, native menus/dialogs and plugins for the pinned build. Record direction, options/defaults, availability, automation route, fidelity/losses, fixtures, warnings and test evidence for each entry.</p>
+<div class="table-wrap"><table><thead><tr><th>Surface</th><th>Initial inventory</th><th>Required EAK behavior</th></tr></thead><tbody>
+<tr><td>Native project &amp; libraries</td><td><code>.kicad_pro</code>, <code>.kicad_sch</code>, <code>.kicad_pcb</code>, symbols, footprints, library tables, project assets and supported legacy upgrades.</td><td>Create/open/save/save-as, preserve hierarchy and UUIDs, resolve assets and reopen in stock KiCad. Keep unsupported data intact.</td></tr>
+<tr><td>Schematic imports</td><td>Native/legacy KiCad; source handlers include Altium, CADSTAR, Eagle, EasyEDA variants, gEDA/Lepton, LTspice and PADS. Exact support is build-dependent.</td><td>Use upstream importers; retain conversion diagnostics. Import support does not imply export back to that format.</td></tr>
+<tr><td>PCB imports</td><td>Native/legacy KiCad; source registry includes Altium variants, CADSTAR, Eagle, EasyEDA variants, Fabmaster, gEDA, PADS and ODB++ plugins. Plugin registration alone does not prove every import/export direction.</td><td>Inventory each handler's real supported operation; compare converted geometry/connectivity, not just successful file creation.</td></tr>
+<tr><td>Schematic outputs</td><td>BOM, netlists and supported plot formats such as PDF, SVG, DXF, PS and PNG in inspected development source; include available netlist dialects and BOM field/filter settings.</td><td>Expose all actual options of the pinned build, hierarchy/page selection, output paths, warnings and machine-readable results.</td></tr>
+<tr><td>Fabrication &amp; assembly</td><td>Gerber/Gerber job, Excellon/Gerber drill as supported, component placement, BOM, IPC-D-356, IPC-2581 and ODB++ where available.</td><td>Preserve layers, origin, units, rotation conventions, variant/DNP settings and drill choices. Validate outputs against the exact approved revision.</td></tr>
+<tr><td>PCB documents &amp; exchange</td><td>PDF, SVG, DXF, PS, HPGL, PNG, GenCAD, IDF, stackup/statistics and other options present in the selected build.</td><td>Provide a searchable output catalogue; distinguish native-only, automated, unsupported and untested entries without silently dropping menu options.</td></tr>
+<tr><td>3D outputs &amp; rendering</td><td>STEP and other formats offered by the build's 3D exporter, plus board render output. Inventory model inclusion, origin, units, camera and material options.</td><td>Use KiCad's exporter/renderer; expose missing-model diagnostics. Do not substitute a flat preview for 3D inspection.</td></tr>
+<tr><td>Editor-specific import/export</td><td>Symbol/footprint library import/export, drawing/graphics import, image conversion, Gerber viewing/conversion and installed plugin options where applicable.</td><td>Audit the native menus in addition to the CLI. Native dialog delegation is acceptable when labelled as manual; do not claim an agent API exists for it.</td></tr>
+</tbody></table></div>
+<div class="callout warning"><strong>Parity is a testable scope, not the phrase “supports KiCad”.</strong> Every applicable option must have an accessible native or automated path and documented behavior. Unsupported automation must remain visible. Full V1 cannot be declared complete from only Gerber + BOM support.</div>
+</section>
+<section id="phases">
+<h2>Dependency-ordered implementation plan</h2>
+<p>All phases below are <strong>planned / not acceptance-tested</strong>. Existing code can satisfy individual checks after validation; no percentage is inferred from file counts or old reports.</p>
+<div class="filters" role="group" aria-label="Filter phases"><button type="button" data-filter="all" aria-pressed="true">All phases</button><button type="button" data-filter="integration" aria-pressed="false">Integration</button><button type="button" data-filter="editing" aria-pressed="false">Editing</button><button type="button" data-filter="release" aria-pressed="false">Release</button></div>
+<details id="p00" data-phase data-category="integration" open>
+<summary>00 · Establish a truthful build baseline <span class="badge pending">Planned</span></summary>
+<p class="phase-meta">Dependency: none. Focus: current EAK, not an assumed rewrite.</p>
+<ul class="tasks"><li>Reproduce Rust, frontend and desktop builds; restore real compilation/tests in CI and retain failure evidence.</li><li>Pin candidate KiCad and Herdr versions, inventory installed capabilities, and reconcile older specs with this terminal-agent V1 direction.</li><li>Separate fixture/demo modes from real design operations; remove stale progress claims and document existing components that can be reused.</li></ul>
+<p class="gate"><strong>Exit:</strong> another developer reproduces the baseline; every claimed passing check actually executes and failures are recorded rather than disabled.</p>
+</details>
+<details id="p01" data-phase data-category="integration">
+<summary>01 · Prove the actual KiCad UI hosting strategy <span class="badge pending">Planned</span></summary>
+<p class="phase-meta">Dependency: 00. Highest-risk integration proof; do this before a UI rebuild.</p>
+<ul class="tasks"><li>Launch real schematic, PCB and 3D tools on one project; demonstrate an API-driven edit and a manual edit.</li><li>Prototype a thin native host/dock and terminal presentation. Compare against companion-process integration; document the chosen boundary, lifecycle and platform limitations.</li><li>Verify licensing/distribution obligations before incorporating upstream code. Test focus, shortcuts, dialogs, clipboard, DPI, graphics and undo on the platforms claimed.</li></ul>
+<p class="gate"><strong>Exit:</strong> a demonstrated route to actual editable KiCad surfaces inside EAK. Separate windows prove only the intermediate preview, not final integrated-UI acceptance.</p>
+</details>
+<details id="p02" data-phase data-category="integration">
+<summary>02 · Shared project state and lossless reconciliation <span class="badge pending">Planned</span></summary>
+<p class="phase-meta">Dependencies: 00, 01.</p>
+<ul class="tasks"><li>Implement create/open/save/reopen and capture full native documents, assets, accepted revisions, stable IDs and EAK provenance.</li><li>Coordinate unsaved manual changes, agent proposals, revision checks, single-writer ownership, undo/redo and semantic diffs.</li><li>Handle partial failures, interrupted commits, reconnects and unknown native objects without overwrites or lossy reserialization.</li></ul>
+<p class="gate"><strong>Exit:</strong> manual edit → agent reads current revision → agent edit → manual undo → save/reopen preserves the expected objects, connectivity and history.</p>
+</details>
+<details id="p03" data-phase data-category="integration">
+<summary>03 · Herdr-style persistent terminal workspace <span class="badge pending">Planned</span></summary>
+<p class="phase-meta">Dependencies: 00, 01; can proceed alongside 02 once interface boundaries are fixed.</p>
+<ul class="tasks"><li>Integrate a named, project-scoped Herdr session through its supported public surface; keep server-owned terminal identity separate from EAK panel layout.</li><li>Provide real interactive terminals with keyboard input, ANSI/full-screen applications, resize, clipboard, tabs, splits, focus and attach/detach.</li><li>Bootstrap/reconcile state on reconnect; test output backpressure, agent status and optional native session resume. Do not promise process survival after server restart.</li></ul>
+<p class="gate"><strong>Exit:</strong> three concurrent terminals, including two different coding agents and a shell, remain usable after UI detach/reconnect without losing live processes while the server stays running.</p>
+</details>
+<details id="p04" data-phase data-category="integration">
+<summary>04 · Agent-neutral EAK tools <span class="badge pending">Planned</span></summary>
+<p class="phase-meta">Dependencies: 02, 03.</p>
+<ul class="tasks"><li>Provide discoverable CLI/JSON tools for project context, selection, object queries, proposing/applying edits, checks and export jobs; add optional MCP without making it mandatory.</li><li>Use structured IDs, units, angles, request IDs, revision preconditions, permissions, previews and per-item errors. Allow user-selected agents/models; no mandatory NIM or embedded LLM.</li><li>Supply tool-use instructions and verify compatibility with at least two independent coding agents. Run arbitrary unsupported terminal programs without pretending detection or tool integration is guaranteed.</li></ul>
+<p class="gate"><strong>Exit:</strong> both agents inspect the same project and execute an approved reversible edit through EAK tools, with read-back evidence and an audit trail.</p>
+</details>
+<details id="p05" data-phase data-category="editing">
+<summary>05 · Real schematic editing, manual and agent-driven <span class="badge pending">Planned</span></summary>
+<p class="phase-meta">Dependencies: 01, 02, 04.</p>
+<ul class="tasks"><li>Expose native symbol/library placement, properties, movement, orientation, wires, labels, junctions and hierarchical sheets.</li><li>Implement validated agent operations for the same objects, preserving real pin numbers, symbol/footprint assignments and sheet-instance identity.</li><li>Verify schematic API coverage for the pinned build. If required editing operations are missing, record and implement a bounded native adapter; do not silently fall back to unsafe text replacement.</li></ul>
+<p class="gate"><strong>Exit:</strong> agent adds/wires/rotates a real component, user edits it manually, and KiCad ERC/netlist plus reopen confirm intended connectivity and undo behavior.</p>
+</details>
+<details id="p06" data-phase data-category="editing">
+<summary>06 · PCB component placement and orientation <span class="badge pending">Planned</span></summary>
+<p class="phase-meta">Dependencies: 05.</p>
+<ul class="tasks"><li>Transfer schematic changes through KiCad's supported update path while preserving symbol-to-footprint identities and nets.</li><li>Enable manual and agent add/move/rotate/flip/property operations, board-edge references, placement constraints and locked-item handling.</li><li>Preserve real pad geometry, placement coordinates, board side, courtyard and 3D model transforms; preview proposed positions before applying.</li></ul>
+<p class="gate"><strong>Exit:</strong> “move J1 to the left edge and rotate 90°” changes the intended footprint, retains connectivity, appears in the actual PCB UI and can be manually adjusted/undone.</p>
+</details>
+<details id="p07" data-phase data-category="editing">
+<summary>07 · Guided routing with actual geometry <span class="badge pending">Planned</span></summary>
+<p class="phase-meta">Dependencies: 06.</p>
+<ul class="tasks"><li>Retain KiCad's native manual interactive routing, layer/via control, zone refill and applicable differential-pair/length tools.</li><li>Support bounded agent route proposals using actual pads, nets, tracks, vias, widths, clearances and layers; inspect and validate resulting geometry.</li><li>Prove any router automation API separately. Where absent, plan a versioned adapter or explicitly labelled user-assisted step; generic item creation or internal RunAction strings do not prove routing integration.</li></ul>
+<p class="gate"><strong>Exit:</strong> user guides an agent to route a specified connection; actual endpoints, clearance and DRC are checked, manual adjustment works, and rejected changes remain recoverable. General autonomous autorouting is not implied.</p>
+</details>
+<details id="p08" data-phase data-category="editing">
+<summary>08 · Interactive 3D inspection of the same board <span class="badge pending">Planned</span></summary>
+<p class="phase-meta">Dependencies: 06; final revision-consistency test also covers 07.</p>
+<ul class="tasks"><li>Integrate KiCad's actual 3D viewer with board shape, stackup, holes and real component models.</li><li>Support normal orbit/pan/zoom, visibility and native viewing controls; surface missing models instead of inventing geometry.</li><li>Refresh the view after manual or agent placement/routing changes and expose render/3D exports separately.</li></ul>
+<p class="gate"><strong>Exit:</strong> a known footprint move/rotation and board change appear correctly in PCB and interactive 3D for the same revision, with correct side and model orientation.</p>
+</details>
+<details id="p09" data-phase data-category="release">
+<summary>09 · Full selected-version import/export catalogue <span class="badge pending">Planned</span></summary>
+<p class="phase-meta">Dependencies: 05–08; inventory can start after 00.</p>
+<ul class="tasks"><li>Complete the <a href="#formats">parity matrix</a> from actual native menus, CLI help and plugins, including operation direction and every exposed option.</li><li>Connect supported APIs/CLI jobs; make native-only dialogs reachable and labelled. Preserve option defaults, units, origins, file paths, diagnostics and cancellation.</li><li>Add fixtures for each supported route/format and test material option combinations. Validate output contents and reopen/round-trip where meaningful; record format losses honestly.</li></ul>
+<p class="gate"><strong>Exit:</strong> every applicable option in the pinned KiCad distribution is reachable through EAK, its automation level is explicit, and output evidence is tied to a revision. No “all formats” claim from a partial subset.</p>
+</details>
+<details id="p10" data-phase data-category="release">
+<summary>10 · Verification, recovery and user control <span class="badge pending">Planned</span></summary>
+<p class="phase-meta">Dependencies: 02, 04–09.</p>
+<ul class="tasks"><li>Run real KiCad ERC/DRC plus applicable EAK checks; distinguish passed, failed, not run and unsupported. No findings is not proof when inputs/checks are missing.</li><li>Test stale requests, simultaneous manual/agent edits, partial item failures, cancellation, disconnects, crashes and replay/reopen; never overwrite a newer manual change.</li><li>Keep previews, approvals, recovery points and export revision checks visible. Manufacturing approval remains explicit and is not a guarantee of physical safety.</li></ul>
+<p class="gate"><strong>Exit:</strong> injected failures preserve recoverable documents, bad changes show actionable findings, and repair/recheck never reports a stale or untested revision as verified.</p>
+</details>
+<details id="p11" data-phase data-category="release">
+<summary>11 · Reproducible installation and license compliance <span class="badge pending">Planned</span></summary>
+<p class="phase-meta">Dependencies: 01 integration/license decision, 03, 09, 10.</p>
+<ul class="tasks"><li>Package or document exact native dependencies and model/library paths; detect missing tools and incompatible versions with actionable messages.</li><li>Supply root README, license texts, third-party notices, corresponding source where required, supported-agent/platform matrix and honest limitations.</li><li>Test clean installation on each advertised OS. One-OS preview is acceptable when labelled; cross-platform support requires independent evidence, including terminal and native graphics behavior.</li></ul>
+<p class="gate"><strong>Exit:</strong> clean-machine install, project open, terminal launch, native editing, 3D and export all work on each claimed platform without developer-local paths.</p>
+</details>
+<details id="p12" data-phase data-category="release">
+<summary>12 · V1 acceptance: manual + agent + output <span class="badge pending">Planned</span></summary>
+<p class="phase-meta">Dependencies: all previous acceptance evidence.</p>
+<ul class="tasks"><li>Execute the complete <a href="#acceptance">acceptance scenario</a> on a real example with actual library parts and correct pin mappings.</li><li>Repeat with two different user-selected coding agents; prove the project also remains manually editable without an AI provider.</li><li>Publish reproducible commands, expected outputs, limitations and evidence; no fixture-only demonstration may satisfy live product acceptance.</li></ul>
+<p class="gate"><strong>Exit:</strong> install → native edit → agent edit → manual refinement → route → ERC/DRC → interactive 3D → import/export → reopen, with one consistent design history.</p>
+</details>
+</section>
+<section id="acceptance">
+<h2>Concrete V1 acceptance scenario</h2>
+<ol>
+<li>Install on a supported clean machine and create/open a native KiCad project from EAK.</li>
+<li>Open the actual schematic, PCB and 3D surfaces in the EAK workspace. Keep manual editing available without a model account.</li>
+<li>Start two different coding agents in persistent terminals; both discover EAK tools and inspect the same project and selected objects.</li>
+<li>Ask one agent to add a component with a real library symbol, correct pins and footprint, wire specified connections, edit a property and rotate it. Preview, approve and inspect the change.</li>
+<li>Make a manual schematic edit. The other agent reads the updated state, not a stale file or terminal transcript.</li>
+<li>Update the PCB, ask for specific placement/orientation, manually refine it, and verify that symbol/footprint/net identities remain consistent.</li>
+<li>Guide a bounded routing operation; inspect actual pads, tracks, vias and layer changes. Run ERC/DRC and repair deliberate violations rather than disabling checks.</li>
+<li>Inspect the same board in 3D with correct model transforms. Confirm the latest revision is visible.</li>
+<li>Exercise the selected-version import/export catalogue, including a manufacturing package. Inspect contents and revision identity; a file's existence alone is insufficient.</li>
+<li>Undo/redo, save, close, reopen, and reconnect terminals. Test a stale agent proposal and an interrupted operation without losing manual work.</li>
+</ol>
+</section>
+<section id="preview">
+<h2>48-hour milestone: credible preview, not a false V1 claim</h2>
+<p>The complete integrated product above is the target. The original 48-hour release window should be treated as a <strong>conditional developer-preview timebox</strong>, not a commitment to finish native UI hosting and full KiCad parity in two days.</p>
+<ul>
+<li><strong>First:</strong> reproduce EAK builds, make CI meaningful, pin the toolchain and document the native integration/license constraints.</li>
+<li><strong>Then:</strong> prove one real manual/agent edit round-trip with a terminal agent, a native KiCad editor and authoritative read-back. If only a companion-window prototype works, say so.</li>
+<li><strong>Before publication:</strong> provide installation steps, licenses, a real example, exact limitations and a clearly labelled preview release. Do not claim full routing, all import/export automation or embedded KiCad UI before those tests exist.</li>
+<li><strong>If the integration proof fails:</strong> publish findings and a source preview rather than manufacturing a success demo. Preserve the full V1 backlog above.</li>
+</ul>
+</section>
+<section id="sources">
+<h2>Traceable source references</h2>
+<p>Implementation findings below link to inspected commits. Moving upstream/library links above identify projects, not certified release dependencies.</p>
+<ul class="source-list">
+<li><a href="https://github.com/herdrdev/herdr/blob/49848effb0d292a380ef4b8b7f2dce8e9d588058/README.md">Herdr overview and licensing</a>; <a href="https://github.com/herdrdev/herdr/blob/49848effb0d292a380ef4b8b7f2dce8e9d588058/docs/next/website/src/content/docs/socket-api.mdx">CLI/socket, snapshots and event reconciliation</a>; <a href="https://github.com/herdrdev/herdr/blob/49848effb0d292a380ef4b8b7f2dce8e9d588058/docs/next/website/src/content/docs/session-state.mdx">detach, restore and agent resume limitations</a>.</li>
+<li><a href="https://github.com/herdrdev/herdr/blob/49848effb0d292a380ef4b8b7f2dce8e9d588058/src/pane/state.rs">Herdr pane presentation state</a>; <a href="https://github.com/herdrdev/herdr/blob/49848effb0d292a380ef4b8b7f2dce8e9d588058/src/pane.rs">PTY runtime ownership</a>; <a href="https://github.com/herdrdev/herdr/blob/49848effb0d292a380ef4b8b7f2dce8e9d588058/Cargo.toml">runtime dependencies</a>.</li>
+<li><a href="https://github.com/KiCad/kicad-source-mirror/blob/dffc61437573d7fccfc5bbf5ec321eb4493d0bb7/README.md">KiCad source-module map</a>; <a href="https://github.com/KiCad/kicad-source-mirror/blob/dffc61437573d7fccfc5bbf5ec321eb4493d0bb7/CMakeLists.txt">wxWidgets/OpenGL build dependencies</a>; <a href="https://github.com/KiCad/kicad-source-mirror/blob/dffc61437573d7fccfc5bbf5ec321eb4493d0bb7/include/kiway.h">native KIWAY/KIFACE boundary</a>; <a href="https://github.com/KiCad/kicad-source-mirror/blob/dffc61437573d7fccfc5bbf5ec321eb4493d0bb7/LICENSE.README">license inventory</a>.</li>
+<li><a href="https://github.com/KiCad/kicad-source-mirror/blob/dffc61437573d7fccfc5bbf5ec321eb4493d0bb7/api/proto/common/commands/editor_commands.proto">staged edits, per-item statuses and RunAction warning</a>; <a href="https://github.com/KiCad/kicad-source-mirror/blob/dffc61437573d7fccfc5bbf5ec321eb4493d0bb7/eeschema/api/api_handler_sch.cpp">schematic handler implementation</a>; <a href="https://github.com/KiCad/kicad-source-mirror/blob/dffc61437573d7fccfc5bbf5ec321eb4493d0bb7/pcbnew/api/api_handler_pcb.cpp">PCB handler implementation</a>.</li>
+<li><a href="https://github.com/KiCad/kicad-source-mirror/tree/dffc61437573d7fccfc5bbf5ec321eb4493d0bb7/kicad/cli">CLI job and export commands</a>; <a href="https://github.com/KiCad/kicad-source-mirror/blob/dffc61437573d7fccfc5bbf5ec321eb4493d0bb7/eeschema/sch_io/sch_io_mgr.cpp">schematic I/O registry</a>; <a href="https://github.com/KiCad/kicad-source-mirror/blob/dffc61437573d7fccfc5bbf5ec321eb4493d0bb7/pcbnew/pcb_io/pcb_io_mgr.cpp">PCB I/O registry</a>.</li>
+<li><a href="https://github.com/NijoP/agent-kit/blob/9f5756b3614d8fb2f7623b8e3e65c5c012c422d5/app/src-tauri/src/main.rs">EAK current desktop command</a>; <a href="https://github.com/NijoP/agent-kit/blob/9f5756b3614d8fb2f7623b8e3e65c5c012c422d5/eak/crates/eak-kicad/src/export.rs">current export fidelity limits</a>; <a href="https://github.com/NijoP/agent-kit/blob/9f5756b3614d8fb2f7623b8e3e65c5c012c422d5/.github/workflows/ci.yml">current CI baseline</a>.</li>
+</ul>
+</section>
+<section id="history">
+<h2>Roadmap history and update discipline</h2>
+<div class="table-wrap"><table><thead><tr><th>Record</th><th>Meaning</th></tr></thead><tbody>
+<tr><td>R3 · 2026-10-05 UTC</td><td>Reframed V1 around real KiCad editing/3D, Herdr-style persistent terminals, user-selected coding agents, shared manual/agent revisions, full selected-version import/export and evidence-backed acceptance. Added upstream findings and limitations. Documentation only; no product milestone marked complete.</td></tr>
+<tr><td>R2 · historical</td><td>The previous page reported 35% progress and a duplicate-ComponentClass build blocker, required a specific NVIDIA model and referenced a developer-local HTML file. Those claims/constraints are not used as current acceptance evidence. The prior page remains recoverable in Git history at the EAK baseline revision above.</td></tr>
+</tbody></table></div>
+<p>Update phase status only after recording revision, commands, environment, results and artifact links. Keep failed, untested and unavailable distinct. This static page does not monitor the repository, schedule updates, launch agents, or automatically commit/push. Changes are published only as explicitly authorized work.</p>
+</section>
+</main>
+</div>
+<footer>EAK V1 roadmap R3 · source-backed plan · no product-build certification · no external scripts or runtime network requests</footer>
+<script>
+'use strict';
+const phasePanels = Array.from(document.querySelectorAll('[data-phase]'));
+const filterButtons = Array.from(document.querySelectorAll('[data-filter]'));
+function setFilter(category) {
+  phasePanels.forEach(panel => { panel.hidden = category !== 'all' && panel.dataset.category !== category; });
+  filterButtons.forEach(button => { button.setAttribute('aria-pressed', String(button.dataset.filter === category)); });
+}
+document.getElementById('expand').addEventListener('click', () => {
+  phasePanels.forEach(panel => { if (!panel.hidden) panel.open = true; });
+});
+document.getElementById('collapse').addEventListener('click', () => {
+  phasePanels.forEach(panel => { panel.open = false; });
+});
+filterButtons.forEach(button => { button.addEventListener('click', () => setFilter(button.dataset.filter)); });
+function revealHash() {
+  const id = window.location.hash.slice(1);
+  const panel = phasePanels.find(item => item.id === id);
+  if (panel) { setFilter('all'); panel.open = true; }
+}
+window.addEventListener('hashchange', revealHash);
+revealHash();
+let printState = null;
+window.addEventListener('beforeprint', () => {
+  printState = phasePanels.map(panel => ({ open: panel.open, hidden: panel.hidden }));
+  phasePanels.forEach(panel => { panel.hidden = false; panel.open = true; });
+});
+window.addEventListener('afterprint', () => {
+  if (!printState) return;
+  phasePanels.forEach((panel, i) => { panel.open = printState[i].open; panel.hidden = printState[i].hidden; });
+  printState = null;
+});
+</script>
+</body>
+</html>
