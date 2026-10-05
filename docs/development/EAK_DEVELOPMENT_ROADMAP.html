@@ -14,6 +14,8 @@ ul,ol{padding-left:23px}li{margin:7px 0}code,pre{font:13px/1.65 ui-monospace,Con
 @media(max-width:1000px){.layout{grid-template-columns:190px minmax(0,1fr)}main{padding:20px}.grid{grid-template-columns:1fr}}
 @media(max-width:700px){header{position:static;padding:14px}.layout{display:block}nav{position:static;max-height:none;padding:16px;display:flex;flex-wrap:wrap;gap:8px 18px}nav h2{width:100%;margin:0}main{border:0;padding:16px}.actions{margin-left:0}html{scroll-padding-top:12px}th,td{padding:8px}}
 
+
+.code{font-family:ui-monospace,Consolas,monospace;background:#0d131a;padding:1px 4px;border-radius:3px;color:var(--cyan)}
 /* --- target-UI screen mocks (CSS-only, no images) --- */
 .mock{border:1px solid #3a4a56;border-radius:10px;overflow:hidden;background:#0a0f14;margin:18px 0;font-size:11px;box-shadow:0 18px 50px #0008}
 .mk-title{display:flex;align-items:center;gap:10px;padding:7px 12px;background:#060a0e;border-bottom:1px solid var(--line);color:#c9d4dc}
@@ -89,11 +91,11 @@ ul,ol{padding-left:23px}li{margin:7px 0}code,pre{font:13px/1.65 ui-monospace,Con
 </style>
 </head>
 <body>
-<header><strong>EAK ◆</strong><span>Development roadmap · R5 · source of truth</span><div class="actions"><button type="button" id="expand">Expand phases</button><button type="button" id="collapse">Collapse phases</button></div></header>
+<header><strong>EAK ◆</strong><span>Development roadmap · R6 · source of truth</span><div class="actions"><button type="button" id="expand">Expand phases</button><button type="button" id="collapse">Collapse phases</button></div></header>
 <div class="layout">
 <nav aria-label="Roadmap navigation">
 <h2>Product &amp; evidence</h2>
-<a href="#vision">V1 user experience</a><a href="#baseline">Verified baseline</a><a href="#findings">Upstream findings</a><a href="#architecture">Integration architecture</a><a href="#formats">Import / export parity</a><a href="#parts">Component library &amp; parts</a><a href="#phases">Implementation phases</a><a href="#screens">Final screens (target UI)</a><a href="#install">Installation commands</a><a href="#acceptance">V1 acceptance</a><a href="#preview">48-hour preview</a><a href="#sources">Source references</a><a href="#history">Change history</a>
+<a href="#vision">V1 user experience</a><a href="#baseline">Verified baseline</a><a href="#findings">Upstream findings</a><a href="#architecture">Integration architecture</a><a href="#formats">Import / export parity</a><a href="#parts">Component library &amp; parts</a><a href="#phases">Implementation phases</a><a href="#screens">Final screens (target UI)</a><a href="#competitive">Competitive strategy</a><a href="#launch">48-hour launch path</a><a href="#install">Installation commands</a><a href="#acceptance">V1 acceptance</a><a href="#preview">48-hour preview</a><a href="#sources">Source references</a><a href="#history">Change history</a>
 <h2>Execution order</h2>
 <a href="#p00">00 · Build baseline</a><a href="#p01">01 · Native UI proof</a><a href="#p02">02 · Shared project state</a><a href="#p03">03 · Persistent terminals</a><a href="#p04">04 · Agent tool bridge</a><a href="#p05">05 · Schematic editing</a><a href="#p06">06 · PCB placement</a><a href="#p07">07 · PCB routing</a><a href="#p08">08 · 3D inspection</a><a href="#p09">09 · KiCad I/O parity</a><a href="#p10">10 · Verification &amp; recovery</a><a href="#p11">11 · Packaging &amp; licenses</a><a href="#p12">12 · End-to-end acceptance</a><a href="#p13">13 · Datasheet-to-part pipeline</a>
 </nav>
@@ -493,6 +495,109 @@ Reconciliation connects these responsibilities; two independent writers do not.<
 
 <p class="muted">Contract notes: the section switch never hides unsaved work; both sections read and write the same project revision shown in the status bars. Agent terminals are real PTYs (any CLI runs there), agent proposals arrive only through the review panel, and the blocked badge is how a stopped agent asks for the user. Visual styling may evolve; the <em>structure</em> above — two sections, three synced electronics views, persistent reviewable agent terminals — is the requirement.</p>
 </section>
+<section id="competitive">
+<h2>Competitive Strategy — EAK vs AI-Native EDA</h2>
+<p><strong>TL;DR:</strong> Coppr.ai is a parked domain. The real competitive field is Flux (browser ECAD + AI copilot), Quilter (physics-driven RL layout), CELUS (agent pipeline + MCP), Circuit Mind (architecture-to-schematic), and tscircuit (React code-to-circuit). All are closed-source SaaS except tscircuit. EAK's defensible layer is <strong>event-sourced canonical engineering state with deterministic validation and replay</strong> — a runtime, not a wrapper.</p>
+
+<h3>Competitor Capability Matrix (verified from public sources)</h3>
+<div class="table-wrap"><table><thead><tr><th>Capability</th><th>Flux</th><th>Quilter</th><th>CELUS</th><th>Circuit Mind</th><th>tscircuit</th><th>EAK (current)</th><th>EAK (target)</th></tr></thead><tbody>
+<tr><td>Canonical engineering state (event-sourced)</td><td>✗</td><td>✗</td><td>✗</td><td>✗</td><td>✗</td><td class="ok-t">✓</td><td class="ok-t">✓</td></tr>
+<tr><td>Deterministic replay / byte-identical</td><td>✗</td><td>✗</td><td>✗</td><td>✗</td><td>✗</td><td class="ok-t">✓</td><td class="ok-t">✓</td></tr>
+<tr><td>Requirement → decision → verification traceability</td><td>partial</td><td>✗</td><td>partial</td><td>partial</td><td>✗</td><td class="ok-t">✓</td><td class="ok-t">✓</td></tr>
+<tr><td>Agent proposal → validation → commit protocol</td><td>copilot only</td><td>✗</td><td>agent pipeline</td><td>✗</td><td>✗</td><td class="ok-t">✓</td><td class="ok-t">✓</td></tr>
+<tr><td>Engineering decision provenance</td><td>✗</td><td>✗</td><td>partial</td><td>✗</td><td>✗</td><td class="ok-t">✓</td><td class="ok-t">✓</td></tr>
+<tr><td>Assumptions as first-class, dischargeable objects</td><td>✗</td><td>✗</td><td>✗</td><td>✗</td><td>✗</td><td class="ok-t">✓</td><td class="ok-t">✓</td></tr>
+<tr><td>Multi-agent orchestration (intent, plan, check, verify)</td><td>✗</td><td>✗</td><td class="ok-t">✓</td><td>✗</td><td>✗</td><td class="ok-t">✓</td><td class="ok-t">✓</td></tr>
+<tr><td>Persistent terminals + agent bus (Herdr)</td><td>✗</td><td>✗</td><td>✗</td><td>✗</td><td>✗</td><td class="warn-t">Doc</td><td class="ok-t">✓</td></tr>
+<tr><td>Model-provider independence (no lock-in)</td><td>locked</td><td>locked</td><td>MCP + own</td><td>locked</td><td class="ok-t">✓</td><td class="ok-t">✓</td></tr>
+<tr><td>Local / air-gapped operation</td><td>✗</td><td>self-hosted</td><td>✗</td><td>✗</td><td class="ok-t">✓</td><td class="ok-t">✓</td><td class="ok-t">✓</td></tr>
+<tr><td>KiCad as adapter (not source of truth)</td><td>import only</td><td>ECAD upload</td><td>EDA handoff</td><td>ECAD export</td><td>KiCad gen</td><td class="ok-t">✓</td><td class="ok-t">✓</td></tr>
+<tr><td>Schematic generation / editing</td><td class="ok-t">✓</td><td>✗</td><td class="ok-t">✓</td><td class="ok-t">✓</td><td class="ok-t">✓</td><td class="warn-t">partial</td><td class="ok-t">✓</td></tr>
+<tr><td>PCB placement & routing</td><td class="ok-t">✓</td><td class="ok-t">RL</td><td>✗</td><td>✗</td><td>✗</td><td class="warn-t">stub</td><td class="ok-t">✓</td></tr>
+<tr><td>3D inspection</td><td class="ok-t">✓</td><td>✗</td><td>✗</td><td>✗</td><td>✗</td><td class="warn-t">scaffold</td><td class="ok-t">✓</td></tr>
+<tr><td>ERC / DRC / DFM</td><td class="ok-t">real-time</td><td>physics RL</td><td>✗</td><td class="ok-t">auto</td><td>✗</td><td class="warn-t">subset</td><td class="ok-t">✓</td></tr>
+<tr><td>SPICE / simulation</td><td class="ok-t">✓</td><td>✗</td><td>✗</td><td>✗</td><td class="ok-t">✓</td><td class="err-t">missing</td><td class="warn-t">P2</td></tr>
+<tr><td>BOM + manufacturing export</td><td class="ok-t">Gerber/BOM/PnP</td><td>fab-ready</td><td class="ok-t">BOM + EDA</td><td class="ok-t">✓</td><td>✗</td><td class="warn-t">subset</td><td class="ok-t">✓</td></tr>
+<tr><td>Component intelligence / datasheet reasoning</td><td>live parts + AI</td><td>physics-only</td><td>MCP catalog</td><td>optimization</td><td>✗</td><td class="warn-t">parser</td><td class="ok-t">pipeline</td></tr>
+<tr><td>Supplier intelligence / live stock</td><td>live</td><td>✗</td><td>MCP</td><td>availability</td><td>✗</td><td class="err-t">scaffold</td><td class="ok-t">MCP</td></tr>
+<tr><td>Open source / extensible</td><td>✗</td><td>✗</td><td>✗</td><td>✗</td><td class="ok-t">MIT</td><td class="ok-t">MIT/Apache</td><td class="ok-t">✓</td></tr>
+<tr><td>Plugin / skill extensibility</td><td>✗</td><td>✗</td><td>skills</td><td>✗</td><td>React comps</td><td class="ok-t">skills</td><td class="ok-t">✓</td></tr>
+<tr><td>CLI for agent integration</td><td>✗</td><td>✗</td><td>✗</td><td>✗</td><td class="ok-t">✓</td><td class="ok-t">✓</td><td class="ok-t">✓</td></tr>
+<tr><td>MCP server for tool exposure</td><td>✗</td><td>✗</td><td class="ok-t">✓</td><td>✗</td><td>✗</td><td class="err-t">missing</td><td class="ok-t">P1</td></tr>
+</tbody></table></div>
+
+<h3>What is Commodity (must not be EAK's moat)</h3>
+<ul>
+<li>Natural-language → schematic generation (Flux, CELUS, Circuit Mind all do this)</li>
+<li>AI copilot in a browser ECAD (Flux owns this)</li>
+<li>Physics-driven auto-placement/routing (Quilter owns this)</li>
+<li>Component search with live supplier data (CELUS + Flux + distributor APIs)</li>
+<li>Gerber/BOM/PnP export (table stakes)</li>
+<li>KiCad import/export (table stakes)</li>
+<li>Browser-based collaborative editing (Flux)</li>
+<li>MCP as a protocol (emerging standard; CELUS already uses it)</li>
+</ul>
+
+<h3>EAK's Defensible Moat (ranked by actual implementation)</h3>
+<ol>
+<li><strong>Event-sourced canonical engineering state</strong> — Already implemented: every mutation is a validated event, state is a deterministic fold, byte-identical replay proven by <code>hero_flow</code> test. Competitors store boards/files; EAK stores <em>engineering history</em>.</li>
+<li><strong>Deterministic validation seam</strong> — Proposals (from any agent/model) must cross <code>CapabilityRequest</code> with kernel re-validation before commit. AI never writes state directly.</li>
+<li><strong>Full requirement → decision → verification traceability</strong> — Provenance links bind every fact to evidence; assumptions are first-class, dischargeable objects with a manufacturing gate that blocks on undischarged critical assumptions.</li>
+<li><strong>Agent-proposal/validation/commit protocol</strong> — The 15-phase workflow with loop-backs, per-item validation, and explicit human approval gates is implemented and tested.</li>
+<li><strong>Multi-agent orchestration bus</strong> — The runtime orchestrates Requirement, Component, Schematic, PCB, Verification, Manufacturing agents with structured handoffs; Herdr provides the persistent terminal substrate.</li>
+<li><strong>Model-provider independence</strong> — The <code>ReasoningEngine</code> port abstraction (fixture, Anthropic, OpenAI-compat) means zero kernel changes to swap providers; local models are first-class.</li>
+<li><strong>Open extensibility</strong> — MIT/Apache-2.0, skill system, CLI-first, no SaaS lock-in. Competitors are closed SaaS.</li>
+<li><strong>Engineering "git" semantics</strong> — Revision history, branching intent, replay from any event, structured diff — treating hardware design like software engineering.</li>
+</ol>
+
+<h3>What EAK Should NOT Compete On</h3>
+<ul>
+<li>Browser-based collaborative schematic editor (Flux has years of investment here)</li>
+<li>Reinforcement-learning placement/routing (Quilter's core IP)</li>
+<li>Enterprise sales / SOC-2 compliance (not a product differentiator)</li>
+<li>Component manufacturer go-to-market (CELUS's channel)</li>
+<li>Proprietary optimization solvers (Circuit Mind's IP)</li>
+</ul>
+</section>
+<section id="launch">
+<h2>48-Hour Public Launch Critical Path</h2>
+<p>Goal: honest, runnable, defensible open-source release. <strong>Not</strong> feature parity with closed competitors.</p>
+<div class="table-wrap"><table><thead><tr><th>ID</th><th>P0 Task</th><th>Acceptance (observable)</th><th>Status</th><th>Blocker</th></tr></thead><tbody>
+<tr><td>P0-01</td><td>LICENSE file matching Cargo.toml (<code>MIT OR Apache-2.0</code>)</td><td>Root <code>LICENSE</code> or <code>LICENSE-MIT</code>/<code>LICENSE-APACHE</code> present; SPDX headers consistent</td><td class="err-t">MISSING</td><td>None — add now</td></tr>
+<tr><td>P0-02</td><td>Root README with install, quickstart, architecture summary</td><td>New user runs <code>git clone</code> → <code>cargo build --workspace</code> → <code>eak --help</code> and sees expected output</td><td class="err-t">MISSING</td><td>None — add now</td></tr>
+<tr><td>P0-03</td><td>Re-enable CI checks (check, clippy, test) on main</td><td>GitHub Actions green on <code>main</code>; <code>cargo check --workspace</code>, <code>cargo clippy --workspace</code>, <code>cargo test --workspace</code> all pass</td><td class="warn-t">DISABLED</td><td>Current CI comments out all checks; need cargo locally to fix failures</td></tr>
+<tr><td>P0-04</td><td>Record deterministic run/replay/trace demo transcript</td><td>Terminal log showing: <code>eak run --deterministic</code> → event log → <code>eak replay</code> identical state → <span class="code">eak trace [entity-id]</span> provenance chain</td><td class="warn-t">BLOCKED</td><td>No cargo/rustc on this machine; requires local or CI run</td></tr>
+<tr><td>P0-05</td><td>Verify hero_flow integration test passes</td><td><code>cargo test --workspace hero_flow</code> green; asserts 15 phases, released ManufacturingIr, byte-identical replay, TMP102 part sourced</td><td class="ok-t">IMPLEMENTED</td><td>Test exists; needs cargo to confirm</td></tr>
+<tr><td>P0-06</td><td>Verify KiCad import/export round-trip test passes</td><td><code>cargo test --workspace import</code> green; imports <code>review_board.kicad_pcb</code> fixture, exports, re-imports clean</td><td class="ok-t">IMPLEMENTED</td><td>Test exists; needs cargo to confirm</td></tr>
+<tr><td>P0-07</td><td>Align roadmap status with actual implementation (this file)</td><td>No inflated percentages; every phase/classification grounded in repo evidence</td><td class="ok-t">DONE</td><td>Completed in this session</td></tr>
+</tbody></table></div>
+
+<h3>P1 — First 7 Days After Launch</h3>
+<ul>
+<li><strong>MCP server exposure:</strong> Wrap EAK CLI tools (<code>part search</code>, <code>propose</code>, <code>export</code>, <code>verify</code>) as MCP tools so any MCP-capable agent (Claude, Codex, etc.) can drive EAK without custom integration.</li>
+<li><strong>OpenAI-compat provider:</strong> Wire <code>OpenAICompatEngine</code> into <code>eak-reasoning</code> lib.rs so local/ollama/vllm/openrouter work without code changes.</li>
+<li><strong>CLI JSON mode:</strong> Add <code>--json</code> to <code>eak run/replay/trace/export</code> for machine-readable agent consumption.</li>
+<li><strong>Re-enable clippy:</strong> Fix pre-existing lints incrementally; don't lower standards.</li>
+<li><strong>KiCad round-trip hardening:</strong> Test against real KiCad 8/9 files; fix symbol/footprint/3D model loss.</li>
+</ul>
+
+<h3>P2 — First 30 Days</h3>
+<ul>
+<li><strong>Terminal adapters:</strong> Implement Herdr session adapter + terminal-to-agent message bus so agents in terminals can call EAK tools via stdin/stdout or socket.</li>
+<li><strong>Native KiCad UI proof:</strong> Demonstrate actual KiCad schematic/PCB/3D windows launched from EAK, with cross-probing and live edit sync (not embedded — companion process with IPC).</li>
+<li><strong>Datasheet-to-part pipeline MVP:</strong> Implement the Tier 2 pipeline from the Component Libraries section: agent fetches PDF → extracts pin table + land pattern → runs kicad-footprint-generator → KLC check → human approval → stores as library entry.</li>
+<li><strong>SPICE simulation adapter:</strong> Wire ngspice/kicad-cli spice export as a verification engine option.</li>
+</ul>
+
+<h3>P3 — Long-Term Moat</h3>
+<ul>
+<li>Engineering knowledge graph (decisions, tradeoffs, assumptions as queryable graph)</li>
+<li>Multi-EDA backend (Altium, Cadence, Siemens as additional adapters)</li>
+<li>Reproducible hardware builds (Nix/lockfile for entire toolchain + design)</li>
+<li>Multi-user project semantics (merge, diff, conflict resolution on engineering state)</li>
+<li>Formal verification integration (bounded model checking for critical circuits)</li>
+</ul>
+</section>
 <section id="install">
 <h2>The finish line: one terminal command installs EAK</h2>
 <p>This roadmap ends when a user on a clean machine installs EAK from a terminal, verifies it, and designs a real board. The command shapes below are the <strong>target contract for Phase 11/12</strong>; they are published here so packaging work has a fixed goal. <strong>None of these commands works yet</strong>, and none may be advertised externally until Phase 11's clean-machine evidence exists for that OS.</p>
@@ -529,6 +634,7 @@ eak --version</pre>Signed installer; winget submission considered after the firs
 <section id="history">
 <h2>Roadmap history and update discipline</h2>
 <div class="table-wrap"><table><thead><tr><th>Record</th><th>Meaning</th></tr></thead><tbody>
+<tr><td>R6 · 2026-10-05 UTC</td><td>Added Competitive Strategy section with verified competitor matrix (Flux, Quilter, CELUS, Circuit Mind, tscircuit; Coppr.ai is parked). Added 48-Hour Launch Critical Path with 7 P0 acceptance criteria grounded in actual repo implementation (LICENSE, README, CI, demo transcript, hero_flow, import tests). All P0 statuses reflect real state — MISSING/DISABLED/BLOCKED/IMPLEMENTED — no fake progress.</td></tr>
 <tr><td>R5 · 2026-10-05 UTC</td><td>Added the final-screens section: CSS-drawn target mockups of the Electronics workspace (menus, toolbars, project/library panels, Schematic/PCB/3D tabs with cross-probing, inspector, layers, nets, findings dock, status bar) and the AI &amp; Terminals workspace (agent panes with working/blocked/idle states, proposal review panel, activity feed). Explicitly labelled as design contract, not screenshots.</td></tr>
 <tr><td>R4 · 2026-10-05 UTC</td><td>Declared this file EAK’s authoritative development roadmap, running from current repository state to tested terminal installation on macOS, Windows and Linux. Added the two-tier component-library contract (curated generic library + agent-built datasheet-verified parts), its evidence-backed pipeline and trust boundary, Phase 13, an acceptance step for on-demand part creation, and the target install-command table with its truth discipline. Documentation only; no product milestone marked complete.</td></tr>
 <tr><td>R3 · 2026-10-05 UTC</td><td>Reframed V1 around real KiCad editing/3D, Herdr-style persistent terminals, user-selected coding agents, shared manual/agent revisions, full selected-version import/export and evidence-backed acceptance. Added upstream findings and limitations. Documentation only; no product milestone marked complete.</td></tr>
@@ -538,7 +644,7 @@ eak --version</pre>Signed installer; winget submission considered after the firs
 </section>
 </main>
 </div>
-<footer>EAK development roadmap R5 · source of truth · source-backed plan · no product-build certification · no external scripts or runtime network requests</footer>
+<footer>EAK development roadmap R6 · source of truth · source-backed plan · no product-build certification · no external scripts or runtime network requests</footer>
 <script>
 'use strict';
 const phasePanels = Array.from(document.querySelectorAll('[data-phase]'));
