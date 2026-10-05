@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>EAK V1 Roadmap — KiCad + Agent Terminals</title>
+<title>EAK Development Roadmap — Source of Truth</title>
 <style>
 :root{color-scheme:dark;--bg:#080c10;--panel:#0e151b;--line:#293640;--text:#e7edf2;--muted:#a3b1bc;--cyan:#60d8ef;--green:#61d6a2;--amber:#e1b469}
 *{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:80px}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.6 system-ui,sans-serif}a{color:var(--cyan);overflow-wrap:anywhere}button{font:inherit;cursor:pointer}button:focus-visible,a:focus-visible,summary:focus-visible{outline:3px solid var(--cyan);outline-offset:4px}
@@ -17,17 +17,17 @@ ul,ol{padding-left:23px}li{margin:7px 0}code,pre{font:13px/1.65 ui-monospace,Con
 </style>
 </head>
 <body>
-<header><strong>EAK ◆</strong><span>V1 development roadmap · R3</span><div class="actions"><button type="button" id="expand">Expand phases</button><button type="button" id="collapse">Collapse phases</button></div></header>
+<header><strong>EAK ◆</strong><span>Development roadmap · R4 · source of truth</span><div class="actions"><button type="button" id="expand">Expand phases</button><button type="button" id="collapse">Collapse phases</button></div></header>
 <div class="layout">
 <nav aria-label="Roadmap navigation">
 <h2>Product &amp; evidence</h2>
-<a href="#vision">V1 user experience</a><a href="#baseline">Verified baseline</a><a href="#findings">Upstream findings</a><a href="#architecture">Integration architecture</a><a href="#formats">Import / export parity</a><a href="#phases">Implementation phases</a><a href="#acceptance">V1 acceptance</a><a href="#preview">48-hour preview</a><a href="#sources">Source references</a><a href="#history">Change history</a>
+<a href="#vision">V1 user experience</a><a href="#baseline">Verified baseline</a><a href="#findings">Upstream findings</a><a href="#architecture">Integration architecture</a><a href="#formats">Import / export parity</a><a href="#parts">Component library &amp; parts</a><a href="#phases">Implementation phases</a><a href="#install">Installation commands</a><a href="#acceptance">V1 acceptance</a><a href="#preview">48-hour preview</a><a href="#sources">Source references</a><a href="#history">Change history</a>
 <h2>Execution order</h2>
-<a href="#p00">00 · Build baseline</a><a href="#p01">01 · Native UI proof</a><a href="#p02">02 · Shared project state</a><a href="#p03">03 · Persistent terminals</a><a href="#p04">04 · Agent tool bridge</a><a href="#p05">05 · Schematic editing</a><a href="#p06">06 · PCB placement</a><a href="#p07">07 · PCB routing</a><a href="#p08">08 · 3D inspection</a><a href="#p09">09 · KiCad I/O parity</a><a href="#p10">10 · Verification &amp; recovery</a><a href="#p11">11 · Packaging &amp; licenses</a><a href="#p12">12 · End-to-end acceptance</a>
+<a href="#p00">00 · Build baseline</a><a href="#p01">01 · Native UI proof</a><a href="#p02">02 · Shared project state</a><a href="#p03">03 · Persistent terminals</a><a href="#p04">04 · Agent tool bridge</a><a href="#p05">05 · Schematic editing</a><a href="#p06">06 · PCB placement</a><a href="#p07">07 · PCB routing</a><a href="#p08">08 · 3D inspection</a><a href="#p09">09 · KiCad I/O parity</a><a href="#p10">10 · Verification &amp; recovery</a><a href="#p11">11 · Packaging &amp; licenses</a><a href="#p12">12 · End-to-end acceptance</a><a href="#p13">13 · Datasheet-to-part pipeline</a>
 </nav>
 <main>
 <section id="vision">
-<div class="eyebrow">KiCad editing experience + Herdr-style agent workspace</div>
+<div class="eyebrow">Source of truth: development of EAK → tested terminal installation on macOS, Windows, Linux</div>
 <h1>Design by hand.<br>Design with your coding agent.<br>Keep one engineering project.</h1>
 <p><strong>V1 product requirement:</strong> EAK combines KiCad's real schematic, PCB, and 3D experience with persistent terminals. Users run their preferred coding agent in a terminal and ask it to add, edit, move, rotate, place, and route design objects through EAK. Users can also edit manually and access all import/export options available in the selected KiCad build.</p>
 <div class="grid">
@@ -36,13 +36,13 @@ ul,ol{padding-left:23px}li{margin:7px 0}code,pre{font:13px/1.65 ui-monospace,Con
 <article class="card"><h3>Shared design &amp; outputs</h3><p>Manual and agent operations address the same objects and revision. Inspect changes, retain recovery points, run checks, and export through KiCad's native capabilities.</p></article>
 </div>
 <div class="callout"><strong>Example journey:</strong> Open a project → start a coding agent → “Add this connector and wire its power pins” → inspect the proposed change → apply → “Move J1 to the left edge and rotate it 90°” → manually refine placement → ask for a route → inspect DRC and 3D → export the fabrication package.</div>
-<p class="muted">This roadmap updates the V1 implementation priority. It does not claim those capabilities already exist, replace every older architecture document, or authorize a product-code rewrite. Preserve useful EAK validation, provenance, units, and history while making real editing the first deliverable. Reconcile older provider-first and projection-only specifications during Phase 00.</p>
+<p class="muted"><strong>This file is EAK's authoritative development roadmap.</strong> Where another document, report, or old progress claim disagrees with this page, this page wins until it is deliberately revised with evidence. It spans the whole journey: from the current repository state to a user typing one install command in a terminal on macOS, Windows, or Linux and designing a real board. This roadmap updates the V1 implementation priority. It does not claim those capabilities already exist, replace every older architecture document, or authorize a product-code rewrite. Preserve useful EAK validation, provenance, units, and history while making real editing the first deliverable. Reconcile older provider-first and projection-only specifications during Phase 00.</p>
 </section>
 <section id="baseline">
 <h2>Evidence snapshot, not a live progress feed</h2>
 <div class="grid">
 <div class="card"><span class="metric">Source review</span><span>Inspection recorded 2026-10-05 UTC. No upstream builds or live integration tests were run for this roadmap.</span></div>
-<div class="card"><span class="metric">13 planned phases</span><span>Completion is intentionally unverified. A source review or roadmap edit does not complete a product phase.</span></div>
+<div class="card"><span class="metric">14 planned phases</span><span>Completion is intentionally unverified. A source review or roadmap edit does not complete a product phase.</span></div>
 <div class="card"><span class="metric">No model lock-in</span><span>Terminal agents are the primary V1 interaction. Internal provider integrations are optional, not a prerequisite.</span></div>
 </div>
 <div class="table-wrap"><table><thead><tr><th>Repository</th><th>Inspected revision</th><th>What this establishes</th></tr></thead><tbody>
@@ -129,6 +129,49 @@ Reconciliation connects these responsibilities; two independent writers do not.<
 </tbody></table></div>
 <div class="callout warning"><strong>Parity is a testable scope, not the phrase “supports KiCad”.</strong> Every applicable option must have an accessible native or automated path and documented behavior. Unsupported automation must remain visible. Full V1 cannot be declared complete from only Gerber + BOM support.</div>
 </section>
+<section id="parts">
+<h2>Component libraries: generic parts first, exact parts on demand</h2>
+<p><strong>V1 library requirement:</strong> EAK ships a curated generic library for everyday design work. When a specific part is missing, the user asks their coding agent for it; the agent fetches the official datasheet, studies it, verifies the part against the project, and produces an exact schematic symbol and a correctly dimensioned footprint, which the user reviews before the part enters the project.</p>
+<p>This deliberately avoids pre-building a huge components database. The big database becomes an <em>accumulated</em> asset: every verified on-demand part is stored with its evidence and reused on the next request.</p>
+<h3>Tier 1 · curated generic library</h3>
+<ul>
+<li>Base the generic tier on the official KiCad libraries (<a href="https://gitlab.com/kicad/libraries/kicad-symbols">symbols</a>, <a href="https://gitlab.com/kicad/libraries/kicad-footprints">footprints</a>, <a href="https://gitlab.com/kicad/libraries/kicad-packages3D">3D models</a>) rather than authoring thousands of parts from scratch: passives, standard packages (SOT, SOIC, QFP, QFN, BGA, DIP), connectors, and common discretes.</li>
+<li><strong>License boundary:</strong> the KiCad libraries are CC-BY-SA 4.0 with an explicit exception: designs made with them are unrestricted, but <em>redistributing the libraries themselves (including modified subsets) requires the same license and attribution</em> (<a href="https://www.kicad.org/libraries/license/">library license</a>). Bundling a subset inside EAK is redistribution, so keep notices and share-alike compliance, or reference the user's installed KiCad libraries instead of bundling.</li>
+<li>Pin the library version together with the pinned KiCad build so symbol and footprint identities stay reproducible across machines.</li>
+</ul>
+<h3>Tier 2 · agent-built exact parts from the datasheet</h3>
+<p>The pipeline, with each step producing durable evidence:</p>
+<pre>1  RESOLVE    exact orderable part number + manufacturer (user confirms; one family
+              can ship in several packages; the package is bound per ordering code)
+2  FETCH      official manufacturer datasheet (manufacturer URL preferred); record
+              URL, revision, retrieval date, SHA-256; validate it is a real PDF
+3  STUDY      extract the pin table (number, name, electrical type), the package
+              drawing dimensions with tolerances, and the manufacturer land-pattern
+              example; record the page number for every extracted fact
+4  VERIFY     against the project: supply-voltage range, temperature range, interface,
+              package choice vs board constraints; mismatches are reported, not hidden
+5  BUILD      symbol: pins named/numbered per datasheet, electrical types per KLC S4.4;
+              footprint: manufacturer land pattern when given (KLC F4.1: the datasheet
+              takes priority), else IPC-7351 derivation from package dimensions and
+              tolerances; correct courtyard, silkscreen, paste and pin-1 marking
+6  CHECK      machine checks: pin-count match symbol/footprint/datasheet, KLC checks,
+              geometry sanity (pitch × count vs body size), then render both for review
+7  APPROVE    the user (or a reviewer) approves with the datasheet pages side by side;
+              only approved parts become reusable library entries
+8  STORE      part + symbol + footprint + datasheet + extracted facts + approvals in
+              the project library with full provenance; reuse on the next request</pre>
+<h3>What the research proves, and what it warns</h3>
+<div class="table-wrap"><table><thead><tr><th>Finding</th><th>Evidence</th><th>Consequence for EAK</th></tr></thead><tbody>
+<tr><td>Datasheets contain everything this feature needs</td><td>TI TMP102 (SBOS397I) was walked end to end during this research: a complete pin table (SCL, GND, ALERT, ADD0, V+, SDA), the DRL/SOT563 package outline with toleranced dimensions, and a land-pattern example (six 0.67 mm × 0.3 mm pads at 0.5 mm pitch) that itself notes IPC-7351 may have alternate designs.</td><td>The feature is feasible: a studied datasheet plus IPC rules can yield an exact, dimensioned footprint when extraction is correct.</td></tr>
+<tr><td>Plain text extraction alone is not enough</td><td>Multi-column PDF text scrambles pin tables, and package drawings are vector graphics whose dimension numbers detach from their meaning in extracted text. EAK's current datasheet parser extracts scattered electrical parameters by pattern matching; it does not produce verified pin maps or land patterns.</td><td>The agent's table- and drawing-aware reading proposes structured facts; deterministic checks and human review validate them. Never auto-accept a pin map or a pad dimension from raw text matching.</td></tr>
+<tr><td>Proven generator tooling already exists</td><td><a href="https://gitlab.com/kicad/libraries/kicad-footprint-generator">kicad-footprint-generator</a> (GPL-3.0-or-later) provides parameterized IPC-7351 footprint generation with density classes and manufacturing/placement tolerance math; its package data already covers SOT-563/TI DRL, and its <code>library_utils</code> include KLC checkers and a CSV-driven symbol generator.</td><td>Prefer driving these generators with datasheet-extracted parameters over hand-writing s-expression geometry; respect the GPL boundary (invoke as external tools, or accept GPL obligations if embedded).</td></tr>
+<tr><td>Quality rules are already codified</td><td><a href="https://klc.kicad.org/">KiCad Library Conventions</a>: pin naming and electrical types (S4.x), datasheet-over-KLC priority for land patterns (F4.1), courtyard rules (F5.3), SMD pad/paste/exposed-pad rules (F6.3), and naming conventions (F2.x, S2.x).</td><td>Run KLC checks as the deterministic gate on every generated asset; a part that fails returns to the agent with the specific violations listed.</td></tr>
+<tr><td>Identity is per ordering code, not per family</td><td>The TMP102 packaging addendum binds orderable numbers (e.g. TMP102AIDRLR) to a specific package, lifecycle status and temperature range; many families ship one base MPN in several packages.</td><td>Verification must bind the <em>orderable</em> part number to the exact package drawing used for the footprint; a family-level match is not an identity match.</td></tr>
+<tr><td>Fetching is the fragile step</td><td>The direct manufacturer fetch worked in this research, but distributor sites commonly return anti-bot challenge pages; EAK's existing asset validator already distinguishes real PDFs from HTML/challenge responses.</td><td>Support a manual fallback where the user supplies the PDF and the same study/verify/approve pipeline applies. Respect site terms; never work around access controls.</td></tr>
+<tr><td>Third-party asset licenses differ per source</td><td>Vendor CAD portals attach their own terms to downloadable footprints; official KiCad libraries are CC-BY-SA-with-exception; generated artifacts from GPL tooling have their own upstream guidance.</td><td>Record the license and source of every imported or generated asset, and review before redistributing any accumulated library publicly.</td></tr>
+</tbody></table></div>
+<div class="callout warning"><strong>Trust boundary:</strong> the coding agent proposes; it never writes directly into the library. Every generated part passes deterministic validation (pin counts, KLC, geometry sanity), carries page-level datasheet provenance, and requires explicit approval with rendered previews before first use. A wrong footprint is a scrapped board, so EAK must make "verified against datasheet revision X, page Y" a recorded fact, not a claim.</div>
+</section>
 <section id="phases">
 <h2>Dependency-ordered implementation plan</h2>
 <p>All phases below are <strong>planned / not acceptance-tested</strong>. Existing code can satisfy individual checks after validation; no percentage is inferred from file counts or old reports.</p>
@@ -211,6 +254,12 @@ Reconciliation connects these responsibilities; two independent writers do not.<
 <ul class="tasks"><li>Execute the complete <a href="#acceptance">acceptance scenario</a> on a real example with actual library parts and correct pin mappings.</li><li>Repeat with two different user-selected coding agents; prove the project also remains manually editable without an AI provider.</li><li>Publish reproducible commands, expected outputs, limitations and evidence; no fixture-only demonstration may satisfy live product acceptance.</li></ul>
 <p class="gate"><strong>Exit:</strong> install → native edit → agent edit → manual refinement → route → ERC/DRC → interactive 3D → import/export → reopen, with one consistent design history.</p>
 </details>
+<details id="p13" data-phase data-category="editing">
+<summary>13 · Component library and datasheet-to-part pipeline <span class="badge pending">Planned</span></summary>
+<p class="phase-meta">Dependencies: 02, 04, 05 (symbol placement), 06 (footprint use); approval UX builds on the shared preview/approval flow. Library inventory and license decisions can start after 00. Full contract: <a href="#parts">Component libraries</a>.</p>
+<ul class="tasks"><li>Ship the Tier 1 generic library: select and pin official KiCad symbol/footprint/3D library versions, resolve the bundling-vs-reference license decision, and make generic parts searchable from both the UI and agent tools.</li><li>Implement the Tier 2 pipeline as agent-callable EAK tools: resolve orderable part number, fetch/validate the datasheet (with manual PDF fallback), record structured facts with page-level provenance, verify against project constraints, and generate the symbol and footprint through KLC-checked generator tooling rather than freehand geometry.</li><li>Build the review experience: rendered symbol/footprint previews beside the cited datasheet pages, explicit approval before first use, rejection back to the agent with concrete findings, and storage of approved parts with datasheet hash, extracted facts and approvals for reuse.</li></ul>
+<p class="gate"><strong>Exit:</strong> a part absent from the generic library is requested through a coding agent; the delivered symbol matches the datasheet pin table exactly, the footprint matches the manufacturer land pattern (or a recorded IPC-7351 derivation), KLC checks pass, the user approves against the cited pages, and the part is reused from the library on a second request without re-fetching. A fabricated pin map or dimension anywhere in the pipeline is a release-blocking defect.</p>
+</details>
 </section>
 <section id="acceptance">
 <h2>Concrete V1 acceptance scenario</h2>
@@ -225,6 +274,7 @@ Reconciliation connects these responsibilities; two independent writers do not.<
 <li>Inspect the same board in 3D with correct model transforms. Confirm the latest revision is visible.</li>
 <li>Exercise the selected-version import/export catalogue, including a manufacturing package. Inspect contents and revision identity; a file's existence alone is insufficient.</li>
 <li>Undo/redo, save, close, reopen, and reconnect terminals. Test a stale agent proposal and an interrupted operation without losing manual work.</li>
+<li>Ask an agent for a part that is not in the generic library. It fetches and studies the official datasheet, verifies the part against the project, and delivers a reviewable exact symbol and dimensioned footprint with page-cited evidence; after approval the part is placed, and a repeat request reuses the stored library entry.</li>
 </ol>
 </section>
 <section id="preview">
@@ -237,6 +287,26 @@ Reconciliation connects these responsibilities; two independent writers do not.<
 <li><strong>If the integration proof fails:</strong> publish findings and a source preview rather than manufacturing a success demo. Preserve the full V1 backlog above.</li>
 </ul>
 </section>
+<section id="install">
+<h2>The finish line: one terminal command installs EAK</h2>
+<p>This roadmap ends when a user on a clean machine installs EAK from a terminal, verifies it, and designs a real board. The command shapes below are the <strong>target contract for Phase 11/12</strong>; they are published here so packaging work has a fixed goal. <strong>None of these commands works yet</strong>, and none may be advertised externally until Phase 11's clean-machine evidence exists for that OS.</p>
+<div class="table-wrap"><table><thead><tr><th>Platform</th><th>Target install path (terminal)</th><th>Status</th></tr></thead><tbody>
+<tr><td>Linux (x86_64, aarch64)</td><td><pre>curl -fsSL &lt;official-eak-install-url&gt;/install.sh | sh
+eak --version</pre>Installer script served from the project's official release channel (GitHub Releases until a domain is owned); checksums and signatures published beside artifacts.</td><td><span class="badge pending">Planned</span></td></tr>
+<tr><td>macOS (Intel, Apple&nbsp;Silicon)</td><td><pre>curl -fsSL &lt;official-eak-install-url&gt;/install.sh | sh
+# or, once a tap exists:
+brew install &lt;tap&gt;/eak
+eak --version</pre>Signed and notarized app plus CLI; Homebrew distribution only after the formula or cask is real.</td><td><span class="badge pending">Planned</span></td></tr>
+<tr><td>Windows (x86_64)</td><td><pre>powershell -ExecutionPolicy Bypass -c "irm &lt;official-eak-install-url&gt;/install.ps1 | iex"
+eak --version</pre>Signed installer; winget submission considered after the first stable release.</td><td><span class="badge pending">Planned</span></td></tr>
+</tbody></table></div>
+<ul>
+<li><strong>Install must deliver the whole product:</strong> the EAK service and CLI, the workspace shell, the pinned KiCad integration (bundled or detected-and-verified installed KiCad), terminal runtime support, and the pinned generic component libraries with their license notices. A partial install that cannot open the three editing surfaces fails Phase 11.</li>
+<li><strong>Placeholder rule:</strong> <code>&lt;official-eak-install-url&gt;</code> is resolved when distribution infrastructure exists. Do not register claims around an unowned domain, and do not publish an install one-liner that pipes from an unverified source.</li>
+<li><strong>Verification is part of install:</strong> <code>eak --version</code>, a doctor-style dependency check, and SHA-256 checksums for every artifact; signing per OS as committed in Phase 11.</li>
+<li><strong>Truth discipline:</strong> each row's status flips to Available only with recorded clean-machine evidence (OS version, command transcript, resulting version). This table is the authoritative statement of what users can install today.</li>
+</ul>
+</section>
 <section id="sources">
 <h2>Traceable source references</h2>
 <p>Implementation findings below link to inspected commits. Moving upstream/library links above identify projects, not certified release dependencies.</p>
@@ -246,12 +316,14 @@ Reconciliation connects these responsibilities; two independent writers do not.<
 <li><a href="https://github.com/KiCad/kicad-source-mirror/blob/dffc61437573d7fccfc5bbf5ec321eb4493d0bb7/README.md">KiCad source-module map</a>; <a href="https://github.com/KiCad/kicad-source-mirror/blob/dffc61437573d7fccfc5bbf5ec321eb4493d0bb7/CMakeLists.txt">wxWidgets/OpenGL build dependencies</a>; <a href="https://github.com/KiCad/kicad-source-mirror/blob/dffc61437573d7fccfc5bbf5ec321eb4493d0bb7/include/kiway.h">native KIWAY/KIFACE boundary</a>; <a href="https://github.com/KiCad/kicad-source-mirror/blob/dffc61437573d7fccfc5bbf5ec321eb4493d0bb7/LICENSE.README">license inventory</a>.</li>
 <li><a href="https://github.com/KiCad/kicad-source-mirror/blob/dffc61437573d7fccfc5bbf5ec321eb4493d0bb7/api/proto/common/commands/editor_commands.proto">staged edits, per-item statuses and RunAction warning</a>; <a href="https://github.com/KiCad/kicad-source-mirror/blob/dffc61437573d7fccfc5bbf5ec321eb4493d0bb7/eeschema/api/api_handler_sch.cpp">schematic handler implementation</a>; <a href="https://github.com/KiCad/kicad-source-mirror/blob/dffc61437573d7fccfc5bbf5ec321eb4493d0bb7/pcbnew/api/api_handler_pcb.cpp">PCB handler implementation</a>.</li>
 <li><a href="https://github.com/KiCad/kicad-source-mirror/tree/dffc61437573d7fccfc5bbf5ec321eb4493d0bb7/kicad/cli">CLI job and export commands</a>; <a href="https://github.com/KiCad/kicad-source-mirror/blob/dffc61437573d7fccfc5bbf5ec321eb4493d0bb7/eeschema/sch_io/sch_io_mgr.cpp">schematic I/O registry</a>; <a href="https://github.com/KiCad/kicad-source-mirror/blob/dffc61437573d7fccfc5bbf5ec321eb4493d0bb7/pcbnew/pcb_io/pcb_io_mgr.cpp">PCB I/O registry</a>.</li>
+<li>Component-library research: <a href="https://klc.kicad.org/">KiCad Library Conventions</a> (S4.4 pin types, F4.1 datasheet priority, F5.3 courtyard, F6.3 SMD pads); <a href="https://gitlab.com/kicad/libraries/kicad-footprint-generator">kicad-footprint-generator</a> at <code>84709e5e</code> (IPC-7351 rules in <code>src/kilibs/config/ipc_rules.py</code>, SOT-563/Texas-DRL package data, KLC checkers and CSV symbol generator under <code>library_utils/</code>); <a href="https://www.kicad.org/libraries/license/">official library license</a> (CC-BY-SA 4.0 with design exception); TI TMP102 datasheet SBOS397I (pin table, DRL/SOT563 outline, land-pattern example; retrieved 2026-10-05, SHA-256 <code>c9da6620ef95f75ce94372f670a84d168e05922dd32cebfaa6517083f15ebfaf</code>).</li>
 <li><a href="https://github.com/NijoP/agent-kit/blob/9f5756b3614d8fb2f7623b8e3e65c5c012c422d5/app/src-tauri/src/main.rs">EAK current desktop command</a>; <a href="https://github.com/NijoP/agent-kit/blob/9f5756b3614d8fb2f7623b8e3e65c5c012c422d5/eak/crates/eak-kicad/src/export.rs">current export fidelity limits</a>; <a href="https://github.com/NijoP/agent-kit/blob/9f5756b3614d8fb2f7623b8e3e65c5c012c422d5/.github/workflows/ci.yml">current CI baseline</a>.</li>
 </ul>
 </section>
 <section id="history">
 <h2>Roadmap history and update discipline</h2>
 <div class="table-wrap"><table><thead><tr><th>Record</th><th>Meaning</th></tr></thead><tbody>
+<tr><td>R4 · 2026-10-05 UTC</td><td>Declared this file EAK’s authoritative development roadmap, running from current repository state to tested terminal installation on macOS, Windows and Linux. Added the two-tier component-library contract (curated generic library + agent-built datasheet-verified parts), its evidence-backed pipeline and trust boundary, Phase 13, an acceptance step for on-demand part creation, and the target install-command table with its truth discipline. Documentation only; no product milestone marked complete.</td></tr>
 <tr><td>R3 · 2026-10-05 UTC</td><td>Reframed V1 around real KiCad editing/3D, Herdr-style persistent terminals, user-selected coding agents, shared manual/agent revisions, full selected-version import/export and evidence-backed acceptance. Added upstream findings and limitations. Documentation only; no product milestone marked complete.</td></tr>
 <tr><td>R2 · historical</td><td>The previous page reported 35% progress and a duplicate-ComponentClass build blocker, required a specific NVIDIA model and referenced a developer-local HTML file. Those claims/constraints are not used as current acceptance evidence. The prior page remains recoverable in Git history at the EAK baseline revision above.</td></tr>
 </tbody></table></div>
@@ -259,7 +331,7 @@ Reconciliation connects these responsibilities; two independent writers do not.<
 </section>
 </main>
 </div>
-<footer>EAK V1 roadmap R3 · source-backed plan · no product-build certification · no external scripts or runtime network requests</footer>
+<footer>EAK development roadmap R4 · source of truth · source-backed plan · no product-build certification · no external scripts or runtime network requests</footer>
 <script>
 'use strict';
 const phasePanels = Array.from(document.querySelectorAll('[data-phase]'));
