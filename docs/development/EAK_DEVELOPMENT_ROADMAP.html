@@ -13,15 +13,87 @@ header{position:sticky;top:0;z-index:2;background:#080c10f5;border-bottom:1px so
 ul,ol{padding-left:23px}li{margin:7px 0}code,pre{font:13px/1.65 ui-monospace,Consolas,monospace}code{overflow-wrap:anywhere}pre{padding:16px;background:#080c10;border:1px solid var(--line);border-radius:6px;white-space:pre-wrap;overflow-wrap:anywhere}.table-wrap{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:11px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line)}th{color:var(--cyan)}td:first-child{min-width:130px}summary{cursor:pointer;line-height:1.4;font-weight:700}summary .badge{margin-left:8px}details[open] summary{padding-bottom:12px;border-bottom:1px solid var(--line)}.phase-meta{color:var(--muted);font-size:13px;margin-top:12px}.tasks{padding-left:22px}.gate{border-left:3px solid var(--green);padding:8px 12px;background:#101e1b}.filters{display:flex;gap:8px;flex-wrap:wrap;margin:16px 0}.source-list li{font-size:13px}footer{color:var(--muted);border-top:1px solid var(--line);padding:18px 24px;font-size:12px}[hidden]{display:none!important}
 @media(max-width:1000px){.layout{grid-template-columns:190px minmax(0,1fr)}main{padding:20px}.grid{grid-template-columns:1fr}}
 @media(max-width:700px){header{position:static;padding:14px}.layout{display:block}nav{position:static;max-height:none;padding:16px;display:flex;flex-wrap:wrap;gap:8px 18px}nav h2{width:100%;margin:0}main{border:0;padding:16px}.actions{margin-left:0}html{scroll-padding-top:12px}th,td{padding:8px}}
+
+/* --- target-UI screen mocks (CSS-only, no images) --- */
+.mock{border:1px solid #3a4a56;border-radius:10px;overflow:hidden;background:#0a0f14;margin:18px 0;font-size:11px;box-shadow:0 18px 50px #0008}
+.mk-title{display:flex;align-items:center;gap:10px;padding:7px 12px;background:#060a0e;border-bottom:1px solid var(--line);color:#c9d4dc}
+.mk-title .mk-dots{display:inline-flex;gap:5px}.mk-dots i{width:9px;height:9px;border-radius:50%;background:#2e3c46;display:inline-block}
+.mk-seg{margin-left:auto;display:inline-flex;border:1px solid #3a4a56;border-radius:6px;overflow:hidden}
+.mk-seg span{padding:4px 12px;color:#8b99a4}.mk-seg .on{background:#17333d;color:var(--cyan)}
+.mk-menu{display:flex;gap:14px;padding:5px 12px;background:#0b1118;border-bottom:1px solid var(--line);color:#93a1ac}
+.mk-tools{display:flex;gap:6px;align-items:center;padding:6px 10px;background:#0a1016;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.mk-btn{border:1px solid #33424e;border-radius:5px;padding:3px 8px;color:#aeb9c2;background:#101922}.mk-btn.pri{color:var(--cyan);border-color:#35606e}
+.mk-sep{width:1px;height:16px;background:#2b3842}
+.mk-main{display:grid;grid-template-columns:185px minmax(0,1fr) 215px;min-height:330px}
+.mk-side{background:#0b1117;border-right:1px solid var(--line);padding:8px;overflow:hidden}
+.mk-side.r{border-right:0;border-left:1px solid var(--line)}
+.mk-h{font-size:9px;letter-spacing:1px;color:#6e7d88;text-transform:uppercase;margin:8px 0 5px}.mk-h:first-child{margin-top:0}
+.mk-tree{list-style:none;margin:0;padding:0;color:#aab6c0}.mk-tree li{margin:3px 0;padding-left:12px;position:relative}
+.mk-tree li:before{content:"";position:absolute;left:0;top:6px;width:6px;height:6px;border:1px solid #4a5a66;border-radius:2px}
+.mk-tree .sel{color:var(--cyan)}.mk-tree .ok:after{content:" \2713";color:var(--green)}
+.mk-kv{display:flex;justify-content:space-between;border-bottom:1px dashed #243039;padding:3px 0;color:#9fadb8}.mk-kv b{color:#dfe7ec;font-weight:600}
+.mk-lay{display:flex;align-items:center;gap:6px;padding:2px 0;color:#9fadb8}.mk-lay i{width:10px;height:10px;border-radius:2px;display:inline-block}
+.mk-ed{display:flex;flex-direction:column;min-width:0}
+.mk-tabs{display:flex;gap:2px;background:#0a1016;border-bottom:1px solid var(--line);padding:4px 6px 0}
+.mk-tab{padding:5px 12px;border:1px solid transparent;border-bottom:0;border-radius:6px 6px 0 0;color:#8b99a4}
+.mk-tab.on{background:#0e151c;border-color:#31404c;color:#e7edf2}
+.mk-canvas{position:relative;flex:1;min-height:230px;background:#0d131a;background-image:linear-gradient(#141c2422 1px,transparent 1px),linear-gradient(90deg,#141c2422 1px,transparent 1px);background-size:22px 22px;overflow:hidden}
+.mk-canvas,.mk-canvas *{box-sizing:border-box}
+.sch-comp{position:absolute;border:1.5px solid #d8c278;background:#11161d;border-radius:3px;color:#e6d9a8;text-align:center;padding-top:8px;font-size:10px}
+.sch-comp small{display:block;color:#8b99a4;font-size:9px}
+.sch-pin{position:absolute;width:16px;height:2px;background:#d8c278}
+.sch-wire{position:absolute;background:#5fae6e;height:2px}.sch-wire.v{width:2px;height:auto}
+.sch-net{position:absolute;color:#7fd6ea;font-size:9px;background:#0d131a;padding:0 3px}
+.sch-dot{position:absolute;width:6px;height:6px;border-radius:50%;background:#5fae6e}
+.mk-float{position:absolute;right:10px;top:10px;display:flex;gap:5px}
+.mk-dock{border-top:1px solid var(--line);background:#0a1016}
+.mk-dock .mk-tabs{border-bottom:1px solid #1d2933}
+.mk-row{display:flex;gap:10px;padding:4px 12px;border-bottom:1px dashed #1d2933;color:#9fadb8}
+.mk-row b{font-weight:600}.ok-t{color:var(--green)}.warn-t{color:var(--amber)}.err-t{color:#eb767e}
+.mk-status{display:flex;gap:16px;padding:5px 12px;background:#060a0e;border-top:1px solid var(--line);color:#73828d;font-size:10px}
+.mk-status .sp{flex:1}
+.mk-minis{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:12px 0}
+.mk-mini{border:1px solid var(--line);border-radius:8px;overflow:hidden;background:#0a0f14}
+.mk-mini .cap{padding:6px 10px;border-bottom:1px solid var(--line);color:#9fadb8;font-size:11px}
+.pcb{position:relative;height:170px;background:#0d131a;display:grid;place-items:center}
+.pcb-board{position:relative;width:240px;height:120px;background:#143226;border:2px solid #d8c278;border-radius:4px}
+.pcb-pad{position:absolute;width:10px;height:7px;background:#c9a24a;border-radius:1px}
+.pcb-trk{position:absolute;height:3px;background:#2f6b4f;border-radius:2px}
+.pcb-sm{position:absolute;border:1px solid #cfd8de;background:#2a3540;border-radius:2px}
+.pcb-hole{position:absolute;width:10px;height:10px;border-radius:50%;background:#0d131a;border:2px solid #c9a24a}
+.v3d{position:relative;height:170px;background:linear-gradient(#0d131a,#10181f);display:grid;place-items:center;perspective:420px}
+.v3d-board{position:relative;width:230px;height:110px;background:linear-gradient(#17543c,#123c2c);border-radius:4px;transform:rotateX(55deg) rotateZ(-28deg);box-shadow:0 22px 30px #000a;border:1px solid #2c7d55}
+.v3d-part{position:absolute;background:#20262d;border:1px solid #39424c;box-shadow:0 -5px 0 #11151a}
+.v3d-part.ic:after{content:"";position:absolute;left:3px;top:3px;width:4px;height:4px;border-radius:50%;background:#59646e}
+.term-grid{display:grid;grid-template-columns:minmax(0,1.6fr) 230px;min-height:330px}
+.term-panes{display:grid;grid-template-rows:1fr 1fr;grid-template-columns:1fr 1fr;gap:6px;padding:8px;background:#0b1117;border-right:1px solid var(--line)}
+.term{border:1px solid #27333d;border-radius:7px;background:#07090c;display:flex;flex-direction:column;min-width:0;overflow:hidden}
+.term.wide{grid-column:1/-1}
+.term-h{display:flex;align-items:center;gap:7px;padding:4px 9px;background:#0d1319;border-bottom:1px solid #1c2731;color:#9fadb8}
+.st{margin-left:auto;font-size:9px;border:1px solid;border-radius:9px;padding:1px 7px}
+.st.w{color:var(--cyan);border-color:#2c5d6c}.st.b{color:var(--amber);border-color:#75603a}.st.i{color:#8b99a4;border-color:#3a4a56}
+.term-b{padding:7px 10px;font:10px/1.7 ui-monospace,Consolas,monospace;color:#9fb3a8;white-space:pre-wrap;overflow:hidden}
+.term-b .c{color:var(--cyan)}.term-b .g{color:var(--green)}.term-b .a{color:var(--amber)}.term-b .m{color:#8b99a4}
+.prop-card{border:1px solid #31404c;border-radius:7px;background:#0d141b;margin-bottom:10px;overflow:hidden}
+.prop-card .cap{padding:6px 9px;border-bottom:1px solid #1d2933;color:#dfe7ec;font-weight:600;font-size:11px}
+.prop-card .bd{padding:7px 9px;color:#9fadb8}
+.diff{font:10px/1.7 ui-monospace,Consolas,monospace;border:1px solid #1d2933;border-radius:5px;padding:6px 8px;margin:6px 0;background:#080d12}
+.diff .add{color:var(--green)}.diff .ctx{color:#73828d}
+.mk-act{display:flex;gap:7px;margin-top:7px}
+.mk-act span{flex:1;text-align:center;border-radius:5px;padding:5px 0;border:1px solid}
+.ap{color:var(--green);border-color:#2f6b4f;background:#0f1d17}.rj{color:#eb767e;border-color:#6c3a40;background:#1a1114}
+.feed{list-style:none;margin:0;padding:0;color:#8b99a4;font-size:10px}.feed li{padding:4px 0;border-bottom:1px dashed #1d2933}.feed b{color:#c9d4dc;font-weight:600}
+@media(max-width:860px){.mk-main{grid-template-columns:1fr}.mk-side{display:none}.term-grid{grid-template-columns:1fr}.term-panes{border-right:0}.mk-minis{grid-template-columns:1fr}}
+
 @media print{header{position:static}nav,.actions,.filters{display:none}.layout{display:block}main{border:0}body{font-size:11px}.card,details{break-inside:avoid}a{color:inherit}}
 </style>
 </head>
 <body>
-<header><strong>EAK ◆</strong><span>Development roadmap · R4 · source of truth</span><div class="actions"><button type="button" id="expand">Expand phases</button><button type="button" id="collapse">Collapse phases</button></div></header>
+<header><strong>EAK ◆</strong><span>Development roadmap · R5 · source of truth</span><div class="actions"><button type="button" id="expand">Expand phases</button><button type="button" id="collapse">Collapse phases</button></div></header>
 <div class="layout">
 <nav aria-label="Roadmap navigation">
 <h2>Product &amp; evidence</h2>
-<a href="#vision">V1 user experience</a><a href="#baseline">Verified baseline</a><a href="#findings">Upstream findings</a><a href="#architecture">Integration architecture</a><a href="#formats">Import / export parity</a><a href="#parts">Component library &amp; parts</a><a href="#phases">Implementation phases</a><a href="#install">Installation commands</a><a href="#acceptance">V1 acceptance</a><a href="#preview">48-hour preview</a><a href="#sources">Source references</a><a href="#history">Change history</a>
+<a href="#vision">V1 user experience</a><a href="#baseline">Verified baseline</a><a href="#findings">Upstream findings</a><a href="#architecture">Integration architecture</a><a href="#formats">Import / export parity</a><a href="#parts">Component library &amp; parts</a><a href="#phases">Implementation phases</a><a href="#screens">Final screens (target UI)</a><a href="#install">Installation commands</a><a href="#acceptance">V1 acceptance</a><a href="#preview">48-hour preview</a><a href="#sources">Source references</a><a href="#history">Change history</a>
 <h2>Execution order</h2>
 <a href="#p00">00 · Build baseline</a><a href="#p01">01 · Native UI proof</a><a href="#p02">02 · Shared project state</a><a href="#p03">03 · Persistent terminals</a><a href="#p04">04 · Agent tool bridge</a><a href="#p05">05 · Schematic editing</a><a href="#p06">06 · PCB placement</a><a href="#p07">07 · PCB routing</a><a href="#p08">08 · 3D inspection</a><a href="#p09">09 · KiCad I/O parity</a><a href="#p10">10 · Verification &amp; recovery</a><a href="#p11">11 · Packaging &amp; licenses</a><a href="#p12">12 · End-to-end acceptance</a><a href="#p13">13 · Datasheet-to-part pipeline</a>
 </nav>
@@ -287,6 +359,140 @@ Reconciliation connects these responsibilities; two independent writers do not.<
 <li><strong>If the integration proof fails:</strong> publish findings and a source preview rather than manufacturing a success demo. Preserve the full V1 backlog above.</li>
 </ul>
 </section>
+<section id="screens">
+<h2>Final screens: what EAK looks like</h2>
+<p>These are the <strong>target final screens</strong>, drawn here in pure CSS so the design intent lives inside the source-of-truth file. They are the UI contract for Phases 01–08 and 13 — <strong>mockups, not product screenshots</strong>; every panel shown maps to a roadmap phase, and nothing here claims to exist yet. EAK has two main sections, switched at the top right of the window: <strong>Electronics</strong> (the familiar EDA experience) and <strong>AI &amp; Terminals</strong> (the agent workspace). Both operate on the same open project and the same revision.</p>
+
+<h3>Section 1 · Electronics — the EDA workspace</h3>
+<div class="mock">
+<div class="mk-title"><span class="mk-dots"><i></i><i></i><i></i></span><strong>EAK</strong><span>— sensor-node · rev r41</span><span class="mk-seg"><span class="on">Electronics</span><span>AI &amp; Terminals</span></span></div>
+<div class="mk-menu"><span>File</span><span>Edit</span><span>View</span><span>Place</span><span>Route</span><span>Inspect</span><span>Tools</span><span>Import</span><span>Export</span><span>Help</span></div>
+<div class="mk-tools"><span class="mk-btn">Select</span><span class="mk-btn">Wire</span><span class="mk-btn">Place part</span><span class="mk-btn">Move</span><span class="mk-btn">Rotate</span><span class="mk-btn">Flip</span><span class="mk-sep"></span><span class="mk-btn">Zoom fit</span><span class="mk-btn">Grid 0.25</span><span class="mk-sep"></span><span class="mk-btn pri">Run ERC</span><span class="mk-btn pri">Run DRC</span><span class="mk-sep"></span><span class="mk-btn">Export ▾</span></div>
+<div class="mk-main">
+<div class="mk-side">
+<div class="mk-h">Project</div>
+<ul class="mk-tree"><li>sensor-node.kicad_pro</li><li class="sel">Schematic · root sheet</li><li>Schematic · power</li><li>PCB · board</li><li>Outputs · fab r40</li><li>History · 41 revisions</li></ul>
+<div class="mk-h">Libraries</div>
+<ul class="mk-tree"><li>Generic · KiCad pinned</li><li class="ok">Project · TMP102 (verified)</li><li>Project · USB4110-GF-A</li><li>Request part via agent…</li></ul>
+</div>
+<div class="mk-ed">
+<div class="mk-tabs"><span class="mk-tab on">Schematic ●</span><span class="mk-tab">PCB</span><span class="mk-tab">3D</span><span class="mk-tab">Datasheet · TMP102</span></div>
+<div class="mk-canvas">
+<span class="sch-net" style="left:40px;top:52px">VDD_3V3</span>
+<div class="sch-wire" style="left:40px;top:70px;width:300px"></div>
+<div class="sch-wire" style="left:40px;top:170px;width:300px"></div>
+<span class="sch-net" style="left:40px;top:152px">GND</span>
+<div class="sch-comp" style="left:150px;top:88px;width:110px;height:64px">U1<small>TMP102 · SOT563</small></div>
+<div class="sch-pin" style="left:134px;top:100px"></div>
+<div class="sch-pin" style="left:134px;top:118px"></div>
+<div class="sch-pin" style="left:134px;top:136px"></div>
+<div class="sch-pin" style="left:260px;top:100px"></div>
+<div class="sch-pin" style="left:260px;top:118px"></div>
+<div class="sch-wire v" style="left:188px;top:70px;height:18px"></div>
+<div class="sch-dot" style="left:185px;top:67px"></div>
+<div class="sch-wire v" style="left:214px;top:152px;height:18px"></div>
+<div class="sch-dot" style="left:211px;top:167px"></div>
+<div class="sch-wire" style="left:276px;top:101px;width:70px"></div>
+<span class="sch-net" style="left:290px;top:84px">SDA</span>
+<div class="sch-wire" style="left:276px;top:119px;width:70px"></div>
+<span class="sch-net" style="left:290px;top:124px">SCL</span>
+<div class="sch-comp" style="left:60px;top:96px;width:44px;height:48px">R1<small>10k</small></div>
+<div class="sch-wire v" style="left:80px;top:70px;height:26px"></div>
+<div class="sch-wire v" style="left:80px;top:144px;height:26px"></div>
+<div class="mk-float"><span class="mk-btn">−</span><span class="mk-btn">100%</span><span class="mk-btn">+</span></div>
+</div>
+<div class="mk-dock">
+<div class="mk-tabs"><span class="mk-tab on">Findings</span><span class="mk-tab">ERC</span><span class="mk-tab">DRC</span><span class="mk-tab">Messages</span></div>
+<div class="mk-row"><b class="ok-t">✓ ERC</b><span>passed on rev r41 · 0 errors · 0 warnings</span></div>
+<div class="mk-row"><b class="warn-t">⚠ DRC</b><span>courtyard overlap U1 ↔ C2 · click to locate on PCB</span></div>
+<div class="mk-row"><b class="ok-t">✓ Part</b><span>TMP102 verified against datasheet SBOS397I p.3 (pins) and p.27 (land pattern)</span></div>
+</div>
+</div>
+<div class="mk-side r">
+<div class="mk-h">Inspector</div>
+<div class="mk-kv"><span>Selected</span><b>U1 · TMP102</b></div>
+<div class="mk-kv"><span>Footprint</span><b>SOT563 (DRL)</b></div>
+<div class="mk-kv"><span>Orientation</span><b>90° · top</b></div>
+<div class="mk-kv"><span>Datasheet</span><b>SBOS397I ✓</b></div>
+<div class="mk-kv"><span>Provenance</span><b>agent · approved</b></div>
+<div class="mk-h">Layers</div>
+<div class="mk-lay"><i style="background:#c9403f"></i>F.Cu</div>
+<div class="mk-lay"><i style="background:#3f7bc9"></i>B.Cu</div>
+<div class="mk-lay"><i style="background:#cfd8de"></i>F.SilkS</div>
+<div class="mk-lay"><i style="background:#c9a24a"></i>Edge.Cuts</div>
+<div class="mk-lay"><i style="background:#7a4ac9"></i>F.CrtYd</div>
+<div class="mk-h">Nets</div>
+<div class="mk-lay"><i style="background:#5fae6e"></i>VDD_3V3 · 4 pins</div>
+<div class="mk-lay"><i style="background:#5f8fae"></i>SDA · 3 pins</div>
+<div class="mk-lay"><i style="background:#ae8f5f"></i>SCL · 3 pins</div>
+<div class="mk-lay"><i style="background:#6e6e6e"></i>GND · 9 pins</div>
+</div>
+</div>
+<div class="mk-status"><span>x 23.40 mm</span><span>y 11.25 mm</span><span>grid 0.25 mm</span><span class="sp"></span><span>rev r41 · saved ✓</span><span>ERC ✓ · DRC ⚠ 1</span><span>zoom 240%</span></div>
+</div>
+
+<p>The <strong>PCB</strong> and <strong>3D</strong> tabs of the same editor — one selection cross-probes across all three views, and a placement change made by hand or by an agent appears in each view for the same revision:</p>
+<div class="mk-minis">
+<div class="mk-mini"><div class="cap">PCB tab · copper, placement, routing (board top)</div>
+<div class="pcb"><div class="pcb-board">
+<div class="pcb-hole" style="left:6px;top:6px"></div><div class="pcb-hole" style="right:6px;top:6px"></div><div class="pcb-hole" style="left:6px;bottom:6px"></div><div class="pcb-hole" style="right:6px;bottom:6px"></div>
+<div class="pcb-sm" style="left:58px;top:42px;width:34px;height:30px"></div>
+<div class="pcb-pad" style="left:46px;top:44px"></div><div class="pcb-pad" style="left:46px;top:56px"></div><div class="pcb-pad" style="left:46px;top:68px"></div>
+<div class="pcb-pad" style="left:94px;top:44px"></div><div class="pcb-pad" style="left:94px;top:56px"></div><div class="pcb-pad" style="left:94px;top:68px"></div>
+<div class="pcb-trk" style="left:104px;top:46px;width:82px"></div>
+<div class="pcb-trk" style="left:104px;top:58px;width:60px"></div>
+<div class="pcb-trk" style="left:160px;top:58px;width:3px;height:34px"></div>
+<div class="pcb-sm" style="left:176px;top:40px;width:22px;height:14px"></div>
+<div class="pcb-pad" style="left:170px;top:43px"></div><div class="pcb-pad" style="left:196px;top:43px"></div>
+<div class="pcb-sm" style="left:148px;top:86px;width:26px;height:16px"></div>
+</div></div></div>
+<div class="mk-mini"><div class="cap">3D tab · interactive board inspection (orbit / pan / zoom)</div>
+<div class="v3d"><div class="v3d-board">
+<div class="v3d-part ic" style="left:84px;top:38px;width:40px;height:34px"></div>
+<div class="v3d-part" style="left:36px;top:44px;width:18px;height:10px"></div>
+<div class="v3d-part" style="left:36px;top:62px;width:18px;height:10px"></div>
+<div class="v3d-part" style="left:150px;top:30px;width:34px;height:20px"></div>
+<div class="v3d-part" style="left:150px;top:66px;width:16px;height:16px"></div>
+</div></div></div>
+</div>
+
+<h3>Section 2 · AI &amp; Terminals — the agent workspace</h3>
+<div class="mock">
+<div class="mk-title"><span class="mk-dots"><i></i><i></i><i></i></span><strong>EAK</strong><span>— sensor-node · rev r41</span><span class="mk-seg"><span>Electronics</span><span class="on">AI &amp; Terminals</span></span></div>
+<div class="mk-tools"><span class="mk-btn pri">New terminal</span><span class="mk-btn">Split ▾</span><span class="mk-btn">Start agent ▾</span><span class="mk-sep"></span><span class="mk-btn">Workspace: sensor-node</span><span class="mk-btn">Layout ▾</span><span class="mk-sep"></span><span class="mk-btn">Detach</span></div>
+<div class="term-grid">
+<div class="term-panes">
+<div class="term"><div class="term-h">claude · w1:p1<span class="st w">working</span></div><div class="term-b"><span class="c">❯</span> add a 100nF decoupling cap at U1 V+ pin
+<span class="m">reading project state… rev r41 · U1 pin 5 (V+)</span>
+<span class="g">✓</span> eak part search "C 100nF 0402" → Generic:C_0402
+<span class="g">✓</span> eak propose add C3 + wire V+→C3→GND
+<span class="a">⧗</span> proposal #142 submitted — waiting for review</div></div>
+<div class="term"><div class="term-h">codex · w1:p2<span class="st b">blocked · needs answer</span></div><div class="term-b"><span class="c">❯</span> route the I2C pair with 0.25mm traces
+<span class="m">checked nets SDA, SCL · 2 connections open</span>
+<span class="a">?</span> SDA crosses the antenna keepout. Route around
+  the south edge (+6.2mm) or request a keepout
+  exception?</div></div>
+<div class="term wide"><div class="term-h">bash · w1:p3<span class="st i">idle</span></div><div class="term-b"><span class="c">$</span> eak export gerbers --rev r41 --out fab/
+<span class="g">✓</span> 8 layers written · drill + map · checksums recorded
+<span class="c">$</span> _</div></div>
+</div>
+<div class="mk-side r">
+<div class="mk-h">Review · proposal #142</div>
+<div class="prop-card"><div class="cap">Add C3 100nF @ U1 V+</div><div class="bd">by claude · against rev r41
+<div class="diff"><span class="add">+ C3 · C_0402 · 100nF</span>
+<span class="add">+ wire U1.5 (V+) → C3.1</span>
+<span class="add">+ wire C3.2 → GND</span>
+<span class="ctx">  ERC preview: clean</span></div>
+<div class="mk-act"><span class="ap">Approve</span><span class="rj">Reject</span></div></div></div>
+<div class="mk-h">Activity</div>
+<ul class="feed"><li><b>claude</b> proposed #142 · just now</li><li><b>you</b> moved U1 +2.0mm · 2m</li><li><b>codex</b> asked a routing question · 4m</li><li><b>you</b> approved part TMP102 · 18m</li></ul>
+</div>
+</div>
+<div class="mk-status"><span>3 terminals · 2 agents</span><span>1 waiting for you</span><span class="sp"></span><span>server connected · session persists on detach</span><span>rev r41</span></div>
+</div>
+
+<p class="muted">Contract notes: the section switch never hides unsaved work; both sections read and write the same project revision shown in the status bars. Agent terminals are real PTYs (any CLI runs there), agent proposals arrive only through the review panel, and the blocked badge is how a stopped agent asks for the user. Visual styling may evolve; the <em>structure</em> above — two sections, three synced electronics views, persistent reviewable agent terminals — is the requirement.</p>
+</section>
 <section id="install">
 <h2>The finish line: one terminal command installs EAK</h2>
 <p>This roadmap ends when a user on a clean machine installs EAK from a terminal, verifies it, and designs a real board. The command shapes below are the <strong>target contract for Phase 11/12</strong>; they are published here so packaging work has a fixed goal. <strong>None of these commands works yet</strong>, and none may be advertised externally until Phase 11's clean-machine evidence exists for that OS.</p>
@@ -323,6 +529,7 @@ eak --version</pre>Signed installer; winget submission considered after the firs
 <section id="history">
 <h2>Roadmap history and update discipline</h2>
 <div class="table-wrap"><table><thead><tr><th>Record</th><th>Meaning</th></tr></thead><tbody>
+<tr><td>R5 · 2026-10-05 UTC</td><td>Added the final-screens section: CSS-drawn target mockups of the Electronics workspace (menus, toolbars, project/library panels, Schematic/PCB/3D tabs with cross-probing, inspector, layers, nets, findings dock, status bar) and the AI &amp; Terminals workspace (agent panes with working/blocked/idle states, proposal review panel, activity feed). Explicitly labelled as design contract, not screenshots.</td></tr>
 <tr><td>R4 · 2026-10-05 UTC</td><td>Declared this file EAK’s authoritative development roadmap, running from current repository state to tested terminal installation on macOS, Windows and Linux. Added the two-tier component-library contract (curated generic library + agent-built datasheet-verified parts), its evidence-backed pipeline and trust boundary, Phase 13, an acceptance step for on-demand part creation, and the target install-command table with its truth discipline. Documentation only; no product milestone marked complete.</td></tr>
 <tr><td>R3 · 2026-10-05 UTC</td><td>Reframed V1 around real KiCad editing/3D, Herdr-style persistent terminals, user-selected coding agents, shared manual/agent revisions, full selected-version import/export and evidence-backed acceptance. Added upstream findings and limitations. Documentation only; no product milestone marked complete.</td></tr>
 <tr><td>R2 · historical</td><td>The previous page reported 35% progress and a duplicate-ComponentClass build blocker, required a specific NVIDIA model and referenced a developer-local HTML file. Those claims/constraints are not used as current acceptance evidence. The prior page remains recoverable in Git history at the EAK baseline revision above.</td></tr>
@@ -331,7 +538,7 @@ eak --version</pre>Signed installer; winget submission considered after the firs
 </section>
 </main>
 </div>
-<footer>EAK development roadmap R4 · source of truth · source-backed plan · no product-build certification · no external scripts or runtime network requests</footer>
+<footer>EAK development roadmap R5 · source of truth · source-backed plan · no product-build certification · no external scripts or runtime network requests</footer>
 <script>
 'use strict';
 const phasePanels = Array.from(document.querySelectorAll('[data-phase]'));
